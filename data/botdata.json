@@ -1,0 +1,84 @@
+{
+  "latest_news": [],
+  "telegram_channels": [
+    "moraselalthawrah",
+    "shaamnetwork",
+    "alktroone",
+    "damascusv011",
+    "almharar",
+    "alarabytvsy",
+    "bnn_syr",
+    "enabbaladi"
+  ],
+  "deactivated_channels": [
+    "syrianarabnewsagency"
+  ],
+  "channel_metadata": {
+    "syrianarabnewsagency": {
+      "status": "deactivated",
+      "date_added": "2025-06-05T04:47:15.167024",
+      "date_deactivated": "2025-06-06T11:30:56.997005"
+    },
+    "moraselalthawrah": {
+      "status": "activated",
+      "date_added": "2025-06-05T21:46:57.671630",
+      "date_deactivated": null
+    },
+    "shaamnetwork": {
+      "status": "activated",
+      "date_added": "2025-06-06T11:13:58.649460",
+      "date_deactivated": null
+    },
+    "enabbaladi": {
+      "status": "activated",
+      "date_added": "2025-06-10T09:30:59.120569",
+      "date_deactivated": null
+    },
+    "alktroone": {
+      "status": "activated",
+      "date_added": "2025-06-06T11:34:59.725064",
+      "date_deactivated": null
+    },
+    "damascusv011": {
+      "status": "activated",
+      "date_added": "2025-06-06T13:57:32.993732",
+      "date_deactivated": null
+    },
+    "almharar": {
+      "status": "activated",
+      "date_added": "2025-06-06T14:01:49.217666",
+      "date_deactivated": null
+    },
+    "alarabytvsy": {
+      "status": "activated",
+      "date_added": "2025-06-06T14:03:46.994881",
+      "date_deactivated": null
+    },
+    "bnn_syr": {
+      "status": "activated",
+      "date_added": "2025-06-06T14:06:44.014580",
+      "date_deactivated": null
+    }
+  },
+  "auto_post_config": {
+    "interval": 10800,
+    "last_post_time": "2025-06-10T04:46:39.747949"
+  },
+  "auto_post_channels_config": {
+    "channels": [
+      "moraselalthawrah",
+      "shaamnetwork",
+      "alktroone",
+      "damascusv011",
+      "almharar",
+      "alarabytvsy",
+      "bnn_syr"
+    ],
+    "index": 6
+  },
+  "blacklisted_posts": [
+    32264,
+    79429,
+    20297
+  ]
+}

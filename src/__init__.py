@@ -1,0 +1,3 @@
+"""
+NewsBot source code.
+""" 

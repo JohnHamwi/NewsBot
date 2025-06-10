@@ -1,0 +1,65 @@
+# Bot Configuration
+bot:
+  version: "1.0.0"
+  debug_mode: true
+  application_id: 1378540050006147114
+  guild_id: 1228455909827805308
+  admin_role_id: 1271183251041681501
+  admin_user_id: ${ADMIN_USER_ID}  # From env
+  news_role_id: 1271183251041681501
+
+# Channel Configuration
+channels:
+  news: 1378552504039510167
+  errors: 1378781937279176774
+  logs: 1378553893083938957
+
+# API Tokens (from environment variables)
+tokens:
+  discord: ${DISCORD_TOKEN}
+
+# Auto-posting Configuration
+auto_post:
+  min_interval_hours: 1
+  max_interval_hours: 24
+  default_interval_hours: 6
+
+# Resource Monitoring
+monitoring:
+  metrics:
+    port: 8000
+    collection_interval: 60
+  resource_alerts:
+    cpu_threshold: 80.0  # percentage
+    ram_threshold: 70.0  # percentage
+    check_interval: 30  # seconds
+
+# Rich Presence
+rich_presence:
+  update_interval: 60  # seconds
+  posted_duration: 600  # seconds
+
+# Logging
+logging:
+  file: "logs/NewsBot.log"
+  max_lines_tail: 15
+  heartbeat_interval: 3600  # seconds
+
+# Circuit Breaker
+circuit_breaker:
+  failure_threshold: 5
+  reset_timeout: 300  # seconds
+  half_open_timeout: 60  # seconds
+
+# Cache
+cache:
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+
+# Telegram configuration
+telegram:
+  api_id: ${TELEGRAM_API_ID}
+  api_hash: ${TELEGRAM_API_HASH}
+  token: ${TELEGRAM_TOKEN} 

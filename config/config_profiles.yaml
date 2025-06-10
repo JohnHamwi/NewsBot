@@ -1,0 +1,109 @@
+# NewsBot Configuration with Profiles
+# This file shows how to use profiles for different environments
+
+# Default/Base Configuration (shared across all profiles)
+bot:
+  version: "1.1.0"
+  application_id: ${APPLICATION_ID}
+  guild_id: ${GUILD_ID}
+  admin_role_id: ${ADMIN_ROLE_ID}
+  admin_user_id: ${ADMIN_USER_ID}
+  debug_mode: false
+
+# Channel Configuration
+channels:
+  news: ${NEWS_CHANNEL_ID}
+  errors: ${ERRORS_CHANNEL_ID}
+  logs: ${LOG_CHANNEL_ID}
+
+# API Tokens
+tokens:
+  discord: ${DISCORD_TOKEN}
+
+# Telegram configuration
+telegram:
+  api_id: ${TELEGRAM_API_ID}
+  api_hash: ${TELEGRAM_API_HASH}
+  token: ${TELEGRAM_TOKEN}
+
+# Monitoring
+monitoring:
+  metrics:
+    port: 8000
+    collection_interval: 300  # 5 minutes default
+  resource_alerts:
+    cpu_threshold: 80.0
+    ram_threshold: 70.0
+    check_interval: 60
+
+# Logging
+logging:
+  file: "logs/NewsBot.log"
+  level: "INFO"
+
+# Auto-posting
+auto_post:
+  default_interval_hours: 6
+
+# Cache settings
+cache:
+  type: "memory"  # default to memory cache
+
+# Environment-specific profiles
+profiles:
+  # Development profile
+  dev:
+    bot:
+      debug_mode: true
+      version: "1.1.0-dev"
+    monitoring:
+      metrics:
+        collection_interval: 60  # More frequent in dev
+    logging:
+      level: "DEBUG"
+    auto_post:
+      default_interval_hours: 1  # Faster cycle for testing
+    cache:
+      type: "memory"  # Use memory cache in dev
+
+  # Testing profile
+  test:
+    bot:
+      debug_mode: true
+      version: "1.1.0-test"
+    monitoring:
+      metrics:
+        collection_interval: 120  # 2 minutes in test
+      resource_alerts:
+        check_interval: 30  # More frequent checks
+    logging:
+      level: "DEBUG"
+      file: "logs/NewsBot-test.log"  # Separate log file
+    auto_post:
+      default_interval_hours: 2  # Faster than prod, slower than dev
+    cache:
+      type: "memory"
+
+  # Production profile
+  prod:
+    bot:
+      debug_mode: false
+      version: "1.1.0"
+    monitoring:
+      metrics:
+        collection_interval: 300  # 5 minutes in prod
+      resource_alerts:
+        cpu_threshold: 90.0  # Higher threshold in prod
+        ram_threshold: 80.0
+        check_interval: 60
+    logging:
+      level: "INFO"
+      file: "logs/NewsBot-prod.log"
+    auto_post:
+      default_interval_hours: 6  # Normal interval in prod
+    cache:
+      type: "redis"
+      redis:
+        host: "localhost"
+        port: 6379
+        db: 0 

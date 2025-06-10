@@ -1,0 +1,606 @@
+"""
+Admin Commands Cog
+
+This cog provides administrative commands for NewsBot.
+Handles logging, presence management, interval settings, and system controls.
+"""
+
+import asyncio
+import os
+import traceback
+from datetime import datetime
+from typing import Any, Optional
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+from src.core.config_manager import config
+from src.utils.base_logger import base_logger as logger
+from src.utils.structured_logger import structured_logger
+from src.components.decorators.admin_required import admin_required, admin_required_with_defer
+from src.components.embeds.base_embed import SuccessEmbed, ErrorEmbed, WarningEmbed, CommandEmbed
+
+# Configuration constants
+GUILD_ID = config.get('bot.guild_id') or 0
+ADMIN_ROLE_ID = config.get('bot.admin_role_id')
+
+
+class AdminCommands(commands.Cog):
+    """
+    Cog for administrative commands.
+    
+    Provides system administration, logging, presence management,
+    and operational controls for the NewsBot.
+    """
+
+    def __init__(self, bot: discord.Client) -> None:
+        """Initialize the AdminCommands cog."""
+        self.bot = bot
+        logger.debug("🔧 AdminCommands cog initialized")
+
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.command(name="log", description="Show the last N lines of the bot log (admin only)")
+    @app_commands.describe(count="Number of log lines to show")
+    @app_commands.choices(count=[
+        app_commands.Choice(name="10", value=10),
+        app_commands.Choice(name="20", value=20),
+        app_commands.Choice(name="30", value=30),
+        app_commands.Choice(name="40", value=40),
+        app_commands.Choice(name="50", value=50),
+    ])
+    @admin_required_with_defer
+    async def log_command(self, interaction: discord.Interaction, count: app_commands.Choice[int] = None) -> None:
+        """
+        Show the last N lines of the bot log (admin only).
+        
+        Args:
+            interaction: The Discord interaction
+            count: Number of log lines to show
+        """
+        try:
+            structured_logger.info(
+            "Log command invoked",
+            extra_data={"count": count.value if count else 20, "user_id": str(interaction.user.id)}
+            )
+            
+            # Get the number of lines to show
+            lines_to_show = count.value if count else 20
+            
+            # Read the log file
+            log_file_path = "logs/newsbot.log"
+            
+            if not os.path.exists(log_file_path):
+            embed = WarningEmbed(
+            "Log File Not Found",
+            f"The log file `{log_file_path}` does not exist."
+            )
+            await interaction.followup.send(embed=embed)
+            return
+            
+            # Read the last N lines
+            try:
+            with open(log_file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            last_lines = lines[-lines_to_show:] if len(lines) > lines_to_show else lines
+            
+            if not last_lines:
+                embed = WarningEmbed(
+                    "Empty Log File",
+                    "The log file is empty."
+                )
+                await interaction.followup.send(embed=embed)
+                return
+            
+                # Format the log content
+            log_content = ''.join(last_lines)
+            
+                # Truncate if too long for Discord
+            if len(log_content) > 1900:  # Leave room for embed formatting
+                log_content = log_content[-1900:]
+                log_content = "...\n" + log_content[log_content.find('\n') + 1:]
+            
+            embed = CommandEmbed(
+                f"📋 Last {len(last_lines)} Log Lines",
+                f"```\n{log_content}\n```"
+            )
+            embed.set_footer(text=f"Log file: {log_file_path}")
+            
+            await interaction.followup.send(embed=embed)
+            
+            except Exception as e:
+            embed = ErrorEmbed(
+                "Error Reading Log File",
+                f"Failed to read log file: {str(e)}"
+            )
+            await interaction.followup.send(embed=embed)
+            
+        except Exception as e:
+            structured_logger.error(
+            "Error executing log command",
+            extra_data={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            error_embed = ErrorEmbed(
+            "Log Command Error",
+            f"An error occurred: {str(e)}"
+            )
+            
+            try:
+            await interaction.followup.send(embed=error_embed)
+            except discord.errors.NotFound:
+            structured_logger.warning("Could not send error response")
+
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.command(name="set_rich_presence", description="Set the bot's rich presence mode (admin only)")
+    @app_commands.describe(mode="Choose presence mode: automatic (dynamic) or maintenance (static)")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="Automatic (dynamic)", value="automatic"),
+        app_commands.Choice(name="Maintenance", value="maintenance"),
+    ])
+    @admin_required
+    async def set_rich_presence_command(self, interaction: discord.Interaction, mode: app_commands.Choice[str]) -> None:
+        """
+        Set the bot's rich presence mode (admin only).
+        
+        Args:
+            interaction: The Discord interaction
+            mode: The presence mode to set
+        """
+        try:
+            structured_logger.info(
+            "Set rich presence command invoked",
+            extra_data={"mode": mode.value, "user_id": str(interaction.user.id)}
+            )
+            
+            # Set the rich presence mode
+            self.bot.rich_presence_mode = mode.value
+            
+            # Update the presence immediately
+            if mode.value == "automatic":
+                # Set dynamic presence
+            activity = discord.Activity(
+                type=discord.ActivityType.watching,
+                name="for news updates"
+            )
+            await self.bot.change_presence(
+                status=discord.Status.online,
+                activity=activity
+            )
+            
+            embed = SuccessEmbed(
+                "Rich Presence Updated",
+                f"✅ Rich presence set to **{mode.name}**\n"
+                f"The bot will now show dynamic status updates with countdown timers."
+            )
+            
+            elif mode.value == "maintenance":
+                # Set maintenance presence
+            activity = discord.Activity(
+                type=discord.ActivityType.playing,
+                name="🔧 Under Maintenance"
+            )
+            await self.bot.change_presence(
+                status=discord.Status.idle,
+                activity=activity
+            )
+            
+            embed = SuccessEmbed(
+                "Rich Presence Updated",
+                f"✅ Rich presence set to **{mode.name}**\n"
+                f"The bot will now show a static maintenance status."
+            )
+            
+            await interaction.response.send_message(embed=embed)
+            
+            structured_logger.info(f"Rich presence mode set to {mode.value}")
+            
+            except Exception as e:
+            structured_logger.error(
+                "Error executing set_rich_presence command",
+                extra_data={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            error_embed = ErrorEmbed(
+                "Rich Presence Error",
+                f"Failed to set rich presence: {str(e)}"
+            )
+            
+            try:
+            await interaction.response.send_message(embed=error_embed)
+            except discord.errors.InteractionResponded:
+            await interaction.followup.send(embed=error_embed)
+
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.command(name="set_interval", description="Set the auto-post interval in hours (admin only)")
+    @app_commands.describe(hours="Interval in hours (1-24, 0 to disable)")
+    @admin_required
+    async def set_interval_command(self, interaction: discord.Interaction, hours: int) -> None:
+        """
+        Set the auto-post interval in hours (admin only).
+        
+        Args:
+            interaction: The Discord interaction
+            hours: Interval in hours (1-24, 0 to disable)
+        """
+        with LogContext(
+            user_id=str(interaction.user.id),
+            component="AdminCommands",
+            command_name="set_interval"
+        ):
+            try:
+            structured_logger.info(
+            "Set interval command invoked",
+            extra_data={"hours": hours}
+            )
+            
+            # Validate the interval
+            if hours < 0 or hours > 24:
+            embed = ErrorEmbed(
+                "Invalid Interval",
+                "⚠️ Interval must be between 0 and 24 hours.\n"
+                "Use 0 to disable auto-posting."
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+            
+            # Update the interval
+            self.bot.auto_post_interval = hours
+            
+            if hours == 0:
+                # Disable auto-posting
+            if hasattr(self.bot, 'auto_post_task') and self.bot.auto_post_task:
+                self.bot.auto_post_task.cancel()
+                self.bot.auto_post_task = None
+            
+            embed = SuccessEmbed(
+                "Auto-Post Disabled",
+                "🔴 Auto-posting has been **disabled**.\n"
+                "Use `/start` to post manually or set a new interval to re-enable."
+            )
+            else:
+                # Enable/update auto-posting
+            embed = SuccessEmbed(
+                "Auto-Post Interval Updated",
+                f"✅ Auto-post interval set to **{hours} hour{'s' if hours != 1 else ''}**.\n"
+                f"The bot will now post news every {hours} hour{'s' if hours != 1 else ''}."
+            )
+            
+                # Restart the auto-post task if it exists
+            if hasattr(self.bot, 'auto_post_task') and self.bot.auto_post_task:
+                self.bot.auto_post_task.cancel()
+            
+                # Start new auto-post task (this would need to be implemented in the main bot)
+                # self.bot.auto_post_task = asyncio.create_task(self.bot.auto_post_loop())
+            
+            await interaction.response.send_message(embed=embed)
+            
+            structured_logger.info(f"Auto-post interval set to {hours} hours")
+            
+            except Exception as e:
+            structured_logger.error(
+                "Error executing set_interval command",
+                extra_data={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            error_embed = ErrorEmbed(
+                "Set Interval Error",
+                f"Failed to set interval: {str(e)}"
+            )
+            
+            try:
+            await interaction.response.send_message(embed=error_embed)
+            except discord.errors.InteractionResponded:
+            await interaction.followup.send(embed=error_embed)
+
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.command(name="start", description="Trigger an immediate auto-post (admin only)")
+    @admin_required_with_defer
+    async def start_command(self, interaction: discord.Interaction) -> None:
+        """
+        Trigger an immediate auto-post (admin only).
+        
+        Args:
+            interaction: The Discord interaction
+        """
+        with LogContext(
+            user_id=str(interaction.user.id),
+            component="AdminCommands",
+            command_name="start"
+        ):
+            try:
+            structured_logger.info("Start command invoked")
+            
+            # Check if fetch_view cog is available
+            fetch_cog = self.bot.get_cog('FetchView')
+            if not fetch_cog:
+            embed = ErrorEmbed(
+                "Fetch Cog Not Found",
+                "The FetchView cog is not loaded. Cannot trigger auto-post."
+            )
+            await interaction.followup.send(embed=embed)
+                return
+            
+            # Get configuration with timeout
+            try:
+            config_data = await asyncio.wait_for(
+                self.bot.config_manager.get_config(),
+                timeout=10.0
+            )
+            except asyncio.TimeoutError:
+            embed = ErrorEmbed(
+                "Configuration Timeout",
+                "Failed to load configuration within 10 seconds."
+            )
+            await interaction.followup.send(embed=embed)
+                return
+            
+            # Trigger the fetch operation
+            try:
+                # Set force flag and call fetch_and_post
+            self.bot.force_fetch = True
+            
+                # Run fetch with timeout
+            await asyncio.wait_for(
+                fetch_cog.fetch_and_post(),
+                timeout=300.0  # 5 minutes timeout
+            )
+            
+            embed = SuccessEmbed(
+                "Auto-Post Triggered",
+                "✅ **Auto-post completed successfully!**\n"
+                "News has been fetched and posted to the configured channels."
+            )
+            
+            except asyncio.TimeoutError:
+            embed = WarningEmbed(
+                "Auto-Post Timeout",
+                "⏰ Auto-post operation timed out after 5 minutes.\n"
+                "The operation may still be running in the background."
+            )
+            
+            except Exception as fetch_error:
+            embed = ErrorEmbed(
+                "Auto-Post Failed",
+                f"❌ Auto-post failed: {str(fetch_error)}"
+            )
+            
+            await interaction.followup.send(embed=embed)
+            
+            
+            except Exception as e:
+            
+            structured_logger.error(
+                "Error executing start command",
+                extra_data={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            error_embed = ErrorEmbed(
+                "Start Command Error",
+                f"An error occurred: {str(e)}"
+            )
+            
+            try:
+            await interaction.followup.send(embed=error_embed)
+            except discord.errors.NotFound:
+            structured_logger.warning("Could not send error response")
+
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.command(name="test_autopost", description="Test auto-post with custom delay (admin only)")
+    @app_commands.describe(delay_seconds="Delay in seconds before posting (0 for immediate)")
+    @admin_required_with_defer
+    async def test_autopost_command(self, interaction: discord.Interaction, delay_seconds: int = 0) -> None:
+        """
+        Test auto-post with custom delay (admin only).
+        
+        Args:
+            interaction: The Discord interaction
+            delay_seconds: Delay in seconds before posting
+        """
+        with LogContext(
+            user_id=str(interaction.user.id),
+            component="AdminCommands",
+            command_name="test_autopost"
+        ):
+            try:
+            structured_logger.info(
+            "Test autopost command invoked",
+            extra_data={"delay_seconds": delay_seconds}
+            )
+            
+            # Validate delay
+            if delay_seconds < 0 or delay_seconds > 3600:  # Max 1 hour
+            embed = ErrorEmbed(
+                "Invalid Delay",
+                "⚠️ Delay must be between 0 and 3600 seconds (1 hour)."
+            )
+            await interaction.followup.send(embed=embed)
+                return
+            
+            # Send initial response
+            if delay_seconds > 0:
+            embed = CommandEmbed(
+                "Test Auto-Post Scheduled",
+                f"⏰ Test auto-post will begin in **{delay_seconds} seconds**.\n"
+                f"Please wait..."
+            )
+            await interaction.followup.send(embed=embed)
+            
+                # Wait for the specified delay
+            await asyncio.sleep(delay_seconds)
+            
+            # Check if fetch_view cog is available
+            fetch_cog = self.bot.get_cog('FetchView')
+            if not fetch_cog:
+            embed = ErrorEmbed(
+                "Fetch Cog Not Found",
+                "The FetchView cog is not loaded. Cannot run test."
+            )
+            await interaction.followup.send(embed=embed)
+                return
+            
+            # Run the test
+            try:
+            self.bot.force_fetch = True
+            
+                # Run fetch with timeout
+            await asyncio.wait_for(
+                fetch_cog.fetch_and_post(),
+                timeout=300.0  # 5 minutes timeout
+            )
+            
+            embed = SuccessEmbed(
+                "Test Auto-Post Completed",
+                "✅ **Test auto-post completed successfully!**\n"
+                "News has been fetched and posted to the configured channels."
+            )
+            
+            except asyncio.TimeoutError:
+            embed = WarningEmbed(
+                "Test Auto-Post Timeout",
+                "⏰ Test auto-post timed out after 5 minutes.\n"
+                "The operation may still be running in the background."
+            )
+            
+            except Exception as test_error:
+            embed = ErrorEmbed(
+                "Test Auto-Post Failed",
+                f"❌ Test auto-post failed: {str(test_error)}"
+            )
+            
+            await interaction.followup.send(embed=embed)
+            
+            
+            except Exception as e:
+            
+            structured_logger.error(
+                "Error executing test_autopost command",
+                extra_data={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            error_embed = ErrorEmbed(
+                "Test Auto-Post Error",
+                f"An error occurred: {str(e)}"
+            )
+            
+            try:
+            await interaction.followup.send(embed=error_embed)
+            except discord.errors.NotFound:
+            structured_logger.warning("Could not send error response")
+
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.command(name="fix_telegram", description="Diagnose Telegram authentication issues (admin only)")
+    @admin_required_with_defer
+    async def fix_telegram_command(self, interaction: discord.Interaction) -> None:
+        """
+        Diagnose Telegram authentication issues (admin only).
+        
+        Args:
+            interaction: The Discord interaction
+        """
+        with LogContext(
+            user_id=str(interaction.user.id),
+            component="AdminCommands",
+            command_name="fix_telegram"
+        ):
+            try:
+            structured_logger.info("Fix Telegram command invoked")
+            
+            embed = CommandEmbed(
+            "🔧 Telegram Diagnostics",
+            "Running Telegram connection diagnostics..."
+            )
+            await interaction.followup.send(embed=embed)
+            
+            # Check if Telegram client exists
+            if not hasattr(self.bot, 'telegram_client'):
+            embed = ErrorEmbed(
+                "Telegram Client Not Found",
+                "❌ Telegram client is not initialized.\n"
+                "Please check your Telegram API configuration."
+            )
+            await interaction.followup.send(embed=embed)
+                return
+            
+            # Test connection
+            try:
+            is_connected = self.bot.telegram_client.is_connected()
+            
+            if is_connected:
+                    # Test channel access
+                    try:
+                    cache = self.bot.json_cache
+                    active_channels = await cache.list_telegram_channels("activated")
+                    
+                    if active_channels:
+                            # Test access to first channel
+                        test_channel = active_channels[0]
+                        entity = await self.bot.telegram_client.get_entity(test_channel['username'])
+                        
+                        embed = SuccessEmbed(
+                            "Telegram Connection Healthy",
+                            f"✅ **Connection Status:** Connected\n"
+                            f"✅ **Channel Access:** Working\n"
+                            f"✅ **Test Channel:** {test_channel['name']}\n"
+                            f"📊 **Active Channels:** {len(active_channels)}"
+                        )
+                    else:
+                        embed = WarningEmbed(
+                            "No Active Channels",
+                            "⚠️ **Connection Status:** Connected\n"
+                            "⚠️ **Issue:** No active Telegram channels configured\n"
+                            "💡 **Solution:** Use `/channel action:Activate Channel` to add channels"
+                        )
+                        
+                except Exception as channel_error:
+                    embed = ErrorEmbed(
+                        "Channel Access Error",
+                        f"✅ **Connection Status:** Connected\n"
+                        f"❌ **Channel Access:** Failed\n"
+                        f"**Error:** {str(channel_error)}\n"
+                        f"💡 **Solution:** Check channel permissions and usernames"
+                    )
+            else:
+                embed = ErrorEmbed(
+                    "Telegram Connection Failed",
+                    "❌ **Connection Status:** Disconnected\n"
+                    "💡 **Solutions:**\n"
+                    "• Check your API ID and API Hash\n"
+                    "• Verify your phone number authentication\n"
+                    "• Check network connectivity\n"
+                    "• Restart the bot if needed"
+                )
+                
+            except Exception as conn_error:
+            embed = ErrorEmbed(
+                "Connection Test Failed",
+                f"❌ **Connection Test:** Failed\n"
+                f"**Error:** {str(conn_error)}\n"
+                f"💡 **Solution:** Check Telegram API credentials and restart bot"
+            )
+            
+            await interaction.followup.send(embed=embed)
+            
+            
+            except Exception as e:
+            
+            structured_logger.error(
+                "Error executing fix_telegram command",
+                extra_data={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            error_embed = ErrorEmbed(
+                "Fix Telegram Error",
+                f"An error occurred during diagnostics: {str(e)}"
+            )
+            
+            try:
+            await interaction.followup.send(embed=error_embed)
+            except discord.errors.NotFound:
+            structured_logger.warning("Could not send error response")
+
+
+async def setup(bot: commands.Bot) -> None:
+    """Set up the AdminCommands cog."""
+    await bot.add_cog(AdminCommands(bot))
+    logger.info("✅ AdminCommands cog loaded") 

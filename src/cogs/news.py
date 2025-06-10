@@ -1,0 +1,488 @@
+"""
+News Cog
+
+Handles news-related commands and functionality for the NewsBot.
+Provides channel management and admin actions for Telegram news sources.
+"""
+
+import asyncio
+import os
+import traceback
+from datetime import datetime
+from typing import Any, List, Optional
+
+import discord
+from discord import app_commands, ui
+from discord.ext import commands
+from telethon import TelegramClient
+from telethon.errors import ChannelPrivateError
+from zoneinfo import ZoneInfo
+
+from src.utils.base_logger import base_logger as logger
+from src.utils.config import Config
+from src.utils.error_handler import error_handler
+
+# Configuration constants
+GUILD_ID = Config.GUILD_ID or 0
+ADMIN_USER_ID = Config.ADMIN_USER_ID or 0
+
+# Embed color scheme
+EMBED_COLOR_INFO = discord.Color.blue()
+EMBED_COLOR_SUCCESS = discord.Color.green()
+EMBED_COLOR_ERROR = discord.Color.red()
+EMBED_COLOR_WARNING = discord.Color.orange()
+
+
+class NewsCog(commands.Cog):
+    """
+    Cog for managing Telegram channel operations.
+    
+    Handles activation, deactivation, and listing of Telegram channels
+    for news aggregation. Provides admin-only commands with proper
+    validation and error handling.
+    """
+
+    def __init__(self, bot: commands.Bot) -> None:
+        """Initialize the NewsCog with bot reference."""
+        self.bot = bot
+        logger.debug("🔧 NewsCog initialized")
+
+    @app_commands.command(
+        name="channel", 
+        description="Manage Telegram channels (admin only)"
+    )
+    @app_commands.describe(
+        action="What channel action to perform",
+        filter="Filter for list action (activated/deactivated/all)"
+    )
+    @app_commands.choices(action=[
+        app_commands.Choice(name="📋 List Channels", value="list"),
+        app_commands.Choice(name="🟢 Activate Channel", value="activate"),
+        app_commands.Choice(name="🔴 Deactivate Channel", value="deactivate"),
+    ])
+    @app_commands.choices(filter=[
+        app_commands.Choice(name="🟢 Activated", value="activated"),
+        app_commands.Choice(name="🔴 Deactivated", value="deactivated"),
+        app_commands.Choice(name="📋 All", value="all"),
+    ])
+    async def channel_command(
+        self, 
+        interaction: discord.Interaction, 
+        action: app_commands.Choice[str],
+        filter: app_commands.Choice[str] = None
+    ) -> None:
+        """
+        Consolidated channel management command (admin only).
+        
+        Args:
+            interaction: The Discord interaction
+            action: The action to perform (list/activate/deactivate)
+            filter: Filter for list action
+        """
+        action_value = action.value
+        filter_value = filter.value if filter else "all"
+        
+        logger.info(f"[NEWS][CMD][channel] Command invoked by user {interaction.user.id}, action={action_value}")
+        
+        try:
+            # Check authorization
+            if not await self._check_admin_authorization(interaction):
+                return
+            
+            # Defer response
+            await interaction.response.defer(thinking=True)
+            
+            if action_value == "list":
+                await self._handle_channel_list(interaction, filter_value)
+            elif action_value == "activate":
+                await self._handle_channel_activate_selection(interaction)
+            elif action_value == "deactivate":
+                await self._handle_channel_deactivate_selection(interaction)
+            else:
+                await interaction.followup.send(
+                    embed=discord.Embed(
+                        title="❌ Invalid Action",
+                        description="Invalid action specified.",
+                        color=EMBED_COLOR_ERROR
+                    )
+                )
+            
+        except Exception as e:
+            logger.error(f"[NEWS][CMD][channel] Error: {str(e)}", exc_info=True)
+            
+            await self._send_error_response(
+                interaction, 
+                "Channel Command Error", 
+                e, 
+                f"channel_{action_value}"
+            )
+
+    async def _check_admin_authorization(self, interaction: discord.Interaction) -> bool:
+        """
+        Check if user is authorized for admin commands.
+        
+        Args:
+            interaction: The Discord interaction
+            
+        Returns:
+            True if authorized, False otherwise
+        """
+        if interaction.user.id != ADMIN_USER_ID:
+            logger.warning(f"[NEWS][CMD] Unauthorized access attempt by user {interaction.user.id}")
+            
+            embed = discord.Embed(
+                title="❌ Unauthorized",
+                description="```You are not authorized to use this command.```",
+                color=EMBED_COLOR_ERROR,
+                timestamp=datetime.utcnow(),
+            )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+            await error_handler.send_error_embed(
+                "Unauthorized Access",
+                Exception("User is not authorized."),
+                context=f"User: {interaction.user} ({interaction.user.id}) | Command: {interaction.command.name}",
+                bot=self.bot,
+                channel=getattr(self.bot, 'log_channel', None)
+            )
+            
+            return False
+        
+        return True
+
+    async def _get_channels_by_filter(self, filter_value: str) -> List[str]:
+        """
+        Get channels based on filter criteria.
+        
+        Args:
+            filter_value: The filter to apply (activated/deactivated/all)
+            
+        Returns:
+            List of channel names
+        """
+        if filter_value == "activated":
+            return await self.bot.json_cache.list_telegram_channels("activated")
+        elif filter_value == "deactivated":
+            return await self.bot.json_cache.list_telegram_channels("deactivated")
+        else:
+            return await self.bot.json_cache.list_telegram_channels("all")
+
+    def _create_channel_list_embed(self, channels: List[str], filter_value: str) -> discord.Embed:
+        """
+        Create embed for channel list display.
+        
+        Args:
+            channels: List of channel names
+            filter_value: The filter that was applied
+            
+        Returns:
+            Discord embed with channel list
+        """
+        # Determine emoji and title based on filter
+        if filter_value == "activated":
+            emoji = "🟢"
+            title = "Activated Channels"
+        elif filter_value == "deactivated":
+            emoji = "🔴"
+            title = "Deactivated Channels"
+        else:
+            emoji = "📋"
+            title = "All Channels"
+        
+        if channels:
+            # Limit display to prevent embed size issues
+            display_channels = channels[:25]  # Discord embed field limit
+            channel_text = "\n".join(f"@{c}" for c in display_channels)
+            
+            if len(channels) > 25:
+                channel_text += f"\n... and {len(channels) - 25} more"
+            
+            embed = discord.Embed(
+                title=f"{emoji} {title}",
+                description=f"```{channel_text}```",
+                color=EMBED_COLOR_INFO,
+                timestamp=datetime.utcnow(),
+            )
+            embed.set_footer(text=f"Total: {len(channels)} channels")
+        else:
+            embed = discord.Embed(
+                title=f"{emoji} {title}",
+                description="```No channels found for this category.```",
+                color=EMBED_COLOR_WARNING,
+                timestamp=datetime.utcnow(),
+            )
+        
+        return embed
+
+    async def _send_error_response(
+        self, 
+        interaction: discord.Interaction, 
+        title: str, 
+        error: Exception, 
+        context: str
+    ) -> None:
+        """
+        Send a standardized error response to the user.
+        
+        Args:
+            interaction: The Discord interaction
+            title: Error title
+            error: The exception that occurred
+            context: Context information for logging
+        """
+        # Create error embed
+        embed = discord.Embed(
+            title=f"❌ {title}",
+            description=f"```{str(error)}```",
+            color=EMBED_COLOR_ERROR,
+            timestamp=datetime.utcnow(),
+        )
+        
+        try:
+            # Try to send followup first (if response was deferred)
+            await interaction.followup.send(embed=embed)
+        except Exception:
+            try:
+                # Fallback to response if followup fails
+                await interaction.response.send_message(embed=embed)
+            except Exception as e:
+                logger.error(f"[NEWS][CMD] Failed to send error response: {str(e)}")
+
+        # Send error to error handler for logging
+        await error_handler.send_error_embed(
+            title,
+            error,
+            context=context,
+            bot=self.bot,
+            channel=getattr(self.bot, 'log_channel', None)
+        )
+
+    async def _handle_channel_list(self, interaction: discord.Interaction, filter_value: str):
+        """Handle channel list action."""
+        # Fetch channels based on filter
+        channels = await self._get_channels_by_filter(filter_value)
+        
+        # Create and send response embed
+        embed = self._create_channel_list_embed(channels, filter_value)
+        await interaction.followup.send(embed=embed)
+        
+        logger.info(f"[NEWS][CMD][channel_list] Successfully listed {len(channels)} channels")
+
+    async def _handle_channel_activate_selection(self, interaction: discord.Interaction):
+        """Handle channel activate selection."""
+        # Get deactivated channels for activation
+        deactivated_channels = await self.bot.json_cache.list_telegram_channels("deactivated")
+        
+        if not deactivated_channels:
+            embed = discord.Embed(
+                title="ℹ️ No Channels Available",
+                description="No deactivated channels available to activate.",
+                color=EMBED_COLOR_INFO,
+                timestamp=datetime.utcnow(),
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # Create dropdown with deactivated channels
+        view = ChannelActivateDropdown(self.bot, deactivated_channels)
+        
+        embed = discord.Embed(
+            title="🟢 Activate Channel",
+            description="Select channels to activate from the dropdown below:",
+            color=EMBED_COLOR_INFO,
+            timestamp=datetime.utcnow(),
+        )
+        await interaction.followup.send(embed=embed, view=view)
+
+    async def _handle_channel_deactivate_selection(self, interaction: discord.Interaction):
+        """Handle channel deactivate selection."""
+        # Get activated channels for deactivation
+        activated_channels = await self.bot.json_cache.list_telegram_channels("activated")
+        
+        if not activated_channels:
+            embed = discord.Embed(
+                title="ℹ️ No Channels Available",
+                description="No activated channels available to deactivate.",
+                color=EMBED_COLOR_INFO,
+                timestamp=datetime.utcnow(),
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # Create dropdown with activated channels
+        view = ChannelDeactivateDropdown(self.bot, activated_channels)
+        
+        embed = discord.Embed(
+            title="🔴 Deactivate Channel", 
+            description="Select channels to deactivate from the dropdown below:",
+            color=EMBED_COLOR_WARNING,
+            timestamp=datetime.utcnow(),
+        )
+        await interaction.followup.send(embed=embed, view=view)
+
+
+class ChannelActivateDropdown(ui.View):
+    """View for selecting a channel to activate."""
+    
+    def __init__(self, bot: commands.Bot, deactivated_channels: List[str]) -> None:
+        """Initialize the view for selecting a channel to activate."""
+        super().__init__(timeout=60)
+        self.bot = bot
+        
+        # Create select options from deactivated channels
+        options = [
+            discord.SelectOption(label=f"@{channel}", value=channel, description=f"Activate @{channel}")
+            for channel in deactivated_channels[:25]  # Discord limit is 25 options
+        ]
+        
+        # Create the select dropdown
+        self.channel_select = ui.Select(
+            placeholder="Choose channels to activate...",
+            min_values=1,
+            max_values=min(len(options), 25),
+            options=options
+        )
+        self.channel_select.callback = self.channel_callback
+        self.add_item(self.channel_select)
+    
+    async def channel_callback(self, interaction: discord.Interaction):
+        """Handle selection of channels to activate."""
+        selected_channels = self.channel_select.values
+        logger.info(f"[NEWS][VIEW] Channels to activate: {selected_channels}")
+        
+        try:
+            success_count = 0
+            failed_channels = []
+            
+            for channel in selected_channels:
+                try:
+                    success = await self.bot.json_cache.add_telegram_channel(channel)
+                    if success:
+                        success_count += 1
+                    else:
+                        failed_channels.append(channel)
+                except Exception as e:
+                    logger.error(f"[NEWS][VIEW] Error activating channel {channel}: {str(e)}")
+                    failed_channels.append(channel)
+            
+            # Create response embed
+            if success_count > 0 and not failed_channels:
+                embed = discord.Embed(
+                    title="✅ Channels Activated",
+                    description=f"Successfully activated {success_count} channel(s): {', '.join(f'@{c}' for c in selected_channels)}",
+                    color=EMBED_COLOR_SUCCESS,
+                    timestamp=datetime.utcnow(),
+                )
+            elif success_count > 0 and failed_channels:
+                embed = discord.Embed(
+                    title="⚠️ Partial Success",
+                    description=f"Activated {success_count} channel(s), but failed to activate: {', '.join(f'@{c}' for c in failed_channels)}",
+                    color=EMBED_COLOR_WARNING,
+                    timestamp=datetime.utcnow(),
+                )
+            else:
+                embed = discord.Embed(
+                    title="❌ Activation Failed",
+                    description=f"Failed to activate any channels: {', '.join(f'@{c}' for c in failed_channels)}",
+                    color=EMBED_COLOR_ERROR,
+                    timestamp=datetime.utcnow(),
+                )
+            
+            await interaction.response.edit_message(embed=embed, view=None)
+            
+        except Exception as e:
+            logger.error(f"[NEWS][VIEW] Error in channel activation: {str(e)}", exc_info=True)
+            
+            embed = discord.Embed(
+                title="❌ Error",
+                description=f"An error occurred: {str(e)}",
+                color=EMBED_COLOR_ERROR,
+                timestamp=datetime.utcnow(),
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+
+
+class ChannelDeactivateDropdown(ui.View):
+    """View for selecting a channel to deactivate."""
+    
+    def __init__(self, bot: commands.Bot, activated_channels: List[str]) -> None:
+        """Initialize the view for selecting a channel to deactivate."""
+        super().__init__(timeout=60)
+        self.bot = bot
+        
+        # Create select options from activated channels
+        options = [
+            discord.SelectOption(label=f"@{channel}", value=channel, description=f"Deactivate @{channel}")
+            for channel in activated_channels[:25]  # Discord limit is 25 options
+        ]
+        
+        # Create the select dropdown
+        self.channel_select = ui.Select(
+            placeholder="Choose channels to deactivate...",
+            min_values=1,
+            max_values=min(len(options), 25),
+            options=options
+        )
+        self.channel_select.callback = self.channel_callback
+        self.add_item(self.channel_select)
+    
+    async def channel_callback(self, interaction: discord.Interaction):
+        """Handle selection of channels to deactivate."""
+        selected_channels = self.channel_select.values
+        logger.info(f"[NEWS][VIEW] Channels to deactivate: {selected_channels}")
+        
+        try:
+            success_count = 0
+            failed_channels = []
+            
+            for channel in selected_channels:
+                try:
+                    await self.bot.json_cache.set_channel_status(channel, "deactivated")
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"[NEWS][VIEW] Error deactivating channel {channel}: {str(e)}")
+                    failed_channels.append(channel)
+            
+            # Create response embed
+            if success_count > 0 and not failed_channels:
+                embed = discord.Embed(
+                    title="🚫 Channels Deactivated",
+                    description=f"Successfully deactivated {success_count} channel(s): {', '.join(f'@{c}' for c in selected_channels)}",
+                    color=EMBED_COLOR_WARNING,
+                    timestamp=datetime.utcnow(),
+                )
+            elif success_count > 0 and failed_channels:
+                embed = discord.Embed(
+                    title="⚠️ Partial Success",
+                    description=f"Deactivated {success_count} channel(s), but failed to deactivate: {', '.join(f'@{c}' for c in failed_channels)}",
+                    color=EMBED_COLOR_WARNING,
+                    timestamp=datetime.utcnow(),
+                )
+            else:
+                embed = discord.Embed(
+                    title="❌ Deactivation Failed",
+                    description=f"Failed to deactivate any channels: {', '.join(f'@{c}' for c in failed_channels)}",
+                    color=EMBED_COLOR_ERROR,
+                    timestamp=datetime.utcnow(),
+                )
+            
+            await interaction.response.edit_message(embed=embed, view=None)
+            
+        except Exception as e:
+            logger.error(f"[NEWS][VIEW] Error in channel deactivation: {str(e)}", exc_info=True)
+            
+            embed = discord.Embed(
+                title="❌ Error",
+                description=f"An error occurred: {str(e)}",
+                color=EMBED_COLOR_ERROR,
+                timestamp=datetime.utcnow(),
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+
+
+async def setup(bot):
+    """
+    Setup function to add the NewsCog to the bot instance.
+    """
+    await bot.add_cog(NewsCog(bot))
