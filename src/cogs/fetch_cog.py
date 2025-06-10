@@ -5,24 +5,26 @@ This module handles fetching and posting of content from Telegram channels,
 including translation, formatting, and media handling.
 """
 
+import asyncio
+import os
+import re
+from typing import List
+
 import discord
 from discord.ext import commands
 from discord import app_commands
-from typing import Optional, Any
+
 from src.utils import error_handler
 from src.utils.config import Config
-import openai
-from datetime import datetime
 from .fetch_view import FetchView
-import re
+from src.components.decorators.admin_required import admin_required
 from src.utils.base_logger import base_logger as logger
 from src.core.config_manager import config
-import asyncio
 from src.utils.structured_logger import structured_logger
-import os
 
 GUILD_ID = Config.GUILD_ID or 0
 ADMIN_USER_ID = Config.ADMIN_USER_ID or 0
+
 
 def remove_emojis(text):
     emoji_pattern = re.compile(
@@ -42,12 +44,14 @@ def remove_emojis(text):
     )
     return emoji_pattern.sub(r'', text)
 
+
 def remove_links(text):
     """Remove URLs from text."""
     url_pattern = re.compile(
         r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
     )
     return url_pattern.sub('', text)
+
 
 def remove_source_phrases(text):
     """Remove common source attribution phrases."""
@@ -74,6 +78,7 @@ def remove_source_phrases(text):
     for pattern in source_patterns:
         text = re.sub(pattern, '', text, flags=re.MULTILINE)
     return text.strip()
+
 
 class FetchCog(commands.Cog):
     """
@@ -110,7 +115,7 @@ class FetchCog(commands.Cog):
             else:
                 # Fallback to direct ID check
                 is_authorized = interaction.user.id == ADMIN_USER_ID
-                
+
             if not is_authorized:
                 await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
                 self.logger.warning(f"[UNAUTHORIZED] User {interaction.user.id} attempted to use /fetch")
@@ -120,18 +125,18 @@ class FetchCog(commands.Cog):
             if number < 1 or number > 5:
                 await interaction.response.send_message("Please specify a number between 1 and 5.", ephemeral=True)
                 return
-                
+
             # Send initial response
             await interaction.response.send_message(f"Fetching {number} posts from {channel}...", ephemeral=True)
-            
+
             # Get Telegram client from bot
             if not hasattr(self.bot, 'telegram_client') or not self.bot.telegram_client:
                 await interaction.followup.send("Telegram client is not connected. Please check the logs.", ephemeral=True)
                 self.logger.error("Telegram client not connected for fetch command")
                 return
-                
+
             client = self.bot.telegram_client
-            
+
             # Try to get the channel entity
             try:
                 entity = await client.get_entity(channel)
@@ -141,46 +146,46 @@ class FetchCog(commands.Cog):
                 await interaction.followup.send(f"Error: Could not find channel '{channel}'. {str(e)}", ephemeral=True)
                 self.logger.error(f"[ERROR] Failed to find channel '{channel}': {e}")
                 return
-                
+
             # Get the posts
             try:
                 posts = await client.get_posts(channel, limit=number)
                 if not posts:
                     await interaction.followup.send(f"No posts found in {channel_display}.", ephemeral=True)
                     return
-                    
+
                 await interaction.followup.send(f"Found {len(posts)} posts. Processing...", ephemeral=True)
-                
+
                 # Get blacklisted posts to avoid duplicates
                 blacklist = await self.bot.json_cache.get("blacklisted_posts") or []
-                
+
                 # Process each post
                 for i, post in enumerate(posts):
                     if post.id in blacklist:
-                        await interaction.followup.send(f"Post {i+1} (ID {post.id}) was already processed before. Skipping.", ephemeral=True)
+                        await interaction.followup.send(f"Post {i + 1} (ID {post.id}) was already processed before. Skipping.", ephemeral=True)
                         continue
-                        
-                    self.logger.info(f"Processing post {i+1}/{len(posts)} from {channel_display} (ID: {post.id})")
-                    
+
+                    self.logger.info(f"Processing post {i + 1}/{len(posts)} from {channel_display} (ID: {post.id})")
+
                     # Check if the post has text
                     if not post.message:
-                        await interaction.followup.send(f"Post {i+1} has no text content. Skipping.", ephemeral=True)
+                        await interaction.followup.send(f"Post {i + 1} has no text content. Skipping.", ephemeral=True)
                         continue
-                        
+
                     # Remove emojis from text
                     cleaned_text = remove_emojis(post.message)
-                    
+
                     # Get news channel from config
                     news_channel_id = config.get("channels.news")
                     if not news_channel_id:
                         await interaction.followup.send("News channel not configured. Check config.yaml", ephemeral=True)
                         return
-                        
+
                     news_channel = self.bot.get_channel(int(news_channel_id))
                     if not news_channel:
                         await interaction.followup.send(f"Could not find news channel with ID {news_channel_id}", ephemeral=True)
                         return
-                        
+
                     # Create view for the post
                     view = FetchView(
                         self.bot,
@@ -189,25 +194,28 @@ class FetchCog(commands.Cog):
                         interaction.user,
                         news_channel
                     )
-                    
+
                     # Send the view to the user
                     await interaction.followup.send(
                         "Post preview (click 'Post to News' to publish):",
                         view=view,
                         ephemeral=True
                     )
-                    
+
                     # Add to blacklist (if not in debug mode)
                     debug_mode = getattr(self.bot, 'debug_mode', False)
                     if not debug_mode:
                         blacklist.append(post.id)
                         await self.bot.json_cache.set("blacklisted_posts", blacklist)
-                        
+
             except Exception as e:
                 await interaction.followup.send(f"Failed to fetch posts: {e}")
-                self.logger.error(f"[ERROR] Failed to fetch posts: {e} | user={interaction.user.id} channel={interaction.channel.id}")
+                self.logger.error(
+                    f"[ERROR] Failed to fetch posts: {e} | user={interaction.user.id} "
+                    f"channel={interaction.channel.id}"
+                )
                 return
-                
+
         except Exception as e:
             await interaction.response.send_message(f"An error occurred: {e}", ephemeral=True)
             self.logger.error(f"[ERROR] Fetch command failed: {e}")
@@ -223,20 +231,20 @@ class FetchCog(commands.Cog):
         """
         Fetch and post from a channel in automatic mode.
         This is called by the auto_post_task.
-        
+
         Args:
             channel_name: The Telegram channel name to fetch from
-            
+
         Returns:
             bool: True if a post was made, False otherwise
         """
         structured_logger.info(f"Auto fetch started for channel: {channel_name}")
-        
+
         try:
             # Add timeout for channel fetch
             async def fetch_with_timeout():
                 return await self.bot.telegram_client.get_entity(channel_name)
-            
+
             try:
                 structured_logger.debug(f"Fetching channel entity for {channel_name}")
                 channel = await asyncio.wait_for(fetch_with_timeout(), timeout=10.0)
@@ -246,12 +254,13 @@ class FetchCog(commands.Cog):
                 return False
             except Exception as e:
                 structured_logger.error(f"Error fetching channel entity for {channel_name}: {str(e)}")
-                
+
                 # Check for the specific Telegram authentication error
                 error_str = str(e).lower()
                 if "key is not registered" in error_str or "resolve" in error_str:
-                    structured_logger.critical("Telegram authentication issue detected. Need to run fix_telegram_auth.py")
-                    
+                    structured_logger.critical(
+                        "Telegram authentication issue detected. Need to run fix_telegram_auth.py")
+
                     # Try to notify an admin if possible
                     try:
                         admin_id = int(os.getenv("ADMIN_USER_ID", "0"))
@@ -265,13 +274,13 @@ class FetchCog(commands.Cog):
                                 )
                     except Exception as dm_error:
                         structured_logger.error(f"Failed to notify admin: {str(dm_error)}")
-                    
+
                 return False
-            
+
             # Add timeout for message fetch
             async def get_messages_with_timeout():
                 return await self.bot.telegram_client.get_messages(channel, limit=5)
-            
+
             try:
                 structured_logger.debug(f"Fetching messages from {channel_name}")
                 messages = await asyncio.wait_for(get_messages_with_timeout(), timeout=10.0)
@@ -282,18 +291,18 @@ class FetchCog(commands.Cog):
             except Exception as e:
                 structured_logger.error(f"Error fetching messages from {channel_name}: {str(e)}")
                 return False
-            
+
             # No messages found
             if not messages:
                 structured_logger.warning(f"No messages found in channel {channel_name}")
                 return False
-            
+
             # Find the most recent message with text and media
             found_post = False
-            
+
             # Only process messages from newest to oldest
             messages.sort(key=lambda msg: msg.id, reverse=True)
-            
+
             # Only process the most recent valid message
             for message in messages:
                 # Skip messages with no text
@@ -302,7 +311,10 @@ class FetchCog(commands.Cog):
                     continue
                 # Debug log for media type
                 if hasattr(message, 'media'):
-                    structured_logger.debug(f"Message {message.id} media type: {type(message.media)}, media: {repr(message.media)}")
+                    structured_logger.debug(
+                        f"Message {message.id} media type: {type(message.media)}, "
+                        f"media: {repr(message.media)}"
+                    )
                 else:
                     structured_logger.debug(f"Message {message.id} has no media attribute")
                 # Only allow supported media types (photo/video)
@@ -318,53 +330,56 @@ class FetchCog(commands.Cog):
                 if not has_media:
                     structured_logger.debug(f"Message {message.id} has no supported media (photo/video), skipping")
                     continue
-                
+
                 structured_logger.debug(f"Processing message {message.id} from {channel_name}")
-                
+
                 # Check if the message has been posted before
                 if await self._check_already_posted(message.id, channel_name):
                     structured_logger.debug(f"Message {message.id} already posted, skipping")
                     continue
-                
+
                 # Skip posts that are too short (likely just links or non-news)
                 if len(message.message.strip()) < 100:
-                    structured_logger.debug(f"Message {message.id} too short ({len(message.message.strip())} chars), skipping")
+                    structured_logger.debug(
+                        f"Message {message.id} too short ({len(message.message.strip())} chars), skipping")
                     continue
-                
+
                 # Before posting, log what media is being attached
                 if has_media:
                     structured_logger.info(f"Attaching media for message {message.id} (type: {type(message.media)})")
-                
+
                 # Found a valid post - create a FetchView and post it
                 try:
                     # Add timeout for AI translation
                     structured_logger.debug(f"Creating FetchView for message {message.id}")
                     view = FetchView(self.bot, message, channel_name, auto_mode=True)
-                    
+
                     # Process message with timeout
                     async def process_message_with_timeout():
                         nonlocal view
                         await view.process_message()
                         return True
-                    
+
                     try:
                         structured_logger.debug(f"Processing message with timeout")
                         await asyncio.wait_for(process_message_with_timeout(), timeout=20.0)
                     except asyncio.TimeoutError:
                         structured_logger.error(f"Timeout processing message {message.id}")
                         continue
-                    
+
                     # Skip if no translation
                     if not view.ai_english:
                         structured_logger.debug(f"No translation available for message {message.id}, skipping")
                         continue
-                    
+
                     # Post to news channel
                     structured_logger.debug(f"Posting message {message.id} to news channel")
                     success = await view.do_post_to_news()
-                    
+
                     if success:
-                        structured_logger.info(f"Successfully posted message {message.id} with media from {channel_name}")
+                        structured_logger.info(
+                            f"Successfully posted message {message.id} with media from {channel_name}"
+                        )
                         # Mark as posted
                         await self._mark_as_posted(message.id, channel_name)
                         found_post = True
@@ -374,23 +389,23 @@ class FetchCog(commands.Cog):
                         structured_logger.warning(f"Failed to post message {message.id} with media from {channel_name}")
                         # Skip to next message only if posting failed
                         continue
-                
+
                 except Exception as e:
                     structured_logger.error(f"Error processing message {message.id}: {str(e)}")
                     # Skip to next message
                     continue
-            
+
             return found_post
-        
+
         except Exception as e:
             structured_logger.error(f"Error in fetch_and_post_auto for {channel_name}: {str(e)}")
             return False
-            
+
     async def _check_already_posted(self, message_id: int, channel_name: str) -> bool:
         """Check if a message has already been posted."""
         blacklist = await self.bot.json_cache.get("blacklisted_posts") or []
         return message_id in blacklist
-    
+
     async def _mark_as_posted(self, message_id: int, channel_name: str) -> None:
         """Mark a message as posted."""
         blacklist = await self.bot.json_cache.get("blacklisted_posts") or []
@@ -398,6 +413,7 @@ class FetchCog(commands.Cog):
             blacklist.append(message_id)
             await self.bot.json_cache.set("blacklisted_posts", blacklist)
 
+
 async def setup(bot):
     """Add the FetchCog to the bot."""
-    await bot.add_cog(FetchCog(bot)) 
+    await bot.add_cog(FetchCog(bot))

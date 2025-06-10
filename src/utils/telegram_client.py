@@ -19,6 +19,7 @@ from src.utils.config import Config
 from src.utils.error_handler import error_handler, ErrorContext
 from src.utils.rate_limiter import rate_limiter_manager, rate_limited
 from discord.ext import commands
+from src.utils.structured_logger import structured_logger
 
 
 class TelegramManager:
@@ -80,33 +81,34 @@ class TelegramManager:
 
         except Exception as e:
             self.connected = False
-            error_ctx = ErrorContext(
-                error=e,
-                location="TelegramManager.connect",
-                extra_info={"api_id": Config.TELEGRAM_API_ID,
-                            "connection_state": self.connected},
+            structured_logger.error(
+                "Failed to connect to Telegram",
+                extra_data={
+                    "api_id": Config.TELEGRAM_API_ID,
+                    "connection_state": self.connected,
+                    "error": str(e)
+                }
             )
-            logger.error(f"Failed to connect to Telegram: {str(e)}")
             raise
-            
+
     def _patch_telegram_methods(self):
         """
         Patch Telegram client methods to add rate limiting.
         """
         if not self.client:
             return
-            
+
         # Patch key methods with rate limiting
         original_get_entity = self.client.get_entity
         original_get_messages = self.client.get_messages
         original_send_message = self.client.send_message
         original_download_media = self.client.download_media
-        
+
         async def rate_limited_method(original_method, *args, **kwargs):
             """Generic wrapper for rate-limited methods."""
             # Apply rate limiting
             await rate_limiter_manager.acquire("telegram")
-            
+
             # Call original method with rate limiting and error handling
             try:
                 return await original_method(*args, **kwargs)
@@ -123,13 +125,14 @@ class TelegramManager:
                 # Add exponential backoff
                 await asyncio.sleep(2)
                 return await original_method(*args, **kwargs)
-                
+
         # Apply patches
         self.client.get_entity = lambda *args, **kwargs: rate_limited_method(original_get_entity, *args, **kwargs)
         self.client.get_messages = lambda *args, **kwargs: rate_limited_method(original_get_messages, *args, **kwargs)
         self.client.send_message = lambda *args, **kwargs: rate_limited_method(original_send_message, *args, **kwargs)
-        self.client.download_media = lambda *args, **kwargs: rate_limited_method(original_download_media, *args, **kwargs)
-        
+        self.client.download_media = lambda *args, **kwargs: rate_limited_method(
+            original_download_media, *args, **kwargs)
+
         logger.debug("Applied rate limiting to Telegram client methods")
 
     def _setup_event_handlers(self) -> None:
@@ -174,15 +177,14 @@ class TelegramManager:
                     logger.error("Could not find Discord news channel")
 
             except Exception as e:
-                error_ctx = ErrorContext(
-                    error=e,
-                    location="TelegramManager.handle_new_message",
-                    extra_info={
+                structured_logger.error(
+                    "Error handling Telegram message",
+                    extra_data={
                         "message_id": event.message.id if event.message else None,
                         "channel_id": event.chat_id if event.chat else None,
-                    },
+                        "error": str(e)
+                    }
                 )
-                logger.error(f"Error handling Telegram message: {str(e)}")
                 await error_handler.send_error_embed(
                     "Telegram Message Error",
                     e,
@@ -202,7 +204,6 @@ class TelegramManager:
         """
         # Get channel/chat information
         chat = await event.get_chat()
-        sender = await event.get_sender()
 
         embed = discord.Embed(
             title=f"📰 {chat.title if hasattr(chat, 'title') else 'Telegram Update'}",

@@ -10,4 +10,4 @@ __all__ = ['FetchCog', 'FetchView', 'NewsCog']
 
 # This file marks the directory as a Python package for NewsBot cogs.
 
-# Cog package for NewsBot 
+# Cog package for NewsBot

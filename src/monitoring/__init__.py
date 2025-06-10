@@ -1,1 +1,1 @@
-# Monitoring package for NewsBot 
+# Monitoring package for NewsBot

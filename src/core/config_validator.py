@@ -15,24 +15,26 @@ import logging
 
 logger = logging.getLogger("NewsBot")
 
+
 class ValidationError(Exception):
     """Exception raised for configuration validation errors."""
     pass
+
 
 class ConfigValidator:
     """
     Validates configuration against a schema.
     """
-    
+
     @staticmethod
     def validate(config: Dict, schema: Dict) -> Tuple[bool, List[str]]:
         """
         Validate configuration against a schema.
-        
+
         Args:
             config: Configuration dictionary
             schema: Schema definition
-            
+
         Returns:
             Tuple of (is_valid, error_messages)
         """
@@ -61,24 +63,24 @@ class ConfigValidator:
                     errors.extend(result[1])
             elif schema_item.get("required", False):
                 errors.append(f"Missing required key: {key}")
-        
+
         return len(errors) == 0, errors
-    
+
     @staticmethod
     def _validate_value(key: str, value: Any, schema_item: Dict) -> Tuple[bool, List[str]]:
         """
         Validate a single value against its schema.
-        
+
         Args:
             key: Key name
             value: Value to validate
             schema_item: Schema for this value
-            
+
         Returns:
             Tuple of (is_valid, error_messages)
         """
         errors = []
-        
+
         # Check type
         expected_type = schema_item.get("type")
         if expected_type:
@@ -96,60 +98,60 @@ class ConfigValidator:
                 errors.append(f"Key '{key}' must be a dictionary, got {type(value).__name__}")
             elif expected_type == "str_or_int" and not isinstance(value, (str, int)):
                 errors.append(f"Key '{key}' must be a string or integer, got {type(value).__name__}")
-        
+
         # Check required
         if schema_item.get("required", False) and (value is None or (isinstance(value, str) and value == "")):
             errors.append(f"Key '{key}' is required and cannot be empty")
-        
+
         # Check pattern
         pattern = schema_item.get("pattern")
         if pattern and isinstance(value, str):
             if not re.match(pattern, value):
                 errors.append(f"Key '{key}' value '{value}' does not match pattern '{pattern}'")
-        
+
         # Check min/max for numeric values
         if isinstance(value, (int, float)):
             min_val = schema_item.get("min")
             if min_val is not None and value < min_val:
                 errors.append(f"Key '{key}' value {value} is less than minimum {min_val}")
-            
+
             max_val = schema_item.get("max")
             if max_val is not None and value > max_val:
                 errors.append(f"Key '{key}' value {value} is greater than maximum {max_val}")
-        
+
         # Check min/max length for strings and lists
         if isinstance(value, (str, list)):
             min_length = schema_item.get("min_length")
             if min_length is not None and len(value) < min_length:
                 errors.append(f"Key '{key}' length {len(value)} is less than minimum length {min_length}")
-            
+
             max_length = schema_item.get("max_length")
             if max_length is not None and len(value) > max_length:
                 errors.append(f"Key '{key}' length {len(value)} is greater than maximum length {max_length}")
-        
+
         # Check enum values
         enum_values = schema_item.get("enum")
         if enum_values and value not in enum_values:
             errors.append(f"Key '{key}' value '{value}' must be one of: {', '.join(str(v) for v in enum_values)}")
-        
+
         return len(errors) == 0, errors
-    
+
     @staticmethod
     def apply_defaults(config: Dict, schema: Dict) -> Dict:
         """
         Apply default values from schema to config.
-        
+
         Args:
             config: Configuration dictionary
             schema: Schema definition
-            
+
         Returns:
             Updated configuration with defaults applied
         """
         # Create a deep copy to avoid modifying the original
         import copy
         result = copy.deepcopy(config)
-        
+
         for key, schema_item in schema.items():
             if "default" in schema_item:
                 if "." in key:
@@ -161,14 +163,14 @@ class ConfigValidator:
                         if part not in current:
                             current[part] = {}
                         current = current[part]
-                    
+
                     # Set the default if the key doesn't exist
                     if parts[-1] not in current:
                         current[parts[-1]] = schema_item["default"]
                 elif key not in result:
                     # Direct key
                     result[key] = schema_item["default"]
-        
+
         return result
 
 
@@ -251,10 +253,10 @@ NEWSBOT_CONFIG_SCHEMA = {
 def validate_config(config: Dict) -> Tuple[bool, List[str]]:
     """
     Validate the NewsBot configuration.
-    
+
     Args:
         config: Configuration dictionary
-        
+
     Returns:
         Tuple of (is_valid, error_messages)
     """
@@ -264,11 +266,11 @@ def validate_config(config: Dict) -> Tuple[bool, List[str]]:
 def apply_defaults(config: Dict) -> Dict:
     """
     Apply default values to configuration.
-    
+
     Args:
         config: Configuration dictionary
-        
+
     Returns:
         Updated configuration with defaults
     """
-    return ConfigValidator.apply_defaults(config, NEWSBOT_CONFIG_SCHEMA) 
+    return ConfigValidator.apply_defaults(config, NEWSBOT_CONFIG_SCHEMA)

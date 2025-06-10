@@ -7,6 +7,7 @@ import datetime
 from discord.ext import commands
 import discord
 
+
 async def set_maintenance_presence(bot: commands.Bot) -> None:
     """
     Set the bot's rich presence to show it's in maintenance mode.
@@ -20,6 +21,7 @@ async def set_maintenance_presence(bot: commands.Bot) -> None:
             name="⚠️ Maintenance Mode"
         )
     )
+
 
 async def set_automatic_presence(bot: commands.Bot, seconds_until_next_post: int = 0) -> None:
     """
@@ -36,18 +38,19 @@ async def set_automatic_presence(bot: commands.Bot, seconds_until_next_post: int
         # Calculate hours and minutes until next post
         hours = seconds_until_next_post // 3600
         minutes = (seconds_until_next_post % 3600) // 60
-        
+
         if hours > 0:
             status = f"Next post in {hours}h {minutes}m"
         else:
             status = f"Next post in {minutes}m"
-    
+
     await bot.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,
             name=status
         )
     )
+
 
 async def set_posted_presence(bot: commands.Bot) -> None:
     """

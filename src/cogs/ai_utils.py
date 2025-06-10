@@ -33,11 +33,11 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
 
     # Use the provided openai client directly instead of creating a new instance
     client = openai  # Don't try to create a new client with openai.OpenAI()
-    
+
     # Define the prompt template here
     PROMPT_TEMPLATE = """
     You're a translator specializing in converting Arabic news to English.
-    
+
     TRANSLATION INSTRUCTIONS:
     1. REMOVE ALL hashtags completely (e.g., #Syria becomes Syria)
     2. REMOVE ALL Telegram links, URLs, and channel mentions
@@ -50,24 +50,24 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
     9. NEVER include any telegram links in your output
     10. NEVER include anything about following or subscribing
     11. DO NOT SUMMARIZE. Translate the entire text as literally and completely as possible.
-    
+
     TITLE INSTRUCTIONS:
     - Create a complete sentence in 3-6 words that captures the main news event
     - The title should be a grammatically complete sentence that makes sense on its own
     - Examples: "Syria Receives Aid Shipment", "Rebels Capture Strategic City", "President Announces New Policy"
     - Avoid incomplete phrases or fragments
-    
+
     Format your response EXACTLY as follows:
-    
+
     TITLE: [complete sentence in 3-6 words describing the main event]
     TRANSLATION: [full, literal English translation with NO hashtags, links, or promotional content]
     IS_AD: [true/false]
     IS_SYRIA_RELATED: [true/false]
     """
-    
+
     # Create the complete prompt with the input text
     prompt = f"{PROMPT_TEMPLATE}\n\nArabic text:\n{arabic_text}"
-    
+
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -78,43 +78,43 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
             temperature=0.3,
             max_tokens=1000
         )
-        
+
         raw_result = response.choices[0].message.content
         if logger:
             logger.info("[AI_UTILS] Received translation response")
             logger.debug(f"[AI_UTILS] Raw response: {raw_result[:100]}...")
-        
+
         # Parse the response into a dictionary
         result = {}
-        
+
         # Extract title
         title_match = re.search(r'TITLE:\s*(.*?)(?:\n|$)', raw_result)
         if title_match:
             result["title"] = title_match.group(1).strip()
         else:
             result["title"] = "News Update"
-            
+
         # Extract translation
         translation_match = re.search(r'TRANSLATION:\s*(.*?)(?:\n(?:IS_AD|IS_SYRIA_RELATED)|$)', raw_result, re.DOTALL)
         if translation_match:
             result["translation"] = translation_match.group(1).strip()
         else:
             result["translation"] = raw_result  # Fallback to entire response
-            
+
         # Extract if it's an ad
         ad_match = re.search(r'IS_AD:\s*(true|false)', raw_result, re.IGNORECASE)
         result["is_ad"] = ad_match and ad_match.group(1).lower() == "true"
-        
+
         # Extract if it's Syria-related
         syria_match = re.search(r'IS_SYRIA_RELATED:\s*(true|false)', raw_result, re.IGNORECASE)
         result["is_syria_related"] = not syria_match or syria_match.group(1).lower() == "true"
-        
+
         # Clean up the translation further
         result["translation"] = clean_translation(result["translation"])
-        
+
         if logger:
             logger.debug(f"[AI_UTILS] Parsed result: {result}")
-            
+
         return result
     except Exception as e:
         if logger:
@@ -133,27 +133,27 @@ def clean_translation(text):
     # First, handle hashtags - completely remove them
     text = re.sub(r'#\w+', '', text)
     text = re.sub(r'#', '', text)  # Remove any lone # symbols
-    
+
     # Remove ALL URLs
     text = re.sub(r'https?://\S+', '', text)
     text = re.sub(r'(?:www|t\.me)\.\S+', '', text)  # Catch www and t.me links without http
-    
+
     # Remove all emoji
     emoji_pattern = re.compile("["
-        u"\U0001F600-\U0001F64F"  # emoticons
-        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-        u"\U0001F680-\U0001F6FF"  # transport & map symbols
-        u"\U0001F700-\U0001F77F"  # alchemical symbols
-        u"\U0001F780-\U0001F7FF"  # Geometric Shapes
-        u"\U0001F800-\U0001F8FF"  # Supplemental Arrows-C
-        u"\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
-        u"\U0001FA00-\U0001FA6F"  # Chess Symbols
-        u"\U0001FA70-\U0001FAFF"  # Symbols and Pictographs Extended-A
-        u"\U00002702-\U000027B0"  # Dingbats
-        u"\U000024C2-\U0001F251" 
-        "]+", flags=re.UNICODE)
+                               u"\U0001F600-\U0001F64F"  # emoticons
+                               u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+                               u"\U0001F680-\U0001F6FF"  # transport & map symbols
+                               u"\U0001F700-\U0001F77F"  # alchemical symbols
+                               u"\U0001F780-\U0001F7FF"  # Geometric Shapes
+                               u"\U0001F800-\U0001F8FF"  # Supplemental Arrows-C
+                               u"\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+                               u"\U0001FA00-\U0001FA6F"  # Chess Symbols
+                               u"\U0001FA70-\U0001FAFF"  # Symbols and Pictographs Extended-A
+                               u"\U00002702-\U000027B0"  # Dingbats
+                               u"\U000024C2-\U0001F251"
+                               "]+", flags=re.UNICODE)
     text = emoji_pattern.sub(r'', text)
-    
+
     # Remove common promotional phrases - more aggressive list
     promo_phrases = [
         r'(?i)subscribe to our channel',
@@ -188,19 +188,19 @@ def clean_translation(text):
     ]
     for phrase in promo_phrases:
         text = re.sub(phrase, '', text)
-    
+
     # Remove lines that are too short (likely just promotional leftovers)
     lines = text.split('\n')
     filtered_lines = [line for line in lines if len(line.strip()) > 5]
     text = '\n'.join(filtered_lines)
-    
+
     # Clean up any excess whitespace from removals
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'\n\s*\n', '\n', text)
     text = text.strip()
-    
+
     # Remove any remaining promotional phrases that might be at the beginning or end
     text = re.sub(r'^.*(news service|network)\s*[:]\s*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\s+$', '', text)  # Remove trailing whitespace
-    
-    return text 
+
+    return text

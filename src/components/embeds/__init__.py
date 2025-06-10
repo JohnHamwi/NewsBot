@@ -12,7 +12,7 @@ from .base_embed import (
 
 __all__ = [
     'BaseEmbed',
-    'SuccessEmbed', 
+    'SuccessEmbed',
     'ErrorEmbed',
     'WarningEmbed',
     'InfoEmbed',
@@ -23,4 +23,4 @@ __all__ = [
     'create_embed_from_template',
     'create_error_embed',
     'create_success_embed',
-] 
+]

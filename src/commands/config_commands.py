@@ -15,12 +15,13 @@ import yaml
 from src.core.simple_config import config
 from src.utils.base_logger import base_logger as logger
 
+
 class ConfigCommands(commands.Cog):
     """Commands for managing the bot's configuration."""
-    
+
     def __init__(self, bot):
         self.bot = bot
-    
+
     @app_commands.command(
         name="config",
         description="Manage bot configuration (admin only)"
@@ -48,7 +49,7 @@ class ConfigCommands(commands.Cog):
         app_commands.Choice(name="Production", value="prod")
     ])
     async def config_command(
-        self, 
+        self,
         interaction: discord.Interaction,
         action: app_commands.Choice[str],
         key: str = None,
@@ -58,7 +59,7 @@ class ConfigCommands(commands.Cog):
     ):
         """
         Consolidated configuration management command (admin only).
-        
+
         Args:
             interaction: Discord interaction
             action: The action to perform
@@ -98,17 +99,17 @@ class ConfigCommands(commands.Cog):
                     "❌ Invalid action specified.",
                     ephemeral=True
                 )
-                
+
         except Exception as e:
             logger.error(f"[CONFIG][CMD] Error in config command: {str(e)}", exc_info=True)
-            
+
             error_embed = discord.Embed(
                 title="❌ Configuration Error",
                 description=f"An error occurred: {str(e)}",
                 color=discord.Color.red(),
                 timestamp=discord.utils.utcnow()
             )
-            
+
             try:
                 if interaction.response.is_done():
                     await interaction.followup.send(embed=error_embed)
@@ -125,9 +126,9 @@ class ConfigCommands(commands.Cog):
                 ephemeral=True
             )
             return
-            
+
         value = config.get(key)
-        
+
         embed = discord.Embed(
             title="🔧 Configuration Value",
             color=discord.Color.blue()
@@ -135,7 +136,7 @@ class ConfigCommands(commands.Cog):
         embed.add_field(name="Key", value=f"`{key}`", inline=False)
         embed.add_field(name="Value", value=f"`{value}`", inline=False)
         embed.add_field(name="Type", value=f"`{type(value).__name__}`", inline=False)
-        
+
         await interaction.response.send_message(embed=embed)
 
     async def _handle_config_set(self, interaction: discord.Interaction, key: str, value: str):
@@ -146,13 +147,13 @@ class ConfigCommands(commands.Cog):
                 ephemeral=True
             )
             return
-            
+
         # Convert value to appropriate type
         converted_value = self._convert_value(value)
-        
+
         # Set override
         config.set_override(key, converted_value)
-        
+
         embed = discord.Embed(
             title="🔧 Configuration Override Set",
             description=f"Set override for **{key}** to **{converted_value}**",
@@ -168,7 +169,7 @@ class ConfigCommands(commands.Cog):
     async def _handle_config_clear(self, interaction: discord.Interaction):
         """Handle config clear action."""
         config.clear_overrides()
-        
+
         embed = discord.Embed(
             title="🔧 Configuration Overrides Cleared",
             description="All configuration overrides have been cleared.",
@@ -179,7 +180,7 @@ class ConfigCommands(commands.Cog):
     async def _handle_config_reload(self, interaction: discord.Interaction):
         """Handle config reload action."""
         success = config.load_config()
-        
+
         if success:
             embed = discord.Embed(
                 title="🔧 Configuration Reloaded",
@@ -192,7 +193,7 @@ class ConfigCommands(commands.Cog):
                 description="Failed to reload configuration from file.",
                 color=discord.Color.red()
             )
-            
+
         await interaction.response.send_message(embed=embed)
 
     async def _handle_config_save(self, interaction: discord.Interaction, filename: str):
@@ -203,17 +204,17 @@ class ConfigCommands(commands.Cog):
                 ephemeral=True
             )
             return
-            
+
         # Ensure filename has no path components or extension
         safe_filename = os.path.basename(filename).split('.')[0]
-        
+
         # Create path in configs directory
         os.makedirs("configs", exist_ok=True)
         filepath = f"configs/{safe_filename}.yaml"
-        
+
         # Save configuration
         success = config.save_to_file(filepath)
-        
+
         if success:
             embed = discord.Embed(
                 title="🔧 Configuration Saved",
@@ -226,7 +227,7 @@ class ConfigCommands(commands.Cog):
                 description=f"Failed to save configuration to **{filepath}**",
                 color=discord.Color.red()
             )
-            
+
         await interaction.response.send_message(embed=embed)
 
     async def _handle_config_profile(self, interaction: discord.Interaction, profile: app_commands.Choice[str]):
@@ -237,10 +238,10 @@ class ConfigCommands(commands.Cog):
                 ephemeral=True
             )
             return
-            
+
         profile_value = profile.value
         success = config.set_profile(profile_value)
-        
+
         if success:
             embed = discord.Embed(
                 title="🔧 Configuration Profile",
@@ -253,19 +254,19 @@ class ConfigCommands(commands.Cog):
                 description=f"Failed to switch to profile: **{profile_value}**",
                 color=discord.Color.red()
             )
-            
+
         await interaction.response.send_message(embed=embed)
 
     async def _handle_show_profile(self, interaction: discord.Interaction):
         """Handle show current profile action."""
         current_profile = config.get_current_profile()
-        
+
         embed = discord.Embed(
             title="🔧 Current Configuration Profile",
             description=f"Active profile: **{current_profile}**",
             color=discord.Color.blue()
         )
-        
+
         # Add available profiles
         available_profiles = ["default", "dev", "test", "prod"]
         embed.add_field(
@@ -273,16 +274,16 @@ class ConfigCommands(commands.Cog):
             value="\n".join(f"{'✅' if p == current_profile else '⚪'} {p}" for p in available_profiles),
             inline=False
         )
-        
+
         await interaction.response.send_message(embed=embed)
-    
+
     def _is_admin(self, user: discord.User) -> bool:
         """
         Check if user is an admin.
-        
+
         Args:
             user: Discord user
-            
+
         Returns:
             bool: True if user is an admin
         """
@@ -290,52 +291,53 @@ class ConfigCommands(commands.Cog):
         admin_user_id = config.get('bot.admin_user_id')
         if admin_user_id and str(user.id) == str(admin_user_id):
             return True
-        
+
         # Check if user has admin role
         if hasattr(user, "roles"):
             admin_role_id = config.get('bot.admin_role_id')
             if admin_role_id:
                 return any(role.id == admin_role_id for role in user.roles)
-        
+
         return False
-    
+
     def _convert_value(self, value: str) -> any:
         """
         Convert string value to appropriate type.
-        
+
         Args:
             value: String value to convert
-            
+
         Returns:
             any: Converted value
         """
         # Try to convert to int
         if value.isdigit():
             return int(value)
-        
+
         # Try to convert to float
         try:
             return float(value)
         except ValueError:
             pass
-        
+
         # Try to convert to bool
         if value.lower() in ['true', 'false']:
             return value.lower() == 'true'
-        
+
         # Try to convert to None
         if value.lower() in ['none', 'null']:
             return None
-        
+
         # Try to convert to JSON
         try:
             return json.loads(value)
         except ValueError:
             pass
-        
+
         # Return as string
         return value
 
+
 async def setup(bot):
     """Add the configuration commands cog to the bot."""
-    await bot.add_cog(ConfigCommands(bot)) 
+    await bot.add_cog(ConfigCommands(bot))

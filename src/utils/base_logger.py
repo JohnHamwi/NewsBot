@@ -9,9 +9,39 @@ import logging
 import colorlog
 from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Load environment variables
 load_dotenv()
+
+# Eastern timezone (automatically handles EST/EDT)
+EASTERN = ZoneInfo("America/New_York")
+
+
+class EasternFormatter(logging.Formatter):
+    """Custom formatter that uses Eastern timezone."""
+
+    def formatTime(self, record, datefmt=None):
+        """Override formatTime to use Eastern timezone."""
+        dt = datetime.fromtimestamp(record.created, tz=EASTERN)
+        if datefmt:
+            return dt.strftime(datefmt)
+        else:
+            return dt.isoformat()
+
+
+class EasternColoredFormatter(colorlog.ColoredFormatter):
+    """Custom colored formatter that uses Eastern timezone."""
+
+    def formatTime(self, record, datefmt=None):
+        """Override formatTime to use Eastern timezone."""
+        dt = datetime.fromtimestamp(record.created, tz=EASTERN)
+        if datefmt:
+            return dt.strftime(datefmt)
+        else:
+            return dt.isoformat()
+
 
 def setup_logger(name: str) -> logging.Logger:
     """
@@ -32,7 +62,7 @@ def setup_logger(name: str) -> logging.Logger:
 
     # Create and configure logger
     logger = logging.getLogger(name)
-    
+
     # Prevent duplicate handlers by checking if already configured
     if logger.handlers:
         return logger
@@ -43,7 +73,7 @@ def setup_logger(name: str) -> logging.Logger:
     # Create formatters with enhanced debug information
     console_formatter = colorlog.ColoredFormatter(
         "%(asctime)s | %(log_color)s[%(levelname)-5s]%(reset)s | %(message)s",
-        datefmt="%Y-%m-%d | %I:%M:%S %p EST",
+        datefmt="%Y-%m-%d | %I:%M:%S %p %Z",
         log_colors={
             "DEBUG": "cyan",
             "INFO": "green",
@@ -56,7 +86,7 @@ def setup_logger(name: str) -> logging.Logger:
     )
 
     file_formatter = logging.Formatter(
-        "%(asctime)s | [%(levelname)-5s] | %(message)s", datefmt="%Y-%m-%d | %I:%M:%S %p EST"
+        "%(asctime)s | [%(levelname)-5s] | %(message)s", datefmt="%Y-%m-%d | %I:%M:%S %p %Z"
     )
 
     # Create console handler

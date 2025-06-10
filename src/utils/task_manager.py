@@ -21,15 +21,16 @@ from src.utils.error_handler import error_handler
 
 T = TypeVar('T')
 
+
 class TaskManager:
     """
     Manages background tasks with error recovery and graceful shutdown.
     """
-    
+
     def __init__(self, bot=None):
         """
         Initialize the task manager.
-        
+
         Args:
             bot: Optional bot instance for error reporting
         """
@@ -41,7 +42,7 @@ class TaskManager:
         self.restart_window = 60  # seconds
         self.backoff_factor = 1.5  # Exponential backoff factor
         self.shutdown_requested = False
-    
+
     async def start_task(
         self,
         name: str,
@@ -52,7 +53,7 @@ class TaskManager:
     ) -> None:
         """
         Start a background task with error recovery.
-        
+
         Args:
             name: Unique name for the task
             coro: Coroutine function to run as a task
@@ -63,15 +64,15 @@ class TaskManager:
         if name in self.tasks and not self.tasks[name].done():
             logger.warning(f"Task {name} is already running")
             return
-        
+
         self.restart_counts.setdefault(name, 0)
         self.last_restart_time.setdefault(name, datetime.now() - timedelta(seconds=self.restart_window))
-        
+
         wrapped_coro = self._create_wrapped_task(name, coro, restart_on_failure, *args, **kwargs)
         task = asyncio.create_task(wrapped_coro)
         self.tasks[name] = task
         logger.info(f"Started task: {name}")
-    
+
     def _create_wrapped_task(
         self,
         name: str,
@@ -82,14 +83,14 @@ class TaskManager:
     ) -> Coroutine:
         """
         Create a wrapped task with error handling and recovery.
-        
+
         Args:
             name: Task name
             coro: Coroutine function
             restart_on_failure: Whether to restart on failure
             *args: Arguments for the coroutine
             **kwargs: Keyword arguments for the coroutine
-            
+
         Returns:
             Wrapped coroutine
         """
@@ -106,7 +107,7 @@ class TaskManager:
                 except Exception as e:
                     # Log the error
                     logger.error(f"Error in task {name}: {str(e)}")
-                    
+
                     # Report the error if bot is available
                     if self.bot:
                         try:
@@ -118,24 +119,24 @@ class TaskManager:
                             )
                         except Exception as report_error:
                             logger.error(f"Failed to report task error: {str(report_error)}")
-                    
+
                     # Handle task restart
                     if not restart_on_failure:
                         logger.warning(f"Task {name} failed and will not be restarted")
                         break
-                    
+
                     # Check if we should restart (rate limiting)
                     now = datetime.now()
                     time_since_last_restart = (now - self.last_restart_time[name]).total_seconds()
-                    
+
                     # Reset restart count if outside window
                     if time_since_last_restart > self.restart_window:
                         self.restart_counts[name] = 0
-                    
+
                     # Increment restart count
                     self.restart_counts[name] += 1
                     self.last_restart_time[name] = now
-                    
+
                     # Check if we've hit the restart limit
                     if self.restart_counts[name] > self.max_restarts:
                         logger.error(f"Task {name} failed too many times ({self.restart_counts[name]}), not restarting")
@@ -150,60 +151,63 @@ class TaskManager:
                             except Exception:
                                 pass
                         break
-                    
+
                     # Calculate backoff time
                     backoff_time = min(60, 2 * (self.backoff_factor ** (self.restart_counts[name] - 1)))
-                    logger.warning(f"Task {name} will restart in {backoff_time:.1f} seconds (attempt {self.restart_counts[name]})")
-                    
+                    logger.warning(
+                        f"Task {name} will restart in {backoff_time:.1f} seconds "
+                        f"(attempt {self.restart_counts[name]})"
+                    )
+
                     # Wait before restarting
                     try:
                         await asyncio.sleep(backoff_time)
                     except asyncio.CancelledError:
                         logger.info(f"Task {name} restart was cancelled during backoff")
                         break
-        
+
         return wrapped_task()
-    
+
     def get_task(self, name: str) -> Optional[asyncio.Task]:
         """
         Get a task by name.
-        
+
         Args:
             name: Task name
-            
+
         Returns:
             Task object or None if not found
         """
         return self.tasks.get(name)
-    
+
     def is_running(self, name: str) -> bool:
         """
         Check if a task is running.
-        
+
         Args:
             name: Task name
-            
+
         Returns:
             True if the task is running, False otherwise
         """
         task = self.get_task(name)
         return task is not None and not task.done()
-    
+
     async def stop_task(self, name: str, timeout: float = 5.0) -> bool:
         """
         Stop a running task gracefully.
-        
+
         Args:
             name: Task name
             timeout: Maximum time to wait for the task to stop
-            
+
         Returns:
             True if the task was stopped, False otherwise
         """
         task = self.get_task(name)
         if not task or task.done():
             return True
-        
+
         task.cancel()
         try:
             # Use gather with return_exceptions=True to handle CancelledError gracefully
@@ -215,22 +219,22 @@ class TaskManager:
         except Exception as e:
             logger.error(f"Error stopping task {name}: {str(e)}")
             return False
-    
+
     async def stop_all_tasks(self, timeout: float = 5.0) -> None:
         """
         Stop all running tasks gracefully.
-        
+
         Args:
             timeout: Maximum time to wait for each task to stop
         """
         self.shutdown_requested = True
         for name in list(self.tasks.keys()):
             await self.stop_task(name, timeout)
-    
+
     def get_task_stats(self) -> Dict[str, Dict[str, Any]]:
         """
         Get statistics about all tasks.
-        
+
         Returns:
             Dictionary of task statistics
         """
@@ -241,19 +245,22 @@ class TaskManager:
                 "restart_count": self.restart_counts.get(name, 0),
                 "last_restart": self.last_restart_time.get(name),
                 "cancelled": task.cancelled() if hasattr(task, "cancelled") else None,
-                "exception": task.exception() if hasattr(task, "exception") and task.done() and not task.cancelled() else None,
+                "exception": (task.exception() if hasattr(task, "exception") and
+                              task.done() and not task.cancelled() else None),
             }
         return stats
+
 
 # Create a global instance for easy access
 task_manager = TaskManager()
 
+
 def set_bot_instance(bot):
     """
     Set the bot instance for the global task manager.
-    
+
     Args:
         bot: Bot instance
     """
     global task_manager
-    task_manager.bot = bot 
+    task_manager.bot = bot

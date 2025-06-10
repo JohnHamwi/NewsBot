@@ -1,1 +1,1 @@
-# Core package for NewsBot 
+# Core package for NewsBot

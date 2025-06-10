@@ -5,28 +5,31 @@ This module provides configuration management functionality for NewsBot.
 """
 
 import os
+import re
 import yaml
 import json
 import time
 import logging
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Union
 from src.core.config_validator import validate_config, apply_defaults
+from src.utils.base_logger import base_logger as logger
+
 
 class ConfigManager:
     """
     Configuration manager that loads settings from a YAML file and environment variables.
     Supports type conversion, caching, and environment variable substitution.
     """
-    
+
     _instance: Optional['ConfigManager'] = None
-    
+
     def __new__(cls, config_file="config/config.yaml"):
         """
         Implement singleton pattern to ensure only one ConfigManager instance exists.
-        
+
         Args:
             config_file (str): Path to the configuration file
-        
+
         Returns:
             The singleton ConfigManager instance
         """
@@ -45,7 +48,7 @@ class ConfigManager:
         # Only initialize once due to singleton pattern
         if getattr(self, '_initialized', False):
             return
-            
+
         self._config_file = config_file
         self._config = None
         self._last_check_time = 0
@@ -70,21 +73,27 @@ class ConfigManager:
             load_dotenv("config/.env")
 
             # Load YAML config
-            with open(self._config_file, 'r') as f:
-                self._config = yaml.safe_load(f) or {}
-                
+            with open(self._config_file, 'r', encoding='utf-8') as file:
+                self._config = yaml.safe_load(file) or {}
+                logger.debug(f"✅ Configuration loaded from {self._config_file}")
+
             # Substitute environment variables
             self._substitute_env_vars(self._config)
-            
+
             # Get file modification time
             self._last_modified_time = os.path.getmtime(self._config_file)
             self._last_check_time = time.time()
-            
-        except Exception as e:
-            import logging
-            logging.getLogger("NewsBot").error(f"Failed to load config: {str(e)}")
+
+        except FileNotFoundError:
+            logger.warning(f"⚠️ Configuration file not found: {self._config_file}")
             self._config = {}
-            
+        except yaml.YAMLError as e:
+            logger.error(f"❌ Error parsing YAML configuration: {e}")
+            self._config = {}
+        except Exception as e:
+            logger.error(f"❌ Unexpected error loading configuration: {e}")
+            self._config = {}
+
     def reload_config(self):
         """
         Force reload the configuration file.
@@ -94,7 +103,7 @@ class ConfigManager:
     def _substitute_env_vars(self, config_dict):
         """
         Recursively substitute environment variables in the configuration.
-        
+
         Args:
             config_dict (dict): Dictionary to substitute values in
         """
@@ -113,56 +122,56 @@ class ConfigManager:
                             config_dict[key] = env_value.lower() == 'true'  # Convert to bool
                         else:
                             config_dict[key] = env_value
-                    except:
+                    except BaseException:
                         config_dict[key] = env_value
 
     def get(self, key_path, default=None):
         """
         Get a configuration value by its path.
-        
+
         Args:
             key_path (str): Dot-separated path to the configuration value
             default: Default value to return if the key is not found
-            
+
         Returns:
             The configuration value, or the default if not found
         """
         self.check_for_changes()
-        
+
         # Check runtime overrides first
         if key_path in self._runtime_overrides:
             return self._runtime_overrides[key_path]
-            
+
         # If no config loaded, load it now
         if self._config is None:
             self.load()
-            
+
         keys = key_path.split('.')
         current = self._config
-        
+
         for key in keys:
             if isinstance(current, dict) and key in current:
                 current = current[key]
             else:
                 return default
-                
+
         # Return the actual value type, don't convert to string
         return current
 
     def set_override(self, key_path, value):
         """
         Set a runtime override for a configuration value.
-        
+
         Args:
             key_path (str): Dot-separated path to the configuration value
             value: The value to set
         """
         self._runtime_overrides[key_path] = value
-        
+
     def clear_override(self, key_path=None):
         """
         Clear a runtime override, or all overrides if no key is specified.
-        
+
         Args:
             key_path (str, optional): Dot-separated path to clear, or None for all
         """
@@ -170,7 +179,7 @@ class ConfigManager:
             self._runtime_overrides = {}
         elif key_path in self._runtime_overrides:
             del self._runtime_overrides[key_path]
-            
+
     def check_for_changes(self):
         """
         Check if the configuration file has changed and reload if necessary.
@@ -178,62 +187,62 @@ class ConfigManager:
         now = time.time()
         if now - self._last_check_time < 5:
             return False
-            
+
         try:
             # Check for changes only every 5 seconds
             self._last_check_time = now
-            
+
             if not os.path.exists(self._config_file):
                 return False
-                
+
             mod_time = os.path.getmtime(self._config_file)
             if mod_time > self._last_modified_time:
                 self._load_config()
                 return True
-                
+
         except Exception:
             pass
-            
+
         return False
-        
+
     def validate(self) -> bool:
         """
         Validate the configuration against the schema.
-        
+
         Returns:
             bool: True if the configuration is valid, False otherwise
         """
         self.load()
-        
+
         # Use schema validation
         is_valid, errors = validate_config(self._config)
-        
+
         if not is_valid:
             for error in errors:
                 logging.getLogger("NewsBot").error(f"Configuration error: {error}")
             return False
-        
+
         # Apply defaults for missing values
         self._config = apply_defaults(self._config)
-        
+
         return True
-        
+
     def get_validation_errors(self) -> List[str]:
         """
         Get a list of validation errors for the current configuration.
-        
+
         Returns:
             List of error messages
         """
         self.load()
         _, errors = validate_config(self._config)
         return errors
-    
+
     @property
     def raw_config(self):
         """
         Get a copy of the raw configuration dictionary.
-        
+
         Returns:
             dict: A copy of the configuration dictionary
         """
@@ -241,5 +250,6 @@ class ConfigManager:
             self.load()
         return self._config.copy() if self._config else {}
 
+
 # Create global instance
-config = ConfigManager() 
+config = ConfigManager()

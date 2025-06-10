@@ -1,1 +1,1 @@
-# Security package for NewsBot 
+# Security package for NewsBot

@@ -1,3 +1,3 @@
 """
 NewsBot source code.
-""" 
+"""

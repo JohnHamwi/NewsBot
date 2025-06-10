@@ -10,6 +10,7 @@ from typing import Any, Optional, List, Dict
 from src.utils.base_logger import base_logger as logger
 import datetime
 
+
 class JSONCache:
     """
     JSON file-based cache manager for the bot.
@@ -17,6 +18,7 @@ class JSONCache:
     - latest_news: List[str]
     - telegram_channels: List[str]
     """
+
     def __init__(self, json_path: str = "data/botdata.json"):
         self.json_path = os.path.abspath(json_path)
         self._ensure_file()
@@ -191,4 +193,4 @@ class JSONCache:
             return True
         except Exception as e:
             logger.error(f"Failed to set status for channel {channel}: {str(e)}")
-            return False 
+            return False

@@ -71,7 +71,7 @@ class RBACManager:
         if hasattr(self, '_initialized'):
             return
         self._initialized = True
-        
+
         self.roles: Dict[str, Role] = {}
         self.permissions: Dict[str, Permission] = {}
 

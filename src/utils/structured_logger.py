@@ -6,10 +6,9 @@ This module provides structured logging functionality with JSON output for produ
 
 import os
 import json
-import logging
-from datetime import datetime
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
+from .timezone_utils import now_est
 
 # Load environment variables
 load_dotenv()
@@ -50,7 +49,7 @@ class StructuredLogger:
             str: JSON-formatted log message
         """
         log_entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": now_est().isoformat(),
             "level": level,
             "logger": self.name,
             "message": message,
@@ -100,4 +99,4 @@ class StructuredLogger:
 
 
 # Create a default structured logger instance
-structured_logger = StructuredLogger() 
+structured_logger = StructuredLogger()

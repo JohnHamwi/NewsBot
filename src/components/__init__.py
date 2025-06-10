@@ -15,10 +15,10 @@ __all__ = [
     # Decorators
     'admin_required',
     'admin_required_with_defer',
-    
+
     # Embeds
     'BaseEmbed',
-    'SuccessEmbed', 
+    'SuccessEmbed',
     'ErrorEmbed',
     'WarningEmbed',
     'InfoEmbed',
@@ -29,4 +29,4 @@ __all__ = [
     'create_embed_from_template',
     'create_error_embed',
     'create_success_embed',
-] 
+]

@@ -1,1 +1,1 @@
-# Utils package for NewsBot 
+# Utils package for NewsBot

@@ -30,7 +30,7 @@ def mock_config():
     """Provide a mock configuration."""
     return {
         'bot': {
-            'version': '1.5.0',
+            'version': '2.0.0',
             'guild_id': '123456789',
             'application_id': '987654321',
             'debug_mode': False

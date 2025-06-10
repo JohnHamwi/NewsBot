@@ -67,30 +67,53 @@ class MetricsManager:
         """Start the metrics server."""
         if self._server_started:
             return
-            
-        try:
-            start_http_server(self.port)
-            self._server_started = True
-            logger.info(f"Metrics server started on port {self.port}")
-        except Exception as e:
-            logger.error(f"Failed to start metrics server: {str(e)}")
-            raise
+
+        # Try multiple ports if the default is in use
+        ports_to_try = [self.port, 8001, 8002, 8003, 8004, 8005]
+
+        for port in ports_to_try:
+            try:
+                start_http_server(port)
+                self._server_started = True
+                self.port = port  # Update to the successful port
+                logger.info(f"Metrics server started on port {port}")
+                return
+            except OSError as e:
+                if "Address already in use" in str(e):
+                    logger.debug(f"Port {port} is in use, trying next port...")
+                    continue
+                else:
+                    logger.error(f"Failed to start metrics server on port {port}: {str(e)}")
+                    raise
+            except Exception as e:
+                logger.error(f"Failed to start metrics server on port {port}: {str(e)}")
+                raise
+
+        # If we get here, all ports failed
+        logger.warning("⚠️ Could not start metrics server on any port, continuing without metrics")
+        self._server_started = False
 
     def start_collection(self) -> None:
         """Start metrics collection."""
         if self._collection_started:
             return
-            
+
         try:
             # Start the HTTP server if not already started
             if not self._server_started:
                 self.start()
-            
-            self._collection_started = True
-            logger.debug("📊 Metrics collection started")
+
+            # Only start collection if server started successfully
+            if self._server_started:
+                self._collection_started = True
+                logger.debug("📊 Metrics collection started")
+            else:
+                logger.info("📊 Metrics collection disabled (server not available)")
+
         except Exception as e:
             logger.error(f"Failed to start metrics collection: {str(e)}")
-            raise
+            # Don't raise the exception, just log it and continue without metrics
+            logger.info("📊 Continuing without metrics collection")
 
     def stop_collection(self) -> None:
         """Stop metrics collection."""
@@ -100,7 +123,7 @@ class MetricsManager:
     def update_metric(self, metric_name: str, value: float) -> None:
         """
         Update a specific metric by name.
-        
+
         Args:
             metric_name: Name of the metric to update
             value: New value for the metric
@@ -108,7 +131,7 @@ class MetricsManager:
         try:
             if not self._collection_started:
                 return
-                
+
             # Map metric names to Gauge objects
             metric_map = {
                 'bot_latency': self.bot_latency,
@@ -118,13 +141,13 @@ class MetricsManager:
                 'memory_usage': self.memory_usage_percent,
                 'thread_count': self.thread_count,
             }
-            
+
             if metric_name in metric_map:
                 metric_map[metric_name].set(value)
                 logger.debug(f"📊 Updated metric {metric_name}: {value}")
             else:
                 logger.warning(f"Unknown metric: {metric_name}")
-                
+
         except Exception as e:
             logger.error(f"Failed to update metric {metric_name}: {str(e)}")
 
@@ -145,13 +168,13 @@ class MetricsManager:
         try:
             process = psutil.Process()
             self.memory_usage.set(process.memory_info().rss)
-            
+
             # Update additional system metrics if collection is active
             if self._collection_started:
                 self.cpu_usage.set(psutil.cpu_percent())
                 self.memory_usage_percent.set(process.memory_percent())
                 self.thread_count.set(process.num_threads())
-                
+
         except Exception as e:
             logger.error(f"Failed to update system metrics: {str(e)}")
 

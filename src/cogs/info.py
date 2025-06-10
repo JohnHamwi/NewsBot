@@ -6,7 +6,7 @@ Handles bot information, features, commands, technologies, and credits.
 """
 
 import traceback
-from typing import Any
+
 
 import discord
 from discord import app_commands
@@ -19,13 +19,12 @@ from src.components.embeds.base_embed import InfoEmbed, ErrorEmbed
 
 # Configuration constants
 GUILD_ID = config.get('bot.guild_id') or 0
-__version__ = "2.0.0"  # Bot version
 
 
 class InfoCommands(commands.Cog):
     """
     Cog for information commands.
-    
+
     Provides comprehensive bot information, features overview,
     command documentation, and credits.
     """
@@ -48,22 +47,25 @@ class InfoCommands(commands.Cog):
         app_commands.Choice(name="Credits", value="credits"),
     ])
     async def info(
-        self, 
-        interaction: discord.Interaction, 
+        self,
+        interaction: discord.Interaction,
         section: app_commands.Choice[str] = None,
         detailed: bool = False
     ) -> None:
         """
         Show comprehensive bot information and features.
-        
+
         Args:
             interaction: The Discord interaction
             section: Choose what information to display
             detailed: Show more detailed information
         """
         try:
-            logger.info(f"[INFO][CMD] Info command invoked by user {interaction.user.id}, section={section.value if section else 'overview'}, detailed={detailed}")
-            
+            logger.info(
+                f"[INFO][CMD] Info command invoked by user {interaction.user.id}, "
+                f"section={section.value if section else 'overview'}, detailed={detailed}"
+            )
+
             # Try to defer if not already responded to
             try:
                 if not interaction.response.is_done():
@@ -71,31 +73,31 @@ class InfoCommands(commands.Cog):
             except discord.errors.NotFound:
                 structured_logger.warning("Interaction already timed out or was responded to")
                 return
-            
+
             # Get the selected section or default to overview
             selected_section = section.value if section else "overview"
-            
+
             # Build the appropriate embed based on the selected section
             embed = await self._build_info_embed(selected_section, detailed)
-            
+
             # Send the response
             try:
                 await interaction.followup.send(embed=embed)
                 logger.info(f"[INFO][CMD] Info command completed successfully for user {interaction.user.id}")
             except discord.errors.NotFound:
                 logger.warning("Could not send response, interaction may have expired")
-            
+
         except Exception as e:
             structured_logger.error(
                 "Error executing info command",
                 extra_data={"error": str(e), "traceback": traceback.format_exc()}
             )
-            
+
             error_embed = ErrorEmbed(
                 "Info Command Error",
                 f"An error occurred while processing the command: {str(e)}"
             )
-            
+
             try:
                 await interaction.followup.send(embed=error_embed)
             except discord.errors.NotFound:
@@ -115,7 +117,7 @@ class InfoCommands(commands.Cog):
             return await self._build_credits_embed(detailed)
         else:
             return await self._build_overview_embed(detailed)
-    
+
     async def _build_overview_embed(self, detailed: bool) -> InfoEmbed:
         """Build the overview embed."""
         embed = InfoEmbed(
@@ -124,30 +126,33 @@ class InfoCommands(commands.Cog):
             "news from Telegram channels to your Discord server. It features automatic content "
             "curation, media handling, and Arabic-to-English translation."
         )
-        
+
         # Get bot metrics for accurate data
         uptime = discord.utils.utcnow() - self.bot.startup_time if hasattr(self.bot, 'startup_time') else None
         uptime_str = str(uptime).split('.')[0] if uptime else "Unknown"
-        
+
+        # Get version from config
+        bot_version = config.get('bot.version', '2.0.0')
+
         # Bot Details
         bot_details = (
             f"**Name:** {self.bot.user.name}\n"
             f"**ID:** `{self.bot.user.id}`\n"
             f"**Created:** {self.bot.user.created_at.strftime('%Y-%m-%d')}\n"
-            f"**Version:** {__version__}\n"
+            f"**Version:** {bot_version}\n"
             f"**Uptime:** {uptime_str}\n"
             f"**Serving:** {len(self.bot.guilds)} servers, {sum(guild.member_count or 0 for guild in self.bot.guilds)} users"
         )
-        
+
         embed.add_field(name="🤖 Bot Details", value=bot_details, inline=False)
-        
+
         # Quick stats
         if detailed:
             try:
                 cache = self.bot.json_cache
                 active_channels = await cache.list_telegram_channels("activated")
                 deactivated_channels = await cache.list_telegram_channels("deactivated")
-                
+
                 quick_stats = (
                     f"**Active Channels:** {len(active_channels)}\n"
                     f"**Deactivated Channels:** {len(deactivated_channels)}\n"
@@ -157,7 +162,7 @@ class InfoCommands(commands.Cog):
                 embed.add_field(name="📊 Quick Stats", value=quick_stats, inline=False)
             except Exception as e:
                 logger.error(f"Error gathering quick stats: {e}")
-        
+
         # Usage tip
         usage_tip = (
             "Use `/info section:Features` to see available features\n"
@@ -166,13 +171,13 @@ class InfoCommands(commands.Cog):
             "Use `/info section:Credits` to see credits and acknowledgments"
         )
         embed.add_field(name="💡 Usage Tip", value=usage_tip, inline=False)
-        
+
         # Set the bot's avatar as the thumbnail
         if self.bot.user.avatar:
             embed.set_thumbnail(url=self.bot.user.avatar.url)
-            
+
         return embed
-    
+
     async def _build_features_embed(self, detailed: bool) -> InfoEmbed:
         """Build the features embed."""
         embed = InfoEmbed(
@@ -180,7 +185,7 @@ class InfoCommands(commands.Cog):
             "Discover what NewsBot can do for your server"
         )
         embed.color = discord.Color.green()
-        
+
         # Core Features
         core_features = (
             "• 🔄 **Automatic News Aggregation** - Posts from Telegram channels to Discord\n"
@@ -190,7 +195,7 @@ class InfoCommands(commands.Cog):
             "• 📋 **Structured Logging** - Detailed JSON-based logging system"
         )
         embed.add_field(name="🚀 Core Features", value=core_features, inline=False)
-        
+
         # Advanced Features
         if detailed:
             advanced_features = (
@@ -203,7 +208,7 @@ class InfoCommands(commands.Cog):
                 "• 📈 **Resource Monitoring** - Alerts for high CPU/RAM usage"
             )
             embed.add_field(name="🔥 Advanced Features", value=advanced_features, inline=False)
-        
+
         # Background Tasks
         background_tasks = (
             "• 🔄 **Auto-Posting** - Posts news at configured intervals\n"
@@ -212,13 +217,13 @@ class InfoCommands(commands.Cog):
             "• ❤️ **Heartbeat** - Regularly reports system health"
         )
         embed.add_field(name="⚙️ Background Tasks", value=background_tasks, inline=False)
-        
+
         # Set the bot's avatar as the thumbnail
         if self.bot.user.avatar:
             embed.set_thumbnail(url=self.bot.user.avatar.url)
-            
+
         return embed
-    
+
     async def _build_commands_embed(self, detailed: bool) -> InfoEmbed:
         """Build the commands embed."""
         embed = InfoEmbed(
@@ -226,13 +231,13 @@ class InfoCommands(commands.Cog):
             "Here are the available commands you can use"
         )
         embed.color = discord.Color.gold()
-        
+
         # Public Commands
         public_commands = (
             "• `/info` - Show bot information and features (this command!)"
         )
         embed.add_field(name="📝 Public Commands", value=public_commands, inline=False)
-        
+
         # Admin Commands
         admin_commands = (
             "• `/status` - Display comprehensive bot status\n"
@@ -246,7 +251,7 @@ class InfoCommands(commands.Cog):
             "• `/fix_telegram` - Diagnose Telegram issues"
         )
         embed.add_field(name="👑 Admin Commands", value=admin_commands, inline=False)
-        
+
         if detailed:
             # Command Usage Tips
             usage_tips = (
@@ -257,13 +262,13 @@ class InfoCommands(commands.Cog):
                 "• Use `/config action:Get Value` to see current settings"
             )
             embed.add_field(name="💡 Usage Tips", value=usage_tips, inline=False)
-        
+
         # Set the bot's avatar as the thumbnail
         if self.bot.user.avatar:
             embed.set_thumbnail(url=self.bot.user.avatar.url)
-            
+
         return embed
-    
+
     async def _build_technologies_embed(self, detailed: bool) -> InfoEmbed:
         """Build the technologies embed."""
         embed = InfoEmbed(
@@ -271,7 +276,7 @@ class InfoCommands(commands.Cog):
             "NewsBot is built with these technologies"
         )
         embed.color = discord.Color.purple()
-        
+
         # Core Technologies
         core_tech = (
             "• 🐍 **Python 3.9+** - Core programming language\n"
@@ -281,7 +286,7 @@ class InfoCommands(commands.Cog):
             "• 💾 **JSON Cache** - For data persistence and state management"
         )
         embed.add_field(name="🚀 Core Technologies", value=core_tech, inline=False)
-        
+
         if detailed:
             # Architecture
             architecture = (
@@ -293,7 +298,7 @@ class InfoCommands(commands.Cog):
                 "• 🎨 **Component System** - Reusable UI components"
             )
             embed.add_field(name="🏛️ Architecture", value=architecture, inline=False)
-            
+
             # Development Tools
             dev_tools = (
                 "• 🧪 **Pytest** - Testing framework\n"
@@ -303,7 +308,7 @@ class InfoCommands(commands.Cog):
                 "• 🔒 **Bandit** - Security linting"
             )
             embed.add_field(name="🛠️ Development Tools", value=dev_tools, inline=False)
-        
+
         # System Requirements
         system_req = (
             "• 🖥️ **Python 3.9+**\n"
@@ -313,13 +318,13 @@ class InfoCommands(commands.Cog):
             "• 💾 **File System** (for JSON cache)"
         )
         embed.add_field(name="📋 System Requirements", value=system_req, inline=False)
-        
+
         # Set the bot's avatar as the thumbnail
         if self.bot.user.avatar:
             embed.set_thumbnail(url=self.bot.user.avatar.url)
-            
+
         return embed
-    
+
     async def _build_credits_embed(self, detailed: bool) -> InfoEmbed:
         """Build the credits embed."""
         embed = InfoEmbed(
@@ -327,11 +332,11 @@ class InfoCommands(commands.Cog):
             "Solo-developed NewsBot - built entirely by one developer"
         )
         embed.color = discord.Color.magenta()
-        
+
         # Developer info
         admin_user_id = config.get('bot.admin_user_id')
         developer_info = "Unknown developer"
-        
+
         if admin_user_id:
             try:
                 user = await self.bot.fetch_user(int(admin_user_id))
@@ -342,9 +347,9 @@ class InfoCommands(commands.Cog):
             except Exception as e:
                 logger.error(f"Failed to fetch admin user: {str(e)}")
                 developer_info = f"<@{admin_user_id}>"
-        
+
         embed.add_field(name="👨‍💻 Developer", value=developer_info, inline=False)
-        
+
         # Project Repository
         repository = (
             "🔗 **[View Source Code on GitHub](https://github.com/JohnHamwi/NewsBot)**\n"
@@ -352,7 +357,7 @@ class InfoCommands(commands.Cog):
             "🐛 Report issues or contribute improvements"
         )
         embed.add_field(name="📂 Open Source", value=repository, inline=False)
-        
+
         # Libraries and frameworks
         libraries = (
             "• [Discord.py](https://github.com/Rapptz/discord.py)\n"
@@ -362,7 +367,7 @@ class InfoCommands(commands.Cog):
             "• [Psutil](https://github.com/giampaolo/psutil)"
         )
         embed.add_field(name="📚 Libraries", value=libraries, inline=False)
-        
+
         if detailed:
             # Development Info
             development_info = (
@@ -373,18 +378,18 @@ class InfoCommands(commands.Cog):
                 "• **Open Source** - Available for community use"
             )
             embed.add_field(name="🏗️ Development", value=development_info, inline=False)
-        
+
         # Version and release info
-        release_info = f"Version {__version__} - Major Refactor & Optimization"
+        release_info = f"Version {config.get('bot.version', '2.0.0')} - Major Refactor & Optimization"
         embed.add_field(name="🔖 Release", value=release_info, inline=False)
-        
+
         # Footer
         embed.set_footer(text="NewsBot - Solo-developed Discord bot bringing news to your server since 2025")
-        
+
         return embed
 
 
 async def setup(bot: commands.Bot) -> None:
     """Set up the InfoCommands cog."""
     await bot.add_cog(InfoCommands(bot))
-    logger.info("✅ InfoCommands cog loaded") 
+    logger.info("✅ InfoCommands cog loaded")

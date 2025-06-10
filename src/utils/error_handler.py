@@ -28,6 +28,7 @@ from dataclasses import dataclass
 P = ParamSpec("P")
 T = TypeVar("T")
 
+
 @dataclass
 class ErrorContext:
     """Stores context about an error occurrence."""
@@ -51,13 +52,15 @@ class ErrorContext:
             'extra_info': self.extra_info or {}
         }
 
+
 class RateLimit:
     """Rate limiting for error reporting."""
+
     def __init__(self, max_calls: int, time_window: int):
         self.max_calls = max_calls
         self.time_window = time_window
         self.calls: List[datetime] = []
-    
+
     def is_rate_limited(self) -> bool:
         """Check if rate limited."""
         now = datetime.now()
@@ -67,9 +70,10 @@ class RateLimit:
         self.calls.append(now)
         return False
 
+
 class ErrorHandler:
     """Handles error reporting and tracking."""
-    
+
     def __init__(self):
         """Initialize error handler."""
         self.error_history: List[ErrorContext] = []
@@ -77,35 +81,35 @@ class ErrorHandler:
         self.total_operations = 0
         self.total_errors = 0
         self.max_history = 100
-    
+
     def _add_to_history(self, error_ctx: ErrorContext) -> None:
         """Add error to history, maintaining max size."""
         self.error_history.append(error_ctx)
         if len(self.error_history) > self.max_history:
             self.error_history.pop(0)
         self.total_errors += 1
-    
+
     def get_error_metrics(self) -> Dict[str, Any]:
         """Get error metrics for the last 24 hours."""
         now = datetime.now()
         day_ago = now - timedelta(days=1)
-        
+
         # Filter recent errors
         recent_errors = [e for e in self.error_history if e.timestamp > day_ago]
-        
+
         # Count by type
         error_counts = {}
         for err in recent_errors:
             err_type = err.error_type
             error_counts[err_type] = error_counts.get(err_type, 0) + 1
-        
+
         # Calculate success rate (assuming 1000 operations per day)
         total_errors = len(recent_errors)
         success_rate = max(0, 100 - (total_errors / 10))
-        
+
         # Get most recent error
         recent_error = recent_errors[-1].to_dict() if recent_errors else None
-        
+
         return {
             'error_counts': error_counts,
             'error_total': total_errors,
@@ -118,12 +122,12 @@ class ErrorHandler:
         """Format error counts into a readable string."""
         if not error_counts:
             return "No errors in the last 24 hours"
-        
+
         details = []
         for err_type, count in error_counts.items():
             details.append(f"{err_type}: {count}")
         return "\n".join(details)
-    
+
     async def send_error_embed(
         self,
         error_title: str,
@@ -141,11 +145,11 @@ class ErrorHandler:
         if rate_limit_key not in self.rate_limits:
             self.rate_limits[rate_limit_key] = RateLimit(
                 max_calls=5, time_window=60)
-        
+
         if self.rate_limits[rate_limit_key].is_rate_limited():
             logger.warning(f"Rate limited error report: {error_title}")
             return
-        
+
         # Create error context
         error_ctx = ErrorContext(
             error=error,
@@ -156,9 +160,9 @@ class ErrorHandler:
                 "context": context,
             },
         )
-        
+
         self._add_to_history(error_ctx)
-        
+
         # Create enhanced error embed
         embed = discord.Embed(
             title=f"❌ {error_title}",
@@ -166,41 +170,41 @@ class ErrorHandler:
             color=0xFF0000,  # Red
             timestamp=datetime.now(),
         )
-        
+
         # Add error details
         embed.add_field(
             name="Error Type",
             value=f"`{error_ctx.error_type}`",
             inline=True
         )
-        
+
         embed.add_field(
             name="Error Message",
             value=f"```{str(error)}```",
             inline=False
         )
-        
+
         if context:
             embed.add_field(
                 name="Context",
                 value=f"```{context}```",
                 inline=False
             )
-        
+
         if user:
             embed.add_field(
                 name="User",
                 value=f"{user.mention} (`{user.id}`)",
                 inline=True
             )
-        
+
         if channel:
             embed.add_field(
                 name="Channel",
                 value=f"{channel.mention} (`{channel.id}`)",
                 inline=True
             )
-        
+
         # Send to error channel if bot is provided
         if bot and hasattr(bot, 'errors_channel'):
             try:
@@ -208,10 +212,13 @@ class ErrorHandler:
             except Exception as e:
                 logger.error(f"Failed to send error embed: {str(e)}")
 
+
 # Global instance
 error_handler = ErrorHandler()
 
 # Placeholder for send_error_embed so it can be patched at runtime
+
+
 async def send_error_embed(
     error_title: str,
     error: Exception,
@@ -231,6 +238,7 @@ async def send_error_embed(
         bot (Optional[Any]): The bot instance (for logging)
     """
     pass
+
 
 def get_error_metrics() -> dict:
     """

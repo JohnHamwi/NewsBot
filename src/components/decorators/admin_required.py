@@ -16,10 +16,10 @@ from src.utils.base_logger import base_logger as logger
 def admin_required(func: Callable) -> Callable:
     """
     Decorator that ensures only users with admin role can execute the command.
-    
+
     Args:
         func: The command function to wrap
-        
+
     Returns:
         Wrapped function with admin authorization check
     """
@@ -27,20 +27,20 @@ def admin_required(func: Callable) -> Callable:
     async def wrapper(self, interaction: discord.Interaction, *args, **kwargs) -> Any:
         """
         Wrapper function that performs admin authorization check.
-        
+
         Args:
             self: The cog instance
             interaction: Discord interaction
             *args: Positional arguments for the command
             **kwargs: Keyword arguments for the command
-            
+
         Returns:
             Result of the original function if authorized, None otherwise
         """
         try:
             # Get admin role ID from config
             admin_role_id = config.get('bot.admin_role_id')
-            
+
             if not admin_role_id:
                 logger.error("Admin role ID not configured")
                 await interaction.response.send_message(
@@ -48,10 +48,10 @@ def admin_required(func: Callable) -> Callable:
                     ephemeral=True
                 )
                 return
-            
+
             # Check if user has admin role
             admin_role = discord.utils.get(interaction.guild.roles, id=admin_role_id)
-            
+
             if not admin_role:
                 logger.error(f"Admin role with ID {admin_role_id} not found in guild")
                 await interaction.response.send_message(
@@ -59,7 +59,7 @@ def admin_required(func: Callable) -> Callable:
                     ephemeral=True
                 )
                 return
-            
+
             if admin_role not in interaction.user.roles:
                 logger.warning(
                     f"Unauthorized access attempt by user {interaction.user.id} "
@@ -70,14 +70,14 @@ def admin_required(func: Callable) -> Callable:
                     ephemeral=True
                 )
                 return
-            
+
             # User is authorized, execute the original function
             logger.debug(
                 f"Admin command {func.__name__} authorized for user "
                 f"{interaction.user.id} ({interaction.user.display_name})"
             )
             return await func(self, interaction, *args, **kwargs)
-            
+
         except Exception as e:
             logger.error(f"Error in admin authorization check: {str(e)}", exc_info=True)
             await interaction.response.send_message(
@@ -85,7 +85,7 @@ def admin_required(func: Callable) -> Callable:
                 ephemeral=True
             )
             return
-    
+
     return wrapper
 
 
@@ -93,10 +93,10 @@ def admin_required_with_defer(func: Callable) -> Callable:
     """
     Decorator that ensures only users with admin role can execute the command.
     Automatically defers the interaction response for long-running commands.
-    
+
     Args:
         func: The command function to wrap
-        
+
     Returns:
         Wrapped function with admin authorization check and auto-defer
     """
@@ -104,20 +104,20 @@ def admin_required_with_defer(func: Callable) -> Callable:
     async def wrapper(self, interaction: discord.Interaction, *args, **kwargs) -> Any:
         """
         Wrapper function that performs admin authorization check and defers response.
-        
+
         Args:
             self: The cog instance
             interaction: Discord interaction
             *args: Positional arguments for the command
             **kwargs: Keyword arguments for the command
-            
+
         Returns:
             Result of the original function if authorized, None otherwise
         """
         try:
             # Get admin role ID from config
             admin_role_id = config.get('bot.admin_role_id')
-            
+
             if not admin_role_id:
                 logger.error("Admin role ID not configured")
                 await interaction.response.send_message(
@@ -125,10 +125,10 @@ def admin_required_with_defer(func: Callable) -> Callable:
                     ephemeral=True
                 )
                 return
-            
+
             # Check if user has admin role
             admin_role = discord.utils.get(interaction.guild.roles, id=admin_role_id)
-            
+
             if not admin_role:
                 logger.error(f"Admin role with ID {admin_role_id} not found in guild")
                 await interaction.response.send_message(
@@ -136,7 +136,7 @@ def admin_required_with_defer(func: Callable) -> Callable:
                     ephemeral=True
                 )
                 return
-            
+
             if admin_role not in interaction.user.roles:
                 logger.warning(
                     f"Unauthorized access attempt by user {interaction.user.id} "
@@ -147,21 +147,21 @@ def admin_required_with_defer(func: Callable) -> Callable:
                     ephemeral=True
                 )
                 return
-            
+
             # Defer response for potentially long-running command
             if not interaction.response.is_done():
                 await interaction.response.defer(thinking=True)
-            
+
             # User is authorized, execute the original function
             logger.debug(
                 f"Admin command {func.__name__} authorized for user "
                 f"{interaction.user.id} ({interaction.user.display_name})"
             )
             return await func(self, interaction, *args, **kwargs)
-            
+
         except Exception as e:
             logger.error(f"Error in admin authorization check: {str(e)}", exc_info=True)
-            
+
             # Send error response
             error_message = "❌ An error occurred while checking permissions."
             try:
@@ -171,7 +171,7 @@ def admin_required_with_defer(func: Callable) -> Callable:
                     await interaction.response.send_message(error_message, ephemeral=True)
             except discord.errors.NotFound:
                 logger.warning("Could not send error response - interaction expired")
-            
+
             return
-    
-    return wrapper 
+
+    return wrapper

@@ -1,7 +1,7 @@
 import asyncio
 from .newsbot import NewsBot
 from src.core.config_manager import config
-from src.utils.base_logger import base_logger as logger
+
 
 async def main():
     bot = NewsBot()

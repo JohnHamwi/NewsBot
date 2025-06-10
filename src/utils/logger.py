@@ -44,7 +44,7 @@ class BotLogger:
     def debug(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
         """
         Log a debug message.
-        
+
         Args:
             message: Log message
             context: Context information
@@ -58,7 +58,7 @@ class BotLogger:
     def info(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
         """
         Log an info message.
-        
+
         Args:
             message: Log message
             context: Context information
@@ -72,7 +72,7 @@ class BotLogger:
     def warning(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
         """
         Log a warning message.
-        
+
         Args:
             message: Log message
             context: Context information
@@ -86,7 +86,7 @@ class BotLogger:
     def error(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
         """
         Log an error message and increment error count.
-        
+
         Args:
             message: Log message
             context: Context information
@@ -96,13 +96,13 @@ class BotLogger:
             self.logger.error(f"{message} | {context}", exc_info=True)
         else:
             self.logger.error(message, exc_info=True)
-            
+
         self.error_count += 1
 
     def critical(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
         """
         Log a critical message and increment error count.
-        
+
         Args:
             message: Log message
             context: Context information
@@ -112,7 +112,7 @@ class BotLogger:
             self.logger.critical(f"{message} | {context}", exc_info=True)
         else:
             self.logger.critical(message, exc_info=True)
-            
+
         self.error_count += 1
 
     def command(self, command_name: str, duration: float, extras: Dict[str, Any] = None) -> None:

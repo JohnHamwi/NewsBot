@@ -12,8 +12,9 @@ from src.core.config_manager import ConfigManager
 def sample_config():
     return """
 bot:
-  version: "1.5.0"
-  debug_mode: false
+  name: "TestBot"
+  version: "2.0.0"
+  debug: true
   application_id: ${APP_ID}
 channels:
   news: ${NEWS_CHAN}
@@ -51,15 +52,19 @@ def test_get_with_dot_notation():
     config = ConfigManager()
     config._config = {
         "bot": {
-            "version": "1.5.0",
-            "debug": False
+            "name": "TestBot",
+            "version": "2.0.0",
+            "debug": True,
+            "nested": {
+                "value": 42
+            }
         },
         "channels": {
             "news": "123"
         }
     }
     
-    assert config.get("bot.version") == "1.5.0"
+    assert config.get("bot.version") == "2.0.0"
     assert config.get("channels.news") == "123"
     assert config.get("nonexistent.path") is None
     assert config.get("nonexistent.path", "default") == "default"
@@ -79,6 +84,9 @@ def test_config_validation(mock_file):
     """Test configuration validation."""
     valid_config = """
 bot:
+  name: "TestBot"
+  version: "2.0.0"
+  debug: true
   application_id: ${APP_ID}
   guild_id: ${GUILD_ID}
 channels:
@@ -103,7 +111,9 @@ def test_config_validation_missing_required(mock_file):
     """Test configuration validation with missing required values."""
     invalid_config = """
 bot:
-  version: "1.5.0"
+  name: "TestBot"
+  version: "2.0.0"
+  debug: true
 channels:
   news: ""
 """

@@ -1,23 +1,23 @@
 """
 Admin Commands Cog
 
-This cog provides administrative commands for NewsBot.
-Handles bot management, logging, presence settings, and system control.
+This module provides administrative commands for managing the NewsBot.
 """
 
+import asyncio
 import os
 import traceback
-from typing import Any
+from typing import Dict
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from src.core.config_manager import config
-from src.utils.base_logger import base_logger as logger
-from src.utils.structured_logger import structured_logger
 from src.components.decorators.admin_required import admin_required, admin_required_with_defer
 from src.components.embeds.base_embed import SuccessEmbed, ErrorEmbed, WarningEmbed, CommandEmbed
+from src.utils.base_logger import base_logger as logger
+from src.utils.structured_logger import structured_logger
 
 # Configuration constants
 GUILD_ID = config.get('bot.guild_id') or 0
@@ -26,7 +26,7 @@ GUILD_ID = config.get('bot.guild_id') or 0
 class AdminCommands(commands.Cog):
     """
     Cog for administrative commands.
-    
+
     Provides bot management, logging, and system control commands.
     """
 
@@ -48,20 +48,23 @@ class AdminCommands(commands.Cog):
     async def log_command(self, interaction: discord.Interaction, count: app_commands.Choice[int] = None) -> None:
         """
         Show the last N lines of the bot log (admin only).
-        
+
         Args:
             interaction: The Discord interaction
             count: Number of log lines to show
         """
         try:
-            logger.info(f"[ADMIN][CMD] Log command invoked by user {interaction.user.id}, count={count.value if count else 20}")
-            
+            logger.info(
+                f"[ADMIN][CMD] Log command invoked by user {interaction.user.id}, "
+                f"count={count.value if count else 20}"
+            )
+
             # Get the number of lines to show
             lines_to_show = count.value if count else 20
-            
+
             # Read the log file
             log_file_path = "logs/newsbot.log"
-            
+
             if not os.path.exists(log_file_path):
                 embed = WarningEmbed(
                     "Log File Not Found",
@@ -69,13 +72,13 @@ class AdminCommands(commands.Cog):
                 )
                 await interaction.followup.send(embed=embed)
                 return
-            
+
             # Read the last N lines
             try:
                 with open(log_file_path, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
                     last_lines = lines[-lines_to_show:] if len(lines) > lines_to_show else lines
-                    
+
                     if not last_lines:
                         embed = WarningEmbed(
                             "Empty Log File",
@@ -83,42 +86,42 @@ class AdminCommands(commands.Cog):
                         )
                         await interaction.followup.send(embed=embed)
                         return
-                    
+
                     # Format the log content
                     log_content = ''.join(last_lines)
-                    
+
                     # Truncate if too long for Discord
                     if len(log_content) > 1900:  # Leave room for embed formatting
                         log_content = log_content[-1900:]
                         log_content = "...\n" + log_content[log_content.find('\n') + 1:]
-                    
+
                     embed = CommandEmbed(
                         f"📋 Last {len(last_lines)} Log Lines",
                         f"```\n{log_content}\n```"
                     )
                     embed.set_footer(text=f"Log file: {log_file_path}")
-                    
+
                     await interaction.followup.send(embed=embed)
                     logger.info(f"[ADMIN][CMD] Log command completed successfully for user {interaction.user.id}")
-                    
+
             except Exception as e:
                 embed = ErrorEmbed(
                     "Error Reading Log File",
                     f"Failed to read log file: {str(e)}"
                 )
                 await interaction.followup.send(embed=embed)
-            
+
         except Exception as e:
             structured_logger.error(
                 "Error executing log command",
                 extra_data={"error": str(e), "traceback": traceback.format_exc()}
             )
-            
+
             error_embed = ErrorEmbed(
                 "Log Command Error",
                 f"An error occurred: {str(e)}"
             )
-            
+
             try:
                 await interaction.followup.send(embed=error_embed)
             except discord.errors.NotFound:
@@ -129,13 +132,13 @@ class AdminCommands(commands.Cog):
     async def start_command(self, interaction: discord.Interaction) -> None:
         """
         Trigger an immediate news post without waiting for the interval.
-        
+
         Args:
             interaction: The Discord interaction
         """
         try:
             logger.info(f"[ADMIN][CMD] Start command invoked by user {interaction.user.id}")
-            
+
             # Check if auto-posting is configured
             if not hasattr(self.bot, 'auto_post_interval') or self.bot.auto_post_interval <= 0:
                 embed = WarningEmbed(
@@ -143,40 +146,40 @@ class AdminCommands(commands.Cog):
                     "Auto-posting is not configured. Use `/set_interval` to set up automatic posting first."
                 )
                 embed.add_field(
-                    name="💡 Quick Setup", 
-                    value="Try `/set_interval interval:360` (6 hours) to enable auto-posting, then use `/start` again.", 
+                    name="💡 Quick Setup",
+                    value="Try `/set_interval interval:360` (6 hours) to enable auto-posting, then use `/start` again.",
                     inline=False
                 )
                 await interaction.followup.send(embed=embed)
                 return
-            
+
             # Set the force auto post flag
             self.bot.force_auto_post = True
-            
+
             embed = SuccessEmbed(
                 "🚀 Immediate Post Triggered",
                 "The bot will attempt to post news immediately on the next auto-post cycle (within 1 minute)."
             )
             embed.add_field(
-                name="ℹ️ Note", 
-                value="This bypasses the normal posting interval and will post from the next available channel.", 
+                name="ℹ️ Note",
+                value="This bypasses the normal posting interval and will post from the next available channel.",
                 inline=False
             )
-            
+
             await interaction.followup.send(embed=embed)
             logger.info(f"[ADMIN][CMD] Start command completed successfully for user {interaction.user.id}")
-            
+
         except Exception as e:
             structured_logger.error(
                 "Error executing start command",
                 extra_data={"error": str(e), "traceback": traceback.format_exc()}
             )
-            
+
             error_embed = ErrorEmbed(
                 "Start Command Error",
                 f"An error occurred: {str(e)}"
             )
-            
+
             try:
                 await interaction.followup.send(embed=error_embed)
             except discord.errors.NotFound:
@@ -200,14 +203,17 @@ class AdminCommands(commands.Cog):
     async def set_interval_command(self, interaction: discord.Interaction, interval: app_commands.Choice[int]) -> None:
         """
         Set the auto-posting interval.
-        
+
         Args:
             interaction: The Discord interaction
             interval: Number of minutes between posts
         """
         try:
-            logger.info(f"[ADMIN][CMD] Set interval command invoked by user {interaction.user.id}, interval={interval.value} minutes")
-            
+            logger.info(
+                f"[ADMIN][CMD] Set interval command invoked by user {interaction.user.id}, "
+                f"interval={interval.value} minutes"
+            )
+
             # Validate input
             if interval.value < 0 or interval.value > 1440:
                 embed = ErrorEmbed(
@@ -216,7 +222,7 @@ class AdminCommands(commands.Cog):
                 )
                 await interaction.followup.send(embed=embed)
                 return
-            
+
             # Convert minutes to seconds and set the interval
             seconds = interval.value * 60
             if hasattr(self.bot, 'set_auto_post_interval'):
@@ -225,7 +231,7 @@ class AdminCommands(commands.Cog):
                 self.bot.set_auto_post_interval(hours)
             else:
                 self.bot.auto_post_interval = seconds
-            
+
             # Create response embed
             if interval.value == 0:
                 embed = SuccessEmbed(
@@ -245,31 +251,31 @@ class AdminCommands(commands.Cog):
                     hours = interval.value // 60
                     minutes = interval.value % 60
                     interval_text = f"{hours}h {minutes}m"
-                
+
                 embed = SuccessEmbed(
                     "⏰ Auto-Posting Interval Updated",
                     f"Automatic posting interval set to **{interval_text}**."
                 )
                 embed.add_field(
-                    name="ℹ️ Next Post", 
-                    value="Use `/start` to trigger an immediate post or wait for the next scheduled interval.", 
+                    name="ℹ️ Next Post",
+                    value="Use `/start` to trigger an immediate post or wait for the next scheduled interval.",
                     inline=False
                 )
-            
+
             await interaction.followup.send(embed=embed)
             logger.info(f"[ADMIN][CMD] Set interval command completed successfully for user {interaction.user.id}")
-            
+
         except Exception as e:
             structured_logger.error(
                 "Error executing set_interval command",
                 extra_data={"error": str(e), "traceback": traceback.format_exc()}
             )
-            
+
             error_embed = ErrorEmbed(
                 "Set Interval Command Error",
                 f"An error occurred: {str(e)}"
             )
-            
+
             try:
                 await interaction.followup.send(embed=error_embed)
             except discord.errors.NotFound:
@@ -285,20 +291,23 @@ class AdminCommands(commands.Cog):
     async def set_rich_presence_command(self, interaction: discord.Interaction, mode: app_commands.Choice[str]) -> None:
         """
         Set the bot's Discord rich presence mode.
-        
+
         Args:
             interaction: The Discord interaction
             mode: The presence mode to set
         """
         try:
-            logger.info(f"[ADMIN][CMD] Set rich presence command invoked by user {interaction.user.id}, mode={mode.value}")
-            
+            logger.info(
+                f"[ADMIN][CMD] Set rich presence command invoked by user {interaction.user.id}, "
+                f"mode={mode.value}"
+            )
+
             # Set the presence mode
             if hasattr(self.bot, 'set_rich_presence_mode'):
                 self.bot.set_rich_presence_mode(mode.value)
             else:
                 self.bot.rich_presence_mode = mode.value
-            
+
             # Create response embed
             if mode.value == "automatic":
                 embed = SuccessEmbed(
@@ -310,21 +319,21 @@ class AdminCommands(commands.Cog):
                     "🔧 Maintenance Mode Enabled",
                     "Bot presence set to maintenance mode."
                 )
-            
+
             await interaction.followup.send(embed=embed)
             logger.info(f"[ADMIN][CMD] Set rich presence command completed successfully for user {interaction.user.id}")
-            
+
         except Exception as e:
             structured_logger.error(
                 "Error executing set_rich_presence command",
                 extra_data={"error": str(e), "traceback": traceback.format_exc()}
             )
-            
+
             error_embed = ErrorEmbed(
                 "Set Rich Presence Command Error",
                 f"An error occurred: {str(e)}"
             )
-            
+
             try:
                 await interaction.followup.send(embed=embed)
             except discord.errors.NotFound:
@@ -334,4 +343,4 @@ class AdminCommands(commands.Cog):
 async def setup(bot: commands.Bot) -> None:
     """Set up the AdminCommands cog."""
     await bot.add_cog(AdminCommands(bot))
-    logger.info("✅ AdminCommands cog loaded") 
+    logger.info("✅ AdminCommands cog loaded")

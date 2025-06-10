@@ -148,7 +148,7 @@ class ConfigManager:
         
         Example:
             >>> config.get('bot.version')
-            '1.0.0'
+            '2.0.0'
             >>> config.get('nonexistent.key', 'default')
             'default'
         """
