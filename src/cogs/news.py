@@ -86,13 +86,16 @@ class NewsCog(commands.Cog):
             if not await self._check_admin_authorization(interaction):
                 return
 
-            # Defer response
+            # Handle add action differently since it needs to send a modal immediately
+            if action_value == "add":
+                await self._handle_channel_add(interaction)
+                return
+
+            # Defer response for other actions
             await interaction.response.defer(thinking=True)
 
             if action_value == "list":
                 await self._handle_channel_list(interaction, filter_value)
-            elif action_value == "add":
-                await self._handle_channel_add(interaction)
             elif action_value == "activate":
                 await self._handle_channel_activate_selection(interaction)
             elif action_value == "deactivate":
