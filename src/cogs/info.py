@@ -345,6 +345,14 @@ class InfoCommands(commands.Cog):
         
         embed.add_field(name="👨‍💻 Developer", value=developer_info, inline=False)
         
+        # Project Repository
+        repository = (
+            "🔗 **[View Source Code on GitHub](https://github.com/JohnHamwi/NewsBot)**\n"
+            "⭐ Star the repository if you find it useful!\n"
+            "🐛 Report issues or contribute improvements"
+        )
+        embed.add_field(name="📂 Open Source", value=repository, inline=False)
+        
         # Libraries and frameworks
         libraries = (
             "• [Discord.py](https://github.com/Rapptz/discord.py)\n"
