@@ -8,7 +8,7 @@ import os
 import json
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
-from .timezone_utils import now_est
+from .timezone_utils import now_eastern
 
 # Load environment variables
 load_dotenv()
@@ -49,7 +49,7 @@ class StructuredLogger:
             str: JSON-formatted log message
         """
         log_entry = {
-            "timestamp": now_est().isoformat(),
+            "timestamp": now_eastern().isoformat(),
             "level": level,
             "logger": self.name,
             "message": message,

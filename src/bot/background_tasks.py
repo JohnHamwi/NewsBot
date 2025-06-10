@@ -17,7 +17,7 @@ from discord.ext import commands
 
 from src.core.config_manager import config
 from src.utils.base_logger import base_logger as logger
-from src.utils.timezone_utils import now_est
+from src.utils.timezone_utils import now_eastern
 from src.utils.task_manager import task_manager
 from src.utils import error_handler
 
@@ -324,7 +324,7 @@ async def rich_presence_task(bot: "NewsBot"):
                     # Calculate time until next post
                     if bot.auto_post_interval > 0 and bot.last_post_time:
                         next_post = bot.last_post_time + datetime.timedelta(seconds=bot.auto_post_interval)
-                        time_until = next_post - now_est()
+                        time_until = next_post - now_eastern()
 
                         logger.debug(
                             f"🕐 Rich presence: interval={bot.auto_post_interval}s, "
@@ -398,7 +398,7 @@ async def auto_post_task(bot: "NewsBot"):
 
                 # Check if it's time to post
                 if bot.last_post_time:
-                    time_since_last = (now_est() - bot.last_post_time).total_seconds()
+                    time_since_last = (now_eastern() - bot.last_post_time).total_seconds()
                     logger.debug(f"⏱️ Time since last post: {time_since_last:.0f}s (need {bot.auto_post_interval}s)")
 
                     if time_since_last < bot.auto_post_interval and not bot.force_auto_post:
@@ -476,7 +476,7 @@ async def auto_post_task(bot: "NewsBot"):
                                     break
 
                             if post_successful:
-                                bot.last_post_time = now_est()
+                                bot.last_post_time = now_eastern()
                                 bot.mark_just_posted()
                                 logger.info("✅ Auto-post completed successfully")
                                 await bot.save_auto_post_config()

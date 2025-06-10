@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 # Load environment variables
 load_dotenv()
 
-# Eastern timezone (automatically handles EST/EDT)
+# Eastern timezone (automatically handles EST/EDT transitions)
 EASTERN = ZoneInfo("America/New_York")
 
 

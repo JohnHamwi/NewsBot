@@ -14,7 +14,7 @@ from src.components.decorators.admin_required import admin_required
 from src.components.embeds.base_embed import BaseEmbed
 from src.core.config_manager import config
 from src.utils.base_logger import base_logger as logger
-from src.utils.timezone_utils import now_est
+from src.utils.timezone_utils import now_eastern
 from src.utils.config import Config
 from src.utils import error_handler
 
@@ -133,7 +133,7 @@ class NewsCog(commands.Cog):
                 title="❌ Unauthorized",
                 description="```You are not authorized to use this command.```",
                 color=EMBED_COLOR_ERROR,
-                timestamp=now_est(),
+                timestamp=now_eastern(),
             )
 
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -201,7 +201,7 @@ class NewsCog(commands.Cog):
                 title=f"{emoji} {title}",
                 description=f"```{channel_text}```",
                 color=EMBED_COLOR_INFO,
-                timestamp=now_est(),
+                timestamp=now_eastern(),
             )
             embed.set_footer(text=f"Total: {len(channels)} channels")
         else:
@@ -209,7 +209,7 @@ class NewsCog(commands.Cog):
                 title=f"{emoji} {title}",
                 description="```No channels found for this category.```",
                 color=EMBED_COLOR_WARNING,
-                timestamp=now_est(),
+                timestamp=now_eastern(),
             )
 
         return embed
@@ -235,7 +235,7 @@ class NewsCog(commands.Cog):
             title=f"❌ {title}",
             description=f"```{str(error)}```",
             color=EMBED_COLOR_ERROR,
-            timestamp=now_est(),
+            timestamp=now_eastern(),
         )
 
         try:
@@ -284,7 +284,7 @@ class NewsCog(commands.Cog):
                 title="ℹ️ No Channels Available",
                 description="No deactivated channels available to activate.",
                 color=EMBED_COLOR_INFO,
-                timestamp=now_est(),
+                timestamp=now_eastern(),
             )
             await interaction.followup.send(embed=embed)
             return
@@ -296,7 +296,7 @@ class NewsCog(commands.Cog):
             title="🟢 Activate Channel",
             description="Select channels to activate from the dropdown below:",
             color=EMBED_COLOR_INFO,
-            timestamp=now_est(),
+            timestamp=now_eastern(),
         )
         await interaction.followup.send(embed=embed, view=view)
 
@@ -310,7 +310,7 @@ class NewsCog(commands.Cog):
                 title="ℹ️ No Channels Available",
                 description="No activated channels available to deactivate.",
                 color=EMBED_COLOR_INFO,
-                timestamp=now_est(),
+                timestamp=now_eastern(),
             )
             await interaction.followup.send(embed=embed)
             return
@@ -322,7 +322,7 @@ class NewsCog(commands.Cog):
             title="🔴 Deactivate Channel",
             description="Select channels to deactivate from the dropdown below:",
             color=EMBED_COLOR_WARNING,
-            timestamp=now_est(),
+            timestamp=now_eastern(),
         )
         await interaction.followup.send(embed=embed, view=view)
 
@@ -378,7 +378,7 @@ class ChannelActivateDropdown(ui.View):
                     description=(f"Successfully activated {success_count} channel(s): "
                                  f"{', '.join(f'@{c}' for c in selected_channels)}"),
                     color=EMBED_COLOR_SUCCESS,
-                    timestamp=now_est(),
+                    timestamp=now_eastern(),
                 )
             elif success_count > 0 and failed_channels:
                 embed = discord.Embed(
@@ -386,14 +386,14 @@ class ChannelActivateDropdown(ui.View):
                     description=(f"Activated {success_count} channel(s), but failed to activate: "
                                  f"{', '.join(f'@{c}' for c in failed_channels)}"),
                     color=EMBED_COLOR_WARNING,
-                    timestamp=now_est(),
+                    timestamp=now_eastern(),
                 )
             else:
                 embed = discord.Embed(
                     title="❌ Activation Failed",
                     description=f"Failed to activate any channels: {', '.join(f'@{c}' for c in failed_channels)}",
                     color=EMBED_COLOR_ERROR,
-                    timestamp=now_est(),
+                    timestamp=now_eastern(),
                 )
 
             await interaction.response.edit_message(embed=embed, view=None)
@@ -405,7 +405,7 @@ class ChannelActivateDropdown(ui.View):
                 title="❌ Error",
                 description=f"An error occurred: {str(e)}",
                 color=EMBED_COLOR_ERROR,
-                timestamp=now_est(),
+                timestamp=now_eastern(),
             )
             await interaction.response.edit_message(embed=embed, view=None)
 
@@ -458,7 +458,7 @@ class ChannelDeactivateDropdown(ui.View):
                     description=(f"Successfully deactivated {success_count} channel(s): "
                                  f"{', '.join(f'@{c}' for c in selected_channels)}"),
                     color=EMBED_COLOR_WARNING,
-                    timestamp=now_est(),
+                    timestamp=now_eastern(),
                 )
             elif success_count > 0 and failed_channels:
                 embed = discord.Embed(
@@ -466,14 +466,14 @@ class ChannelDeactivateDropdown(ui.View):
                     description=(f"Deactivated {success_count} channel(s), but failed to deactivate: "
                                  f"{', '.join(f'@{c}' for c in failed_channels)}"),
                     color=EMBED_COLOR_WARNING,
-                    timestamp=now_est(),
+                    timestamp=now_eastern(),
                 )
             else:
                 embed = discord.Embed(
                     title="❌ Deactivation Failed",
                     description=f"Failed to deactivate any channels: {', '.join(f'@{c}' for c in failed_channels)}",
                     color=EMBED_COLOR_ERROR,
-                    timestamp=now_est(),
+                    timestamp=now_eastern(),
                 )
 
             await interaction.response.edit_message(embed=embed, view=None)
@@ -485,7 +485,7 @@ class ChannelDeactivateDropdown(ui.View):
                 title="❌ Error",
                 description=f"An error occurred: {str(e)}",
                 color=EMBED_COLOR_ERROR,
-                timestamp=now_est(),
+                timestamp=now_eastern(),
             )
             await interaction.response.edit_message(embed=embed, view=None)
 
@@ -525,7 +525,7 @@ class ChannelAddModal(ui.Modal):
                     title="✅ Channel Added Successfully",
                     description=f"Channel `@{channel_name}` has been added and activated!",
                     color=EMBED_COLOR_SUCCESS,
-                    timestamp=now_est(),
+                    timestamp=now_eastern(),
                 )
                 embed.add_field(
                     name="💡 Next Steps",
@@ -537,7 +537,7 @@ class ChannelAddModal(ui.Modal):
                     title="⚠️ Channel Already Exists",
                     description=f"Channel `@{channel_name}` is already in the system.",
                     color=EMBED_COLOR_WARNING,
-                    timestamp=now_est(),
+                    timestamp=now_eastern(),
                 )
                 embed.add_field(
                     name="💡 Tip",
@@ -554,7 +554,7 @@ class ChannelAddModal(ui.Modal):
                 title="❌ Error Adding Channel",
                 description=f"Failed to add channel `@{channel_name}`: {str(e)}",
                 color=EMBED_COLOR_ERROR,
-                timestamp=now_est(),
+                timestamp=now_eastern(),
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
