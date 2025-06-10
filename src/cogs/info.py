@@ -324,7 +324,7 @@ class InfoCommands(commands.Cog):
         """Build the credits embed."""
         embed = InfoEmbed(
             "👏 Credits",
-            "The people and projects that made NewsBot possible"
+            "Solo-developed NewsBot - built entirely by one developer"
         )
         embed.color = discord.Color.magenta()
         
@@ -364,22 +364,22 @@ class InfoCommands(commands.Cog):
         embed.add_field(name="📚 Libraries", value=libraries, inline=False)
         
         if detailed:
-            # Special thanks
-            special_thanks = (
-                "• Discord Developer Community\n"
-                "• Telegram API Developers\n"
-                "• Python Community\n"
-                "• Open Source Contributors\n"
-                "• Claude AI for development assistance"
+            # Development Info
+            development_info = (
+                "• **Solo Project** - Developed entirely by one person\n"
+                "• **Clean Architecture** - Service-oriented design\n"
+                "• **Modern Practices** - Following industry standards\n"
+                "• **Production Ready** - Comprehensive error handling\n"
+                "• **Open Source** - Available for community use"
             )
-            embed.add_field(name="💖 Special Thanks", value=special_thanks, inline=False)
+            embed.add_field(name="🏗️ Development", value=development_info, inline=False)
         
         # Version and release info
         release_info = f"Version {__version__} - Major Refactor & Optimization"
         embed.add_field(name="🔖 Release", value=release_info, inline=False)
         
         # Footer
-        embed.set_footer(text="NewsBot - Bringing news to your Discord server since 2025")
+        embed.set_footer(text="NewsBot - Solo-developed Discord bot bringing news to your server since 2025")
         
         return embed
 
