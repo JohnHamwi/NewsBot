@@ -20,6 +20,13 @@ wheels/
 .installed.cfg
 *.egg
 
+# Testing
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+htmlcov/
+
 # Virtual Environment
 venv/
 .venv/
@@ -44,6 +51,18 @@ temp_output.log
 .env
 *.session
 *.session-journal
+botdata.json
+last_uptime.txt
+
+# Runtime data
+data/botdata.json
+data/last_uptime.txt
+data/cache/
+
+# Backup files
+*.backup
+*.bak
+*~
 
 # OS
 .DS_Store?
