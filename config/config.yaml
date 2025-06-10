@@ -2,17 +2,17 @@
 bot:
   version: "1.0.0"
   debug_mode: true
-  application_id: 1378540050006147114
-  guild_id: 1228455909827805308
-  admin_role_id: 1271183251041681501
-  admin_user_id: ${ADMIN_USER_ID}  # From env
-  news_role_id: 1271183251041681501
+  application_id: ${APPLICATION_ID}
+  guild_id: ${GUILD_ID}
+  admin_role_id: ${ADMIN_ROLE_ID}
+  admin_user_id: ${ADMIN_USER_ID}
+  news_role_id: ${NEWS_ROLE_ID}
 
 # Channel Configuration
 channels:
-  news: 1378552504039510167
-  errors: 1378781937279176774
-  logs: 1378553893083938957
+  news: ${NEWS_CHANNEL_ID}
+  errors: ${ERRORS_CHANNEL_ID}
+  logs: ${LOG_CHANNEL_ID}
 
 # API Tokens (from environment variables)
 tokens:
