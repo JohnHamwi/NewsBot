@@ -23,6 +23,7 @@ from src.utils.structured_logger import structured_logger
 from src.utils.content_cleaner import clean_news_content
 from src.utils.syrian_locations import format_syrian_location_tags
 from src.utils.syrian_time import format_syrian_time, now_syrian
+from src.utils.translator import translate_arabic_to_english, generate_arabic_title
 
 
 class TelegramManager:
@@ -203,7 +204,7 @@ class TelegramManager:
             event: The Telegram message event
 
         Returns:
-            discord.Embed: Formatted Discord embed with cleaned content and location tags
+            discord.Embed: Formatted Discord embed with cleaned content, ChatGPT translation, and location tags
         """
         # Get channel/chat information
         chat = await event.get_chat()
@@ -214,16 +215,35 @@ class TelegramManager:
         # Clean the content (remove sources, emojis, links, hashtags)
         cleaned_text = clean_news_content(original_text)
         
+        # Generate Arabic title using ChatGPT (3-6 words)
+        arabic_title = generate_arabic_title(cleaned_text)
+        
+        # Translate the cleaned content to English using ChatGPT
+        english_translation = translate_arabic_to_english(cleaned_text)
+        
         # Detect Syrian locations in the cleaned text
         location_tags = format_syrian_location_tags(cleaned_text)
         
         # Convert message timestamp to Syrian time
         syrian_time = format_syrian_time(event.message.date, format_style='short')
+        message_date = format_syrian_time(event.message.date, format_style='date_only')
         
-        # Create embed with cleaned content
+        # Create title with calendar emoji, date, and ChatGPT-generated Arabic title
+        title = f"📅 {message_date} | {arabic_title}" if arabic_title else f"📅 {message_date} | أخبار سورية"
+        
+        # Create description with Arabic text and English translation
+        description_parts = []
+        if cleaned_text:
+            description_parts.append(f"**العربية:**\n{cleaned_text}")
+        if english_translation and english_translation != cleaned_text:
+            description_parts.append(f"**English:**\n{english_translation}")
+        
+        description = "\n\n".join(description_parts) if description_parts else "*(Content removed during cleaning)*"
+        
+        # Create embed with enhanced content
         embed = discord.Embed(
-            title=f"📰 Syrian News Update",
-            description=cleaned_text if cleaned_text else "*(Content removed during cleaning)*",
+            title=title,
+            description=description,
             color=discord.Color.blue(),
             timestamp=event.message.date,
         )

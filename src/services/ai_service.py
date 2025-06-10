@@ -147,9 +147,9 @@ class AIService:
             return None
 
     async def _generate_title(self, text: str) -> Optional[str]:
-        """Generate a concise title from the text using OpenAI."""
+        """Generate a concise Arabic title from the text using OpenAI."""
         try:
-            self.logger.debug("[AI] Starting title generation")
+            self.logger.debug("[AI] Starting Arabic title generation")
 
             response = await self.openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
@@ -157,11 +157,12 @@ class AIService:
                     {
                         "role": "system",
                         "content": (
-                            "You are a news headline writer. "
-                            "Create a concise, informative headline (3-6 words) from the following text. "
-                            "The headline should capture the main news event or topic. "
+                            "You are a news headline writer for Arabic news. "
+                            "Create a concise, informative Arabic headline (3-6 words) from the following text. "
+                            "The headline should capture the main news event or topic in Arabic. "
                             "Use active voice and present tense when possible. "
-                            "Do not use quotation marks or special formatting."
+                            "Do not use quotation marks or special formatting. "
+                            "Respond ONLY in Arabic."
                         )
                     },
                     {
@@ -178,14 +179,14 @@ class AIService:
             if title:
                 # Clean the title
                 title = self._clean_title(title)
-                self.logger.debug(f"[AI] Title generated: {title}")
+                self.logger.debug(f"[AI] Arabic title generated: {title}")
                 return title
             else:
-                self.logger.warning("[AI] Empty title received")
+                self.logger.warning("[AI] Empty Arabic title received")
                 return None
 
         except Exception as e:
-            self.logger.error(f"[AI] Title generation failed: {str(e)}")
+            self.logger.error(f"[AI] Arabic title generation failed: {str(e)}")
             return None
 
     def _clean_translation(self, translation: str) -> str:

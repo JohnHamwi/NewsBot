@@ -16,6 +16,7 @@ import discord
 
 from src.utils.base_logger import base_logger as logger
 from src.utils import error_handler
+from src.utils.config import Config
 
 # Configuration constants
 try:
@@ -115,6 +116,9 @@ class PostingService:
             # Send the message with media
             await self._send_message_to_thread(thread, message_content, discord_files)
 
+            # Send confirmation embed to logs channel
+            await self._send_confirmation_embed(thread, thread_title, channelname, message_id, len(discord_files))
+
             self.logger.info(f"[POSTING] Successfully posted to news channel: {thread_title}")
             return True
 
@@ -191,9 +195,10 @@ class PostingService:
         # Start with news role ping if available
         content_parts = []
 
-        if NEWS_ROLE_ID:
-            content_parts.append(f"<@&{NEWS_ROLE_ID}>")
-            content_parts.append("")  # Empty line
+        # Temporarily disable news role ping for testing
+        # if NEWS_ROLE_ID:
+        #     content_parts.append(f"<@&{NEWS_ROLE_ID}>")
+        #     content_parts.append("")  # Empty line
 
         # Add the Arabic text
         content_parts.append(cleaned_arabic)
@@ -207,8 +212,10 @@ class PostingService:
             content_parts.append(cleaned_translation)
             content_parts.append("")  # Empty line
 
-        # Add source information
-        content_parts.append(f"**Source:** {channelname} | **ID:** {message_id}")
+        # Add beta warning at the bottom
+        content_parts.append("⚠️ This bot is in beta testing. If you notice any issues or unexpected text, please DM @حَـــــنَّـــــا.")
+
+        # No source information will be included in the final post
 
         return "\n".join(content_parts)
 
@@ -252,11 +259,19 @@ class PostingService:
     ) -> Optional[discord.Thread]:
         """Create a new thread in the news channel."""
         try:
-            thread = await news_channel.create_thread(
-                name=thread_title,
-                type=discord.ChannelType.public_thread,
-                auto_archive_duration=1440  # 24 hours
-            )
+            # Check if it's a forum channel or regular text channel
+            if isinstance(news_channel, discord.ForumChannel):
+                # For forum channels, create a thread with empty initial message
+                thread, message = await news_channel.create_thread(
+                    name=thread_title,
+                    content=""  # Empty content instead of "News post loading..."
+                )
+            else:
+                # For regular text channels, create a thread without type parameter
+                thread = await news_channel.create_thread(
+                    name=thread_title,
+                    auto_archive_duration=1440  # 24 hours
+                )
 
             self.logger.debug(f"[POSTING] Created thread: {thread_title}")
             return thread
@@ -285,3 +300,73 @@ class PostingService:
         except Exception as e:
             self.logger.error(f"[POSTING] Failed to send message to thread: {str(e)}")
             raise
+
+    async def _send_confirmation_embed(
+        self,
+        thread: discord.Thread,
+        thread_title: str,
+        channelname: str,
+        message_id: int,
+        media_count: int
+    ) -> None:
+        """Send a confirmation embed to the logs channel after successful posting."""
+        try:
+            # Get the logs channel
+            logs_channel = self.bot.get_channel(Config.LOG_CHANNEL_ID)
+            if not logs_channel:
+                self.logger.warning("[POSTING] Logs channel not found, skipping confirmation embed")
+                return
+
+            # Create the confirmation embed
+            embed = discord.Embed(
+                title="📰 News Post Published",
+                description=f"Successfully posted news to {thread.parent.mention}",
+                color=0x00ff00,  # Green color
+                timestamp=datetime.datetime.now()
+            )
+
+            # Add fields with post information
+            embed.add_field(
+                name="📅 Thread Title",
+                value=thread_title,
+                inline=False
+            )
+
+            embed.add_field(
+                name="🔗 Thread Link",
+                value=f"[Click here to view the post]({thread.jump_url})",
+                inline=True
+            )
+
+            embed.add_field(
+                name="📺 Source Channel",
+                value=channelname,
+                inline=True
+            )
+
+            embed.add_field(
+                name="🆔 Message ID",
+                value=str(message_id),
+                inline=True
+            )
+
+            if media_count > 0:
+                embed.add_field(
+                    name="📎 Media Files",
+                    value=f"{media_count} file(s) attached",
+                    inline=True
+                )
+
+            # Add footer
+            embed.set_footer(
+                text="Syrian News Bot",
+                icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None
+            )
+
+            # Send the embed
+            await logs_channel.send(embed=embed)
+            self.logger.debug(f"[POSTING] Sent confirmation embed to logs channel")
+
+        except Exception as e:
+            self.logger.error(f"[POSTING] Failed to send confirmation embed: {str(e)}")
+            # Don't raise the exception as this is not critical for the main posting functionality

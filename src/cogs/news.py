@@ -139,7 +139,7 @@ class NewsCog(commands.Cog):
                 timestamp=now_eastern(),
             )
 
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=False)
 
             await error_handler.send_error_embed(
                 "Unauthorized Access",
@@ -273,9 +273,32 @@ class NewsCog(commands.Cog):
 
     async def _handle_channel_add(self, interaction: discord.Interaction):
         """Handle adding a new channel."""
-        # Create modal for channel input
-        modal = ChannelAddModal(self.bot)
-        await interaction.response.send_modal(modal)
+        try:
+            # Create modal for channel input
+            modal = ChannelAddModal(self.bot)
+            
+            # Send the modal
+            await interaction.response.send_modal(modal)
+            
+        except Exception as e:
+            logger.error(f"[NEWS][CMD] Error sending modal: {str(e)}", exc_info=True)
+            
+            # Fallback error response
+            embed = discord.Embed(
+                title="❌ Modal Error",
+                description=f"Failed to open input dialog: {str(e)}",
+                color=EMBED_COLOR_ERROR,
+                timestamp=now_eastern(),
+            )
+            
+            try:
+                await interaction.response.send_message(embed=embed, ephemeral=False)
+            except Exception:
+                # If response fails, try followup
+                try:
+                    await interaction.followup.send(embed=embed, ephemeral=False)
+                except Exception as followup_error:
+                    logger.error(f"[NEWS][CMD] Failed to send error response: {followup_error}")
 
     async def _handle_channel_activate_selection(self, interaction: discord.Interaction):
         """Handle channel activate selection."""
@@ -544,11 +567,11 @@ class ChannelAddModal(ui.Modal):
                 )
                 embed.add_field(
                     name="💡 Tip",
-                    value="Use `/news channel activate` to activate existing channels.",
+                    value="Use `/channel activate` to activate existing channels.",
                     inline=False
                 )
 
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=False)
 
         except Exception as e:
             logger.error(f"[NEWS][MODAL] Error adding channel {channel_name}: {str(e)}", exc_info=True)
@@ -559,7 +582,7 @@ class ChannelAddModal(ui.Modal):
                 color=EMBED_COLOR_ERROR,
                 timestamp=now_eastern(),
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
 async def setup(bot):

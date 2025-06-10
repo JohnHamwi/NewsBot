@@ -120,10 +120,11 @@ def admin_required_with_defer(func: Callable) -> Callable:
 
             if not admin_role_id:
                 logger.error("Admin role ID not configured")
-                await interaction.response.send_message(
-                    "❌ Admin role not configured. Please contact the bot administrator.",
-                    ephemeral=True
-                )
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ Admin role not configured. Please contact the bot administrator.",
+                        ephemeral=True
+                    )
                 return
 
             # Check if user has admin role
@@ -131,10 +132,11 @@ def admin_required_with_defer(func: Callable) -> Callable:
 
             if not admin_role:
                 logger.error(f"Admin role with ID {admin_role_id} not found in guild")
-                await interaction.response.send_message(
-                    "❌ Admin role not found. Please contact the bot administrator.",
-                    ephemeral=True
-                )
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ Admin role not found. Please contact the bot administrator.",
+                        ephemeral=True
+                    )
                 return
 
             if admin_role not in interaction.user.roles:
@@ -142,15 +144,17 @@ def admin_required_with_defer(func: Callable) -> Callable:
                     f"Unauthorized access attempt by user {interaction.user.id} "
                     f"({interaction.user.display_name}) to command {func.__name__}"
                 )
-                await interaction.response.send_message(
-                    "❌ You do not have permission to use this command.",
-                    ephemeral=True
-                )
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ You do not have permission to use this command.",
+                        ephemeral=True
+                    )
                 return
 
             # Defer response for potentially long-running command
+            # Only defer if the interaction hasn't been responded to yet
             if not interaction.response.is_done():
-                await interaction.response.defer(thinking=True)
+                await interaction.response.defer(ephemeral=False)
 
             # User is authorized, execute the original function
             logger.debug(
@@ -158,6 +162,28 @@ def admin_required_with_defer(func: Callable) -> Callable:
                 f"{interaction.user.id} ({interaction.user.display_name})"
             )
             return await func(self, interaction, *args, **kwargs)
+
+        except discord.errors.HTTPException as e:
+            if e.code == 40060:  # Interaction already acknowledged
+                logger.warning(f"Interaction already acknowledged for command {func.__name__}")
+                # Try to execute the function anyway since auth checks passed
+                try:
+                    return await func(self, interaction, *args, **kwargs)
+                except Exception as func_error:
+                    logger.error(f"Error executing function after interaction acknowledgment: {func_error}")
+                    return
+            else:
+                logger.error(f"Discord HTTP error in admin authorization: {str(e)}", exc_info=True)
+                # Send error response
+                error_message = "❌ An error occurred while processing the command."
+                try:
+                    if interaction.response.is_done():
+                        await interaction.followup.send(error_message, ephemeral=True)
+                    else:
+                        await interaction.response.send_message(error_message, ephemeral=True)
+                except Exception:
+                    logger.warning("Could not send error response - interaction may have expired")
+                return
 
         except Exception as e:
             logger.error(f"Error in admin authorization check: {str(e)}", exc_info=True)
@@ -169,8 +195,8 @@ def admin_required_with_defer(func: Callable) -> Callable:
                     await interaction.followup.send(error_message, ephemeral=True)
                 else:
                     await interaction.response.send_message(error_message, ephemeral=True)
-            except discord.errors.NotFound:
-                logger.warning("Could not send error response - interaction expired")
+            except Exception:
+                logger.warning("Could not send error response - interaction may have expired")
 
             return
 

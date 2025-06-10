@@ -22,6 +22,7 @@ from src.services.ai_service import AIService
 from src.services.posting_service import PostingService
 from src.components.embeds.base_embed import BaseEmbed
 from src.utils.structured_logger import structured_logger
+from src.utils.content_cleaner import clean_news_content
 
 # Configuration constants
 GUILD_ID = Config.GUILD_ID or 0
@@ -162,7 +163,7 @@ class FetchView(ui.View):
                     if ai_title:
                         self.ai_title = ai_title
 
-            # Download media if present
+            # Download media if present - REQUIRED for posting
             if self.media:
                 self.logger.info("[FETCH] Downloading media using media service")
                 media_files, temp_path = await self.media_service.download_media_with_timeout(
@@ -170,6 +171,15 @@ class FetchView(ui.View):
                 )
                 if media_files:
                     media_files = self.media_service.validate_media_files(media_files)
+                    
+                # If no media files were downloaded successfully, fail the post
+                if not media_files:
+                    self.logger.error("[FETCH] Media download failed or no valid media files - aborting post")
+                    return False
+            else:
+                # No media present - fail the post since we only want posts with media
+                self.logger.error("[FETCH] No media present - aborting post (media required)")
+                return False
 
             # Post to news channel using posting service
             success = await self.posting_service.post_to_news_channel(
@@ -359,6 +369,12 @@ class FetchView(ui.View):
         This method is called during initialization to prepare the content.
         """
         try:
+            # Extract text from the message if not already provided
+            if not self.arabic_text_clean and hasattr(self.post, 'message') and self.post.message:
+                # Clean the text from the Telegram message
+                self.arabic_text_clean = clean_news_content(self.post.message)
+                self.logger.info(f"[FETCH] Extracted and cleaned text: {len(self.arabic_text_clean)} characters")
+
             if self.arabic_text_clean and (not self.ai_english or not self.ai_title):
                 self.logger.info("[FETCH] Processing message with AI services")
 
@@ -367,10 +383,20 @@ class FetchView(ui.View):
 
                 if ai_english:
                     self.ai_english = ai_english
+                    self.logger.info(f"[FETCH] AI translation completed: {len(ai_english)} characters")
+                else:
+                    self.logger.warning("[FETCH] AI translation failed or returned empty")
+                    
                 if ai_title:
                     self.ai_title = ai_title
+                    self.logger.info(f"[FETCH] AI title generated: {ai_title}")
+                else:
+                    self.logger.warning("[FETCH] AI title generation failed")
 
                 self.logger.info("[FETCH] AI processing completed")
+            else:
+                if not self.arabic_text_clean:
+                    self.logger.warning("[FETCH] No text available for processing")
 
         except Exception as e:
             self.logger.error(f"[FETCH] Error processing message: {str(e)}", exc_info=True)

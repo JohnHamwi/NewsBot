@@ -7,7 +7,7 @@ This module provides basic logging functionality without configuration dependenc
 import os
 import logging
 import colorlog
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 from dotenv import load_dotenv
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -17,6 +17,27 @@ load_dotenv()
 
 # Eastern timezone (automatically handles EST/EDT transitions)
 EASTERN = ZoneInfo("America/New_York")
+
+
+class EasternTimedRotatingFileHandler(TimedRotatingFileHandler):
+    """Custom TimedRotatingFileHandler that uses Eastern timezone for rotation."""
+    
+    def __init__(self, filename, when='midnight', interval=1, backupCount=0, encoding=None, delay=False, utc=False, atTime=None):
+        """Initialize with Eastern timezone."""
+        # Force UTC to False since we want Eastern time
+        super().__init__(filename, when, interval, backupCount, encoding, delay, utc=False, atTime=atTime)
+    
+    def computeRollover(self, currentTime):
+        """Override to use Eastern timezone for rollover calculation."""
+        # Convert current time to Eastern timezone
+        dt = datetime.fromtimestamp(currentTime, tz=EASTERN)
+        
+        # Calculate next midnight in Eastern time
+        next_midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        next_midnight = next_midnight.replace(day=next_midnight.day + 1)
+        
+        # Convert back to timestamp
+        return next_midnight.timestamp()
 
 
 class EasternFormatter(logging.Formatter):
@@ -45,7 +66,9 @@ class EasternColoredFormatter(colorlog.ColoredFormatter):
 
 def setup_logger(name: str) -> logging.Logger:
     """
-    Set up a basic logger with console and file output.
+    Set up a basic logger with console and daily rotating file output.
+    
+    Creates a new log file every day at midnight EST with format: newsbot_YYYY-MM-DD.log
 
     Args:
         name (str): Name of the logger
@@ -71,9 +94,9 @@ def setup_logger(name: str) -> logging.Logger:
     logger.setLevel(logging.DEBUG if debug_mode else logging.INFO)
 
     # Create formatters with enhanced debug information
-    console_formatter = colorlog.ColoredFormatter(
+    console_formatter = EasternColoredFormatter(
         "%(asctime)s | %(log_color)s[%(levelname)-5s]%(reset)s | %(message)s",
-        datefmt="%Y-%m-%d | %I:%M:%S %p %Z",
+        datefmt="%Y-%m-%d | %I:%M:%S %p",
         log_colors={
             "DEBUG": "cyan",
             "INFO": "green",
@@ -85,8 +108,8 @@ def setup_logger(name: str) -> logging.Logger:
         secondary_log_colors={},
     )
 
-    file_formatter = logging.Formatter(
-        "%(asctime)s | [%(levelname)-5s] | %(message)s", datefmt="%Y-%m-%d | %I:%M:%S %p %Z"
+    file_formatter = EasternFormatter(
+        "%(asctime)s | [%(levelname)-5s] | %(message)s", datefmt="%Y-%m-%d | %I:%M:%S %p"
     )
 
     # Create console handler
@@ -95,10 +118,20 @@ def setup_logger(name: str) -> logging.Logger:
     console_handler.setLevel(logging.DEBUG if debug_mode else logging.INFO)
     logger.addHandler(console_handler)
 
-    # Create file handler with rotation
-    file_handler = RotatingFileHandler(
-        "logs/newsbot.log", maxBytes=10 * 1024 * 1024, backupCount=5  # 10MB
+    # Create daily rotating file handler
+    # This will create a new log file every day at midnight EST
+    # Files will be named: newsbot_2025-01-15.log, newsbot_2025-01-16.log, etc.
+    file_handler = EasternTimedRotatingFileHandler(
+        filename="logs/newsbot.log",
+        when="midnight",
+        interval=1,
+        backupCount=30,  # Keep 30 days of logs
+        encoding='utf-8'
     )
+    
+    # Set the suffix for rotated files to include the date
+    file_handler.suffix = "%Y-%m-%d"
+    
     file_handler.setFormatter(file_formatter)
     file_handler.setLevel(logging.DEBUG if debug_mode else logging.INFO)
     logger.addHandler(file_handler)
@@ -110,6 +143,9 @@ def setup_logger(name: str) -> logging.Logger:
         logger.debug(f"🔧 Logger '{name}' initialized with DEBUG level")
     else:
         logger.info(f"🔧 Logger '{name}' initialized with INFO level")
+    
+    logger.info(f"📅 Daily log rotation enabled - new file created at midnight EST")
+    logger.info(f"📁 Log files will be kept for 30 days")
 
     return logger
 

@@ -28,11 +28,17 @@ class ContentCleaner:
             re.compile(r'من\s*:.*$', re.MULTILINE | re.IGNORECASE),
             re.compile(r'عن\s*:.*$', re.MULTILINE | re.IGNORECASE),
             re.compile(r'نقلاً?\s*عن\s*:.*$', re.MULTILINE | re.IGNORECASE),
+            re.compile(r'نقلاً?\s*عن.*$', re.MULTILINE | re.IGNORECASE),  # Without colon
             re.compile(r'بحسب\s*:.*$', re.MULTILINE | re.IGNORECASE),
             re.compile(r'وفقاً?\s*لـ?.*$', re.MULTILINE | re.IGNORECASE),
             re.compile(r'حسب\s*:.*$', re.MULTILINE | re.IGNORECASE),
             re.compile(r'المرجع\s*:.*$', re.MULTILINE | re.IGNORECASE),
             re.compile(r'الخبر\s*:.*$', re.MULTILINE | re.IGNORECASE),
+            # More comprehensive Arabic patterns
+            re.compile(r'المصدر.*$', re.MULTILINE | re.IGNORECASE),  # Without colon
+            re.compile(r'قناة\s+[\u0600-\u06FF\s]+.*$', re.MULTILINE | re.IGNORECASE),  # Channel mentions
+            re.compile(r'شبكة\s+[\u0600-\u06FF\s]+.*$', re.MULTILINE | re.IGNORECASE),  # Network mentions
+            re.compile(r'وكالة\s+[\u0600-\u06FF\s]+.*$', re.MULTILINE | re.IGNORECASE),  # Agency mentions
             
             # English source patterns
             re.compile(r'source\s*:.*$', re.MULTILINE | re.IGNORECASE),

@@ -72,7 +72,7 @@ class ConfigCommands(commands.Cog):
         if not self._is_admin(interaction.user):
             await interaction.response.send_message(
                 "❌ You don't have permission to use this command.",
-                ephemeral=True
+                ephemeral=False
             )
             return
 
@@ -97,7 +97,7 @@ class ConfigCommands(commands.Cog):
             else:
                 await interaction.response.send_message(
                     "❌ Invalid action specified.",
-                    ephemeral=True
+                    ephemeral=False
                 )
 
         except Exception as e:
@@ -123,7 +123,7 @@ class ConfigCommands(commands.Cog):
         if not key:
             await interaction.response.send_message(
                 "❌ Please specify a configuration key to get.",
-                ephemeral=True
+                ephemeral=False
             )
             return
 
@@ -144,7 +144,7 @@ class ConfigCommands(commands.Cog):
         if not key or value is None:
             await interaction.response.send_message(
                 "❌ Please specify both a key and value for set action.",
-                ephemeral=True
+                ephemeral=False
             )
             return
 
@@ -201,7 +201,7 @@ class ConfigCommands(commands.Cog):
         if not filename:
             await interaction.response.send_message(
                 "❌ Please specify a filename for save action.",
-                ephemeral=True
+                ephemeral=False
             )
             return
 
@@ -235,7 +235,7 @@ class ConfigCommands(commands.Cog):
         if not profile:
             await interaction.response.send_message(
                 "❌ Please specify a profile to switch to.",
-                ephemeral=True
+                ephemeral=False
             )
             return
 
