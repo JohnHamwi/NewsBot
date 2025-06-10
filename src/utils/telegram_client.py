@@ -20,6 +20,9 @@ from src.utils.error_handler import error_handler, ErrorContext
 from src.utils.rate_limiter import rate_limiter_manager, rate_limited
 from discord.ext import commands
 from src.utils.structured_logger import structured_logger
+from src.utils.content_cleaner import clean_news_content
+from src.utils.syrian_locations import format_syrian_location_tags
+from src.utils.syrian_time import format_syrian_time, now_syrian
 
 
 class TelegramManager:
@@ -194,39 +197,66 @@ class TelegramManager:
 
     async def _create_message_embed(self, event) -> discord.Embed:
         """
-        Create a Discord embed from a Telegram message.
+        Create a Discord embed from a Telegram message with enhanced processing.
 
         Args:
             event: The Telegram message event
 
         Returns:
-            discord.Embed: Formatted Discord embed
+            discord.Embed: Formatted Discord embed with cleaned content and location tags
         """
         # Get channel/chat information
         chat = await event.get_chat()
-
+        
+        # Get original message text
+        original_text = event.message.message or ""
+        
+        # Clean the content (remove sources, emojis, links, hashtags)
+        cleaned_text = clean_news_content(original_text)
+        
+        # Detect Syrian locations in the cleaned text
+        location_tags = format_syrian_location_tags(cleaned_text)
+        
+        # Convert message timestamp to Syrian time
+        syrian_time = format_syrian_time(event.message.date, format_style='short')
+        
+        # Create embed with cleaned content
         embed = discord.Embed(
-            title=f"📰 {chat.title if hasattr(chat, 'title') else 'Telegram Update'}",
-            description=event.message.message,
+            title=f"📰 Syrian News Update",
+            description=cleaned_text if cleaned_text else "*(Content removed during cleaning)*",
             color=discord.Color.blue(),
             timestamp=event.message.date,
         )
-
-        # Add media if present
+        
+        # Add Syrian location tags if detected
+        if location_tags:
+            embed.add_field(
+                name="📍 Locations",
+                value=location_tags,
+                inline=False
+            )
+        
+        # Add Syrian time
+        embed.add_field(
+            name="🕐 Syrian Time",
+            value=syrian_time,
+            inline=True
+        )
+        
+        # Add media info if present (but don't include source links)
         if event.message.media:
-            embed.add_field(
-                name="Media", value=f"Type: {type(event.message.media).__name__}", inline=False
-            )
-
-        # Add message link if available
-        if hasattr(chat, "username"):
-            message_link = f"https://t.me/{chat.username}/{event.message.id}"
-            embed.add_field(
-                name="Source", value=f"[View on Telegram]({message_link})", inline=False
-            )
-
-        # Add footer with message ID
-        embed.set_footer(text=f"Message ID: {event.message.id}")
+            media_type = type(event.message.media).__name__
+            if 'Photo' in media_type:
+                embed.add_field(name="📷 Media", value="Image attached", inline=True)
+            elif 'Video' in media_type or 'Document' in media_type:
+                embed.add_field(name="🎥 Media", value="Video attached", inline=True)
+            else:
+                embed.add_field(name="📎 Media", value="Media attached", inline=True)
+        
+        # Add footer with Syrian time and no source info
+        embed.set_footer(
+            text=f"Syrian News • {format_syrian_time(now_syrian(), format_style='time_only')}"
+        )
 
         return embed
 

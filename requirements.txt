@@ -43,4 +43,5 @@ numpy>=1.26.0  # Required by matplotlib
 
 # Utilities
 aiohttp>=3.9.1  # Async HTTP client
+pytz>=2023.3  # For Syrian timezone handling
 zoneinfo>=0.2.1;python_version<"3.9"  # For timezone handling (built-in for Python 3.9+) 

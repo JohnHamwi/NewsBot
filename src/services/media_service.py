@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from src.utils.base_logger import base_logger as logger
 from src.utils import error_handler
+from src.utils.media_validator import MediaValidator
 
 # Configuration constants
 DISCORD_MAX_FILESIZE_MB = int(os.getenv("DISCORD_MAX_FILESIZE_MB", "25"))
@@ -26,6 +27,7 @@ class MediaService:
         """Initialize the media service with bot instance."""
         self.bot = bot
         self.logger = logger
+        self.media_validator = MediaValidator()
 
     async def download_media_with_timeout(
         self,
@@ -251,7 +253,7 @@ class MediaService:
             self.logger.debug(f"[MEDIA] Cleaned up {len(cleanup_paths)} media items")
 
     def validate_media_files(self, media_files: List[str]) -> List[str]:
-        """Validate and filter media files that exist and are within size limits."""
+        """Validate and filter media files that exist and are properly formatted."""
         valid_files = []
 
         for file_path in media_files:
@@ -264,7 +266,36 @@ class MediaService:
                 self.logger.warning(f"[MEDIA] File too large: {file_path} ({file_size} bytes)")
                 continue
 
-            valid_files.append(file_path)
+            # Enhanced validation using MediaValidator
+            try:
+                from pathlib import Path
+                path_obj = Path(file_path)
+                
+                # Determine file type and validate accordingly
+                file_ext = path_obj.suffix.lower()
+                
+                if file_ext in {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'}:
+                    # Validate image
+                    validation_result = self.media_validator._validate_image_file(path_obj)
+                elif file_ext in {'.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv', '.m4v'}:
+                    # Validate video
+                    validation_result = self.media_validator._validate_video_file(path_obj)
+                else:
+                    # Unknown file type, skip validation but allow
+                    self.logger.debug(f"[MEDIA] Unknown file type, allowing: {file_path}")
+                    valid_files.append(file_path)
+                    continue
+                
+                if validation_result['valid']:
+                    valid_files.append(file_path)
+                    self.logger.debug(f"[MEDIA] Validated {validation_result['type']}: {file_path}")
+                else:
+                    self.logger.warning(f"[MEDIA] Invalid {validation_result['type']}: {file_path} - {validation_result.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                self.logger.error(f"[MEDIA] Error validating {file_path}: {str(e)}")
+                # If validation fails, still include the file (fallback)
+                valid_files.append(file_path)
 
-        self.logger.debug(f"[MEDIA] Validated {len(valid_files)}/{len(media_files)} media files")
+        self.logger.info(f"[MEDIA] Validated {len(valid_files)}/{len(media_files)} media files")
         return valid_files
