@@ -142,6 +142,11 @@ class AdminCommands(commands.Cog):
                     "Auto-Posting Disabled",
                     "Auto-posting is not configured. Use `/set_interval` to set up automatic posting first."
                 )
+                embed.add_field(
+                    name="💡 Quick Setup", 
+                    value="Try `/set_interval interval:360` (6 hours) to enable auto-posting, then use `/start` again.", 
+                    inline=False
+                )
                 await interaction.followup.send(embed=embed)
                 return
             
@@ -177,54 +182,73 @@ class AdminCommands(commands.Cog):
             except discord.errors.NotFound:
                 structured_logger.warning("Could not send error response")
 
-    @app_commands.command(name="set_interval", description="Set auto-posting interval in hours (admin only)")
-    @app_commands.describe(hours="Hours between posts (1-24, 0 to disable)")
-    @app_commands.choices(hours=[
+    @app_commands.command(name="set_interval", description="Set auto-posting interval (admin only)")
+    @app_commands.describe(interval="Time between posts")
+    @app_commands.choices(interval=[
         app_commands.Choice(name="Disabled", value=0),
-        app_commands.Choice(name="1 hour", value=1),
-        app_commands.Choice(name="2 hours", value=2),
-        app_commands.Choice(name="3 hours", value=3),
-        app_commands.Choice(name="6 hours", value=6),
-        app_commands.Choice(name="12 hours", value=12),
-        app_commands.Choice(name="24 hours", value=24),
+        app_commands.Choice(name="5 minutes", value=5),
+        app_commands.Choice(name="15 minutes", value=15),
+        app_commands.Choice(name="30 minutes", value=30),
+        app_commands.Choice(name="1 hour", value=60),
+        app_commands.Choice(name="2 hours", value=120),
+        app_commands.Choice(name="3 hours", value=180),
+        app_commands.Choice(name="6 hours", value=360),
+        app_commands.Choice(name="12 hours", value=720),
+        app_commands.Choice(name="24 hours", value=1440),
     ])
     @admin_required_with_defer
-    async def set_interval_command(self, interaction: discord.Interaction, hours: app_commands.Choice[int]) -> None:
+    async def set_interval_command(self, interaction: discord.Interaction, interval: app_commands.Choice[int]) -> None:
         """
-        Set the auto-posting interval in hours.
+        Set the auto-posting interval.
         
         Args:
             interaction: The Discord interaction
-            hours: Number of hours between posts
+            interval: Number of minutes between posts
         """
         try:
-            logger.info(f"[ADMIN][CMD] Set interval command invoked by user {interaction.user.id}, hours={hours.value}")
+            logger.info(f"[ADMIN][CMD] Set interval command invoked by user {interaction.user.id}, interval={interval.value} minutes")
             
             # Validate input
-            if hours.value < 0 or hours.value > 24:
+            if interval.value < 0 or interval.value > 1440:
                 embed = ErrorEmbed(
                     "Invalid Interval",
-                    "Interval must be between 0 (disabled) and 24 hours."
+                    "Interval must be between 0 (disabled) and 24 hours (1440 minutes)."
                 )
                 await interaction.followup.send(embed=embed)
                 return
             
-            # Set the interval
+            # Convert minutes to seconds and set the interval
+            seconds = interval.value * 60
             if hasattr(self.bot, 'set_auto_post_interval'):
-                self.bot.set_auto_post_interval(hours.value)
+                # Use hours for the existing method
+                hours = interval.value / 60
+                self.bot.set_auto_post_interval(hours)
             else:
-                self.bot.auto_post_interval = hours.value * 3600  # Convert to seconds
+                self.bot.auto_post_interval = seconds
             
             # Create response embed
-            if hours.value == 0:
+            if interval.value == 0:
                 embed = SuccessEmbed(
                     "⏹️ Auto-Posting Disabled",
                     "Automatic news posting has been disabled."
                 )
             else:
+                # Format the interval nicely
+                if interval.value < 60:
+                    interval_text = f"{interval.value} minute{'s' if interval.value != 1 else ''}"
+                elif interval.value == 60:
+                    interval_text = "1 hour"
+                elif interval.value % 60 == 0:
+                    hours = interval.value // 60
+                    interval_text = f"{hours} hour{'s' if hours != 1 else ''}"
+                else:
+                    hours = interval.value // 60
+                    minutes = interval.value % 60
+                    interval_text = f"{hours}h {minutes}m"
+                
                 embed = SuccessEmbed(
                     "⏰ Auto-Posting Interval Updated",
-                    f"Automatic posting interval set to **{hours.value} hour{'s' if hours.value != 1 else ''}**."
+                    f"Automatic posting interval set to **{interval_text}**."
                 )
                 embed.add_field(
                     name="ℹ️ Next Post", 

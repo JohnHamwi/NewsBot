@@ -314,6 +314,9 @@ class NewsBot(commands.Bot):
             
             logger.debug("✅ All required channels found")
             
+            # Load auto-post configuration
+            await self.load_auto_post_config()
+            
             # Send startup notification
             from .background_tasks import send_startup_notification
             await send_startup_notification(self)
@@ -415,6 +418,22 @@ class NewsBot(commands.Bot):
         self.auto_post_channel = channel
         # Save to cache if needed
         asyncio.create_task(self.save_auto_post_config())
+
+    async def load_auto_post_config(self):
+        """Load auto-post configuration from cache."""
+        try:
+            config_data = await self.json_cache.get('auto_post_config')
+            if config_data:
+                self.auto_post_interval = config_data.get('interval', 0)
+                last_post_str = config_data.get('last_post_time')
+                if last_post_str:
+                    from datetime import datetime
+                    self.last_post_time = datetime.fromisoformat(last_post_str)
+                logger.debug(f"✅ Auto-post configuration loaded: interval={self.auto_post_interval}s")
+            else:
+                logger.debug("ℹ️ No auto-post configuration found in cache")
+        except Exception as e:
+            logger.error(f"❌ Failed to load auto-post config: {str(e)}")
 
     async def save_auto_post_config(self):
         """Save auto-post configuration to cache."""
