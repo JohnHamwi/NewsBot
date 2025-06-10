@@ -124,6 +124,188 @@ class AdminCommands(commands.Cog):
             except discord.errors.NotFound:
                 structured_logger.warning("Could not send error response")
 
+    @app_commands.command(name="start", description="Trigger immediate news post (admin only)")
+    @admin_required_with_defer
+    async def start_command(self, interaction: discord.Interaction) -> None:
+        """
+        Trigger an immediate news post without waiting for the interval.
+        
+        Args:
+            interaction: The Discord interaction
+        """
+        try:
+            logger.info(f"[ADMIN][CMD] Start command invoked by user {interaction.user.id}")
+            
+            # Check if auto-posting is configured
+            if not hasattr(self.bot, 'auto_post_interval') or self.bot.auto_post_interval <= 0:
+                embed = WarningEmbed(
+                    "Auto-Posting Disabled",
+                    "Auto-posting is not configured. Use `/set_interval` to set up automatic posting first."
+                )
+                await interaction.followup.send(embed=embed)
+                return
+            
+            # Set the force auto post flag
+            self.bot.force_auto_post = True
+            
+            embed = SuccessEmbed(
+                "🚀 Immediate Post Triggered",
+                "The bot will attempt to post news immediately on the next auto-post cycle (within 1 minute)."
+            )
+            embed.add_field(
+                name="ℹ️ Note", 
+                value="This bypasses the normal posting interval and will post from the next available channel.", 
+                inline=False
+            )
+            
+            await interaction.followup.send(embed=embed)
+            logger.info(f"[ADMIN][CMD] Start command completed successfully for user {interaction.user.id}")
+            
+        except Exception as e:
+            structured_logger.error(
+                "Error executing start command",
+                extra_data={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            error_embed = ErrorEmbed(
+                "Start Command Error",
+                f"An error occurred: {str(e)}"
+            )
+            
+            try:
+                await interaction.followup.send(embed=error_embed)
+            except discord.errors.NotFound:
+                structured_logger.warning("Could not send error response")
+
+    @app_commands.command(name="set_interval", description="Set auto-posting interval in hours (admin only)")
+    @app_commands.describe(hours="Hours between posts (1-24, 0 to disable)")
+    @app_commands.choices(hours=[
+        app_commands.Choice(name="Disabled", value=0),
+        app_commands.Choice(name="1 hour", value=1),
+        app_commands.Choice(name="2 hours", value=2),
+        app_commands.Choice(name="3 hours", value=3),
+        app_commands.Choice(name="6 hours", value=6),
+        app_commands.Choice(name="12 hours", value=12),
+        app_commands.Choice(name="24 hours", value=24),
+    ])
+    @admin_required_with_defer
+    async def set_interval_command(self, interaction: discord.Interaction, hours: app_commands.Choice[int]) -> None:
+        """
+        Set the auto-posting interval in hours.
+        
+        Args:
+            interaction: The Discord interaction
+            hours: Number of hours between posts
+        """
+        try:
+            logger.info(f"[ADMIN][CMD] Set interval command invoked by user {interaction.user.id}, hours={hours.value}")
+            
+            # Validate input
+            if hours.value < 0 or hours.value > 24:
+                embed = ErrorEmbed(
+                    "Invalid Interval",
+                    "Interval must be between 0 (disabled) and 24 hours."
+                )
+                await interaction.followup.send(embed=embed)
+                return
+            
+            # Set the interval
+            if hasattr(self.bot, 'set_auto_post_interval'):
+                self.bot.set_auto_post_interval(hours.value)
+            else:
+                self.bot.auto_post_interval = hours.value * 3600  # Convert to seconds
+            
+            # Create response embed
+            if hours.value == 0:
+                embed = SuccessEmbed(
+                    "⏹️ Auto-Posting Disabled",
+                    "Automatic news posting has been disabled."
+                )
+            else:
+                embed = SuccessEmbed(
+                    "⏰ Auto-Posting Interval Updated",
+                    f"Automatic posting interval set to **{hours.value} hour{'s' if hours.value != 1 else ''}**."
+                )
+                embed.add_field(
+                    name="ℹ️ Next Post", 
+                    value="Use `/start` to trigger an immediate post or wait for the next scheduled interval.", 
+                    inline=False
+                )
+            
+            await interaction.followup.send(embed=embed)
+            logger.info(f"[ADMIN][CMD] Set interval command completed successfully for user {interaction.user.id}")
+            
+        except Exception as e:
+            structured_logger.error(
+                "Error executing set_interval command",
+                extra_data={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            error_embed = ErrorEmbed(
+                "Set Interval Command Error",
+                f"An error occurred: {str(e)}"
+            )
+            
+            try:
+                await interaction.followup.send(embed=error_embed)
+            except discord.errors.NotFound:
+                structured_logger.warning("Could not send error response")
+
+    @app_commands.command(name="set_rich_presence", description="Set bot's Discord presence mode (admin only)")
+    @app_commands.describe(mode="Presence mode to set")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="Automatic", value="automatic"),
+        app_commands.Choice(name="Maintenance", value="maintenance"),
+    ])
+    @admin_required_with_defer
+    async def set_rich_presence_command(self, interaction: discord.Interaction, mode: app_commands.Choice[str]) -> None:
+        """
+        Set the bot's Discord rich presence mode.
+        
+        Args:
+            interaction: The Discord interaction
+            mode: The presence mode to set
+        """
+        try:
+            logger.info(f"[ADMIN][CMD] Set rich presence command invoked by user {interaction.user.id}, mode={mode.value}")
+            
+            # Set the presence mode
+            if hasattr(self.bot, 'set_rich_presence_mode'):
+                self.bot.set_rich_presence_mode(mode.value)
+            else:
+                self.bot.rich_presence_mode = mode.value
+            
+            # Create response embed
+            if mode.value == "automatic":
+                embed = SuccessEmbed(
+                    "🤖 Automatic Presence Enabled",
+                    "Bot presence will automatically show news monitoring status and countdown to next post."
+                )
+            else:
+                embed = SuccessEmbed(
+                    "🔧 Maintenance Mode Enabled",
+                    "Bot presence set to maintenance mode."
+                )
+            
+            await interaction.followup.send(embed=embed)
+            logger.info(f"[ADMIN][CMD] Set rich presence command completed successfully for user {interaction.user.id}")
+            
+        except Exception as e:
+            structured_logger.error(
+                "Error executing set_rich_presence command",
+                extra_data={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            error_embed = ErrorEmbed(
+                "Set Rich Presence Command Error",
+                f"An error occurred: {str(e)}"
+            )
+            
+            try:
+                await interaction.followup.send(embed=embed)
+            except discord.errors.NotFound:
+                structured_logger.warning("Could not send error response")
+
 
 async def setup(bot: commands.Bot) -> None:
     """Set up the AdminCommands cog."""
