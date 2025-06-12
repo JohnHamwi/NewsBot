@@ -1,28 +1,21 @@
 """
 Error Handler Module
 
-This module provides error handling functionality for the bot, including:
-- Retry mechanism for failed operations
-- Error tracking and metrics
-- Error reporting to Discord channels
-- Exception chaining and context tracking
-- Detailed error analysis and reporting
+This module provides comprehensive error handling functionality for the NewsBot.
 """
 
-import discord
-import functools
-import traceback
 import asyncio
-import sys
-import psutil
-import platform
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Callable, Coroutine, TypeVar, ParamSpec, List, Union
-from functools import wraps
-from src.utils.base_logger import base_logger as logger
-from src.utils.config import Config
-from discord.ext import commands
+import traceback
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from functools import wraps
+from typing import Any, Callable, Dict, List, Optional, ParamSpec, TypeVar, Union
+
+import discord
+
+from src.components.embeds.base_embed import ErrorEmbed
+from src.utils.base_logger import base_logger as logger
+from src.utils.structured_logger import structured_logger
 
 # Type variables for generic function handling
 P = ParamSpec("P")
@@ -32,6 +25,7 @@ T = TypeVar("T")
 @dataclass
 class ErrorContext:
     """Stores context about an error occurrence."""
+
     error: Exception
     location: str
     timestamp: datetime = datetime.now()
@@ -45,11 +39,11 @@ class ErrorContext:
     def to_dict(self) -> Dict[str, Any]:
         """Convert error context to dictionary."""
         return {
-            'error_type': self.error_type,
-            'error_message': str(self.error),
-            'location': self.location,
-            'timestamp': self.timestamp.isoformat(),
-            'extra_info': self.extra_info or {}
+            "error_type": self.error_type,
+            "error_message": str(self.error),
+            "location": self.location,
+            "timestamp": self.timestamp.isoformat(),
+            "extra_info": self.extra_info or {},
         }
 
 
@@ -64,7 +58,9 @@ class RateLimit:
     def is_rate_limited(self) -> bool:
         """Check if rate limited."""
         now = datetime.now()
-        self.calls = [t for t in self.calls if now - t < timedelta(seconds=self.time_window)]
+        self.calls = [
+            t for t in self.calls if now - t < timedelta(seconds=self.time_window)
+        ]
         if len(self.calls) >= self.max_calls:
             return True
         self.calls.append(now)
@@ -111,11 +107,11 @@ class ErrorHandler:
         recent_error = recent_errors[-1].to_dict() if recent_errors else None
 
         return {
-            'error_counts': error_counts,
-            'error_total': total_errors,
-            'success_rate': round(success_rate, 1),
-            'recent_error': recent_error,
-            'details': self._format_error_details(error_counts)
+            "error_counts": error_counts,
+            "error_total": total_errors,
+            "success_rate": round(success_rate, 1),
+            "recent_error": recent_error,
+            "details": self._format_error_details(error_counts),
         }
 
     def _format_error_details(self, error_counts: Dict[str, int]) -> str:
@@ -135,7 +131,7 @@ class ErrorHandler:
         context: Optional[str] = None,
         user: Optional[discord.User] = None,
         channel: Optional[discord.TextChannel] = None,
-        bot: Optional[commands.Bot] = None,
+        bot: Optional[discord.Client] = None,
     ) -> None:
         """
         Send a detailed error embed with enhanced information to Discord.
@@ -143,8 +139,7 @@ class ErrorHandler:
         # Check rate limit for error reporting
         rate_limit_key = f"error_{error_title}"
         if rate_limit_key not in self.rate_limits:
-            self.rate_limits[rate_limit_key] = RateLimit(
-                max_calls=5, time_window=60)
+            self.rate_limits[rate_limit_key] = RateLimit(max_calls=5, time_window=60)
 
         if self.rate_limits[rate_limit_key].is_rate_limited():
             logger.warning(f"Rate limited error report: {error_title}")
@@ -173,40 +168,26 @@ class ErrorHandler:
 
         # Add error details
         embed.add_field(
-            name="Error Type",
-            value=f"`{error_ctx.error_type}`",
-            inline=True
+            name="Error Type", value=f"`{error_ctx.error_type}`", inline=True
         )
 
-        embed.add_field(
-            name="Error Message",
-            value=f"```{str(error)}```",
-            inline=False
-        )
+        embed.add_field(name="Error Message", value=f"```{str(error)}```", inline=False)
 
         if context:
-            embed.add_field(
-                name="Context",
-                value=f"```{context}```",
-                inline=False
-            )
+            embed.add_field(name="Context", value=f"```{context}```", inline=False)
 
         if user:
             embed.add_field(
-                name="User",
-                value=f"{user.mention} (`{user.id}`)",
-                inline=True
+                name="User", value=f"{user.mention} (`{user.id}`)", inline=True
             )
 
         if channel:
             embed.add_field(
-                name="Channel",
-                value=f"{channel.mention} (`{channel.id}`)",
-                inline=True
+                name="Channel", value=f"{channel.mention} (`{channel.id}`)", inline=True
             )
 
         # Send to error channel if bot is provided
-        if bot and hasattr(bot, 'errors_channel'):
+        if bot and hasattr(bot, "errors_channel"):
             try:
                 await bot.errors_channel.send(embed=embed)
             except Exception as e:

@@ -5,9 +5,11 @@ Provides standardized embed classes and builders to ensure consistent
 formatting and styling across all bot embeds.
 """
 
-import discord
 from datetime import datetime
-from typing import Optional, Union, List, Dict, Any
+from typing import Any, Dict, List, Optional, Union
+
+import discord
+
 from src.core.config_manager import config
 
 
@@ -24,7 +26,7 @@ class BaseEmbed(discord.Embed):
         title: str,
         description: str = None,
         color: Union[discord.Color, int] = None,
-        timestamp: datetime = None
+        timestamp: datetime = None,
     ):
         """
         Initialize a base embed with standard formatting.
@@ -39,14 +41,14 @@ class BaseEmbed(discord.Embed):
             title=title,
             description=description,
             color=color or discord.Color.blue(),
-            timestamp=timestamp or discord.utils.utcnow()
+            timestamp=timestamp or discord.utils.utcnow(),
         )
 
         # Set standard footer
-        bot_version = config.get('bot.version', '2.0.0')
+        bot_version = config.get("bot.version", "2.0.0")
         self.set_footer(
             text=f"NewsBot v{bot_version}",
-            icon_url="https://cdn.discordapp.com/attachments/placeholder/newsbot-icon.png"
+            icon_url="https://cdn.discordapp.com/attachments/placeholder/newsbot-icon.png",
         )
 
 
@@ -89,12 +91,8 @@ class StatusEmbed(BaseEmbed):
         super().__init__(title, description, discord.Color.blue())
 
     def add_status_field(
-        self,
-        name: str,
-        value: Any,
-        inline: bool = True,
-        format_as_code: bool = True
-    ) -> 'StatusEmbed':
+        self, name: str, value: Any, inline: bool = True, format_as_code: bool = True
+    ) -> "StatusEmbed":
         """
         Add a status field with consistent formatting.
 
@@ -120,8 +118,8 @@ class StatusEmbed(BaseEmbed):
         name: str,
         value: Union[str, int, float],
         unit: str = "",
-        inline: bool = True
-    ) -> 'StatusEmbed':
+        inline: bool = True,
+    ) -> "StatusEmbed":
         """
         Add a metric field with proper formatting.
 
@@ -151,11 +149,8 @@ class CommandEmbed(BaseEmbed):
         super().__init__(title, description)
 
     def add_parameter(
-        self,
-        name: str,
-        value: Any,
-        required: bool = False
-    ) -> 'CommandEmbed':
+        self, name: str, value: Any, required: bool = False
+    ) -> "CommandEmbed":
         """
         Add a command parameter field.
 
@@ -184,11 +179,8 @@ class NewsEmbed(BaseEmbed):
         super().__init__(title, description, discord.Color.gold())
 
     def set_news_content(
-        self,
-        content: str,
-        source: str = None,
-        timestamp: datetime = None
-    ) -> 'NewsEmbed':
+        self, content: str, source: str = None, timestamp: datetime = None
+    ) -> "NewsEmbed":
         """
         Set the main news content.
 
@@ -212,12 +204,14 @@ class NewsEmbed(BaseEmbed):
             self.add_field(
                 name="🕒 Published",
                 value=timestamp.strftime("%Y-%m-%d %H:%M UTC"),
-                inline=True
+                inline=True,
             )
 
         return self
 
-    def add_media_info(self, media_count: int, media_types: List[str] = None) -> 'NewsEmbed':
+    def add_media_info(
+        self, media_count: int, media_types: List[str] = None
+    ) -> "NewsEmbed":
         """
         Add media information to the embed.
 
@@ -249,10 +243,8 @@ class ConfigEmbed(BaseEmbed):
         super().__init__(title, description, discord.Color.purple())
 
     def add_config_section(
-        self,
-        section_name: str,
-        config_data: Dict[str, Any]
-    ) -> 'ConfigEmbed':
+        self, section_name: str, config_data: Dict[str, Any]
+    ) -> "ConfigEmbed":
         """
         Add a configuration section.
 
@@ -273,10 +265,7 @@ class ConfigEmbed(BaseEmbed):
 
 
 def create_embed_from_template(
-    template_type: str,
-    title: str,
-    description: str = None,
-    **kwargs
+    template_type: str, title: str, description: str = None, **kwargs
 ) -> BaseEmbed:
     """
     Factory function to create embeds from templates.
@@ -291,20 +280,20 @@ def create_embed_from_template(
         Appropriate embed instance
     """
     embed_classes = {
-        'success': SuccessEmbed,
-        'error': ErrorEmbed,
-        'warning': WarningEmbed,
-        'info': InfoEmbed,
-        'status': StatusEmbed,
-        'command': CommandEmbed,
-        'news': NewsEmbed,
-        'config': ConfigEmbed,
-        'base': BaseEmbed
+        "success": SuccessEmbed,
+        "error": ErrorEmbed,
+        "warning": WarningEmbed,
+        "info": InfoEmbed,
+        "status": StatusEmbed,
+        "command": CommandEmbed,
+        "news": NewsEmbed,
+        "config": ConfigEmbed,
+        "base": BaseEmbed,
     }
 
     embed_class = embed_classes.get(template_type, BaseEmbed)
 
-    if template_type == 'command':
+    if template_type == "command":
         return embed_class(title, description)
     else:
         return embed_class(title, description)
@@ -331,13 +320,15 @@ def create_error_embed(title: str, error: Exception, context: str = None) -> Err
     embed.add_field(
         name="🔧 Need Help?",
         value="Contact an administrator if this error persists.",
-        inline=False
+        inline=False,
     )
 
     return embed
 
 
-def create_success_embed(title: str, message: str, details: Dict[str, Any] = None) -> SuccessEmbed:
+def create_success_embed(
+    title: str, message: str, details: Dict[str, Any] = None
+) -> SuccessEmbed:
     """
     Create a standardized success embed.
 

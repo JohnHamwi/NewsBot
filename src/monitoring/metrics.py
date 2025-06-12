@@ -5,11 +5,13 @@ This module provides Prometheus metrics collection and monitoring functionality.
 Optimized for low-memory environments.
 """
 
-from prometheus_client import Counter, Histogram, Gauge, start_http_server
-from typing import Dict, Any
-import psutil
 import os
 from datetime import datetime
+from typing import Any, Dict
+
+import psutil
+from prometheus_client import Counter, Gauge, Histogram, start_http_server
+
 from src.utils.base_logger import base_logger as logger
 
 
@@ -49,7 +51,9 @@ class MetricsManager:
             "newsbot_errors_total", "Total errors encountered", ["error_type"]
         )
 
-        self.memory_usage = Gauge("newsbot_memory_usage_bytes", "Current memory usage in bytes")
+        self.memory_usage = Gauge(
+            "newsbot_memory_usage_bytes", "Current memory usage in bytes"
+        )
 
         self.message_counter = Counter(
             "newsbot_messages_total", "Total messages processed", ["source"]
@@ -60,7 +64,9 @@ class MetricsManager:
         self.guild_count = Gauge("newsbot_guild_count", "Number of guilds")
         self.user_count = Gauge("newsbot_user_count", "Number of users")
         self.cpu_usage = Gauge("newsbot_cpu_usage_percent", "CPU usage percentage")
-        self.memory_usage_percent = Gauge("newsbot_memory_usage_percent", "Memory usage percentage")
+        self.memory_usage_percent = Gauge(
+            "newsbot_memory_usage_percent", "Memory usage percentage"
+        )
         self.thread_count = Gauge("newsbot_thread_count", "Number of threads")
 
     def start(self) -> None:
@@ -83,14 +89,18 @@ class MetricsManager:
                     logger.debug(f"Port {port} is in use, trying next port...")
                     continue
                 else:
-                    logger.error(f"Failed to start metrics server on port {port}: {str(e)}")
+                    logger.error(
+                        f"Failed to start metrics server on port {port}: {str(e)}"
+                    )
                     raise
             except Exception as e:
                 logger.error(f"Failed to start metrics server on port {port}: {str(e)}")
                 raise
 
         # If we get here, all ports failed
-        logger.warning("⚠️ Could not start metrics server on any port, continuing without metrics")
+        logger.warning(
+            "⚠️ Could not start metrics server on any port, continuing without metrics"
+        )
         self._server_started = False
 
     def start_collection(self) -> None:
@@ -134,12 +144,12 @@ class MetricsManager:
 
             # Map metric names to Gauge objects
             metric_map = {
-                'bot_latency': self.bot_latency,
-                'guild_count': self.guild_count,
-                'user_count': self.user_count,
-                'cpu_usage': self.cpu_usage,
-                'memory_usage': self.memory_usage_percent,
-                'thread_count': self.thread_count,
+                "bot_latency": self.bot_latency,
+                "guild_count": self.guild_count,
+                "user_count": self.user_count,
+                "cpu_usage": self.cpu_usage,
+                "memory_usage": self.memory_usage_percent,
+                "thread_count": self.thread_count,
             }
 
             if metric_name in metric_map:

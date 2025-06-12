@@ -1,0 +1,47 @@
+# Production Requirements for Syrian NewsBot VPS Deployment
+# Optimized for stability and performance
+
+# Core Discord & Telegram
+py-cord==2.6.1
+telethon==1.33.1
+cryptg==0.4.0  # Fast encryption for Telegram
+pyaes==1.6.1  # Required by Telethon
+rsa==4.9.1  # Required by Telethon
+
+# Environment & Configuration
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# AI & Translation
+openai==1.3.7
+
+# Async & HTTP
+aiohttp==3.9.1
+aiofiles==23.2.1
+
+# Timezone & Date Handling
+pytz==2023.3
+zoneinfo==0.2.1;python_version<"3.9"
+
+# Monitoring & Logging
+colorlog==6.9.0
+psutil==5.9.7
+prometheus-client==0.19.0
+tqdm==4.67.1
+
+# Security
+pyjwt==2.8.0
+cryptography==42.0.5
+passlib==1.7.4
+
+# Data Processing
+redis==5.0.1
+
+# Optional: Process Management (if using PM2 alternatives)
+# supervisor==4.2.5
+
+# Optional: Database (if you want to add persistent storage)
+# aiosqlite==0.19.0
+
+# Optional: Enhanced Error Tracking
+# sentry-sdk==1.38.0 

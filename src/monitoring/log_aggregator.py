@@ -5,14 +5,14 @@ This module provides log aggregation functionality for collecting, processing,
 and analyzing logs from the structured logging system.
 """
 
-import os
-import json
-import time
 import asyncio
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple
+import json
+import os
 import threading
+import time
 from collections import defaultdict, deque
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class LogEntry:
@@ -27,21 +27,34 @@ class LogEntry:
         Args:
             log_data: Raw log data from the structured logger
         """
-        self.timestamp = datetime.fromisoformat(log_data.get('timestamp', datetime.utcnow().isoformat()))
-        self.level = log_data.get('level', 'UNKNOWN')
-        self.message = log_data.get('message', '')
-        self.logger = log_data.get('logger', '')
-        self.request_id = log_data.get('request_id')
-        self.user_id = log_data.get('user_id')
-        self.command_name = log_data.get('command_name')
-        self.component = log_data.get('component')
-        self.extras = {k: v for k, v in log_data.items() if k not in [
-            'timestamp', 'level', 'message', 'logger', 'request_id',
-            'user_id', 'command_name', 'component'
-        ]}
+        self.timestamp = datetime.fromisoformat(
+            log_data.get("timestamp", datetime.utcnow().isoformat())
+        )
+        self.level = log_data.get("level", "UNKNOWN")
+        self.message = log_data.get("message", "")
+        self.logger = log_data.get("logger", "")
+        self.request_id = log_data.get("request_id")
+        self.user_id = log_data.get("user_id")
+        self.command_name = log_data.get("command_name")
+        self.component = log_data.get("component")
+        self.extras = {
+            k: v
+            for k, v in log_data.items()
+            if k
+            not in [
+                "timestamp",
+                "level",
+                "message",
+                "logger",
+                "request_id",
+                "user_id",
+                "command_name",
+                "component",
+            ]
+        }
 
         # Extract exception info if available
-        self.exception = log_data.get('exception')
+        self.exception = log_data.get("exception")
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -51,22 +64,22 @@ class LogEntry:
             Dictionary representation of the log entry
         """
         result = {
-            'timestamp': self.timestamp.isoformat(),
-            'level': self.level,
-            'message': self.message,
-            'logger': self.logger,
+            "timestamp": self.timestamp.isoformat(),
+            "level": self.level,
+            "message": self.message,
+            "logger": self.logger,
         }
 
         if self.request_id:
-            result['request_id'] = self.request_id
+            result["request_id"] = self.request_id
         if self.user_id:
-            result['user_id'] = self.user_id
+            result["user_id"] = self.user_id
         if self.command_name:
-            result['command_name'] = self.command_name
+            result["command_name"] = self.command_name
         if self.component:
-            result['component'] = self.component
+            result["component"] = self.component
         if self.exception:
-            result['exception'] = self.exception
+            result["exception"] = self.exception
 
         result.update(self.extras)
         return result
@@ -166,7 +179,7 @@ class LogAggregator:
 
         # Read and process the log file
         try:
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -208,26 +221,28 @@ class LogAggregator:
             self.level_index[entry.level].append(entry)
 
             # Track errors
-            if entry.level in ('ERROR', 'CRITICAL'):
+            if entry.level in ("ERROR", "CRITICAL"):
                 self.errors.append(entry)
                 if entry.component:
                     self.error_count_by_component[entry.component] += 1
 
             # Track performance metrics
-            if 'duration' in entry.extras and entry.command_name:
-                duration = entry.extras['duration']
+            if "duration" in entry.extras and entry.command_name:
+                duration = entry.extras["duration"]
                 if isinstance(duration, (int, float)):
                     self.command_durations[entry.command_name].append(duration)
 
-    def get_logs(self,
-                 level: Optional[str] = None,
-                 component: Optional[str] = None,
-                 command: Optional[str] = None,
-                 user_id: Optional[str] = None,
-                 request_id: Optional[str] = None,
-                 start_time: Optional[datetime] = None,
-                 end_time: Optional[datetime] = None,
-                 limit: int = 100) -> List[Dict[str, Any]]:
+    def get_logs(
+        self,
+        level: Optional[str] = None,
+        component: Optional[str] = None,
+        command: Optional[str] = None,
+        user_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
         """
         Get filtered log entries.
 
@@ -303,17 +318,17 @@ class LogAggregator:
             # Group by component
             errors_by_component = defaultdict(list)
             for error in recent_errors:
-                component = error.component or 'unknown'
+                component = error.component or "unknown"
                 errors_by_component[component].append(error)
 
             # Calculate statistics
             result = {
-                'total_count': len(recent_errors),
-                'by_component': {
+                "total_count": len(recent_errors),
+                "by_component": {
                     component: len(errors)
                     for component, errors in errors_by_component.items()
                 },
-                'recent': [e.to_dict() for e in recent_errors[-10:]]  # Last 10 errors
+                "recent": [e.to_dict() for e in recent_errors[-10:]],  # Last 10 errors
             }
 
             return result
@@ -333,10 +348,10 @@ class LogAggregator:
                     continue
 
                 metrics[command] = {
-                    'count': len(durations),
-                    'avg_duration': sum(durations) / len(durations),
-                    'min_duration': min(durations),
-                    'max_duration': max(durations),
+                    "count": len(durations),
+                    "avg_duration": sum(durations) / len(durations),
+                    "min_duration": min(durations),
+                    "max_duration": max(durations),
                 }
 
             return metrics

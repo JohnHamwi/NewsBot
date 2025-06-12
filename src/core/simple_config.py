@@ -6,14 +6,15 @@ It combines YAML-based configuration with environment variables and adds develop
 features like automatic reload, configuration overrides, and profile support.
 """
 
-import os
-import yaml
-import json
-import time
-from typing import Dict, Any, Optional
-import logging
-from dotenv import load_dotenv
 import copy
+import json
+import logging
+import os
+import time
+from typing import Any, Dict, Optional
+
+import yaml
+from dotenv import load_dotenv
 
 # Setup logger
 logger = logging.getLogger("NewsBot")
@@ -79,13 +80,17 @@ class SimpleConfig:
             self._last_modified_time = os.path.getmtime(self._config_file)
 
             # Load YAML config
-            with open(self._config_file, 'r', encoding='utf-8') as f:
+            with open(self._config_file, "r", encoding="utf-8") as f:
                 self._config = yaml.safe_load(f) or {}
                 logger.debug(f"Configuration loaded from {self._config_file}")
 
             # Apply profile-specific overrides if they exist
             final_config = self._config.copy()
-            if profile and "profiles" in final_config and profile in final_config["profiles"]:
+            if (
+                profile
+                and "profiles" in final_config
+                and profile in final_config["profiles"]
+            ):
                 self._merge_config(final_config, final_config["profiles"][profile])
 
             # Substitute environment variables
@@ -93,7 +98,7 @@ class SimpleConfig:
 
             # Apply runtime overrides
             for key, value in self._runtime_overrides.items():
-                parts = key.split('.')
+                parts = key.split(".")
                 current = final_config
 
                 # Navigate to the right location
@@ -137,7 +142,11 @@ class SimpleConfig:
         for key, value in list(config_dict.items()):
             if isinstance(value, dict):
                 self._substitute_env_vars(value)
-            elif isinstance(value, str) and value.startswith('${') and value.endswith('}'):
+            elif (
+                isinstance(value, str)
+                and value.startswith("${")
+                and value.endswith("}")
+            ):
                 env_var = value[2:-1]  # Remove ${ and }
                 env_value = os.getenv(env_var)
                 if env_value is not None:
@@ -145,8 +154,8 @@ class SimpleConfig:
                         # Try to convert to appropriate type
                         if env_value.isdigit():
                             config_dict[key] = int(env_value)
-                        elif env_value.lower() in ('true', 'false'):
-                            config_dict[key] = env_value.lower() == 'true'
+                        elif env_value.lower() in ("true", "false"):
+                            config_dict[key] = env_value.lower() == "true"
                         else:
                             config_dict[key] = env_value
                     except BaseException:
@@ -217,7 +226,7 @@ class SimpleConfig:
         self.check_for_changes()
 
         # Navigate to the correct nested dictionary
-        keys = key_path.split('.')
+        keys = key_path.split(".")
         current = self._config
 
         for key in keys:
@@ -285,7 +294,7 @@ class SimpleConfig:
 
             # Apply permanent changes to the base config
             for key, value in self._runtime_overrides.items():
-                keys = key.split('.')
+                keys = key.split(".")
                 current = config_to_save
 
                 # Create nested dictionaries as needed
@@ -298,14 +307,16 @@ class SimpleConfig:
                 current[keys[-1]] = value
 
             # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(os.path.abspath(self._config_file)), exist_ok=True)
+            os.makedirs(
+                os.path.dirname(os.path.abspath(self._config_file)), exist_ok=True
+            )
 
             # Save as YAML or JSON based on file extension
-            if self._config_file.endswith('.json'):
-                with open(self._config_file, 'w') as f:
+            if self._config_file.endswith(".json"):
+                with open(self._config_file, "w") as f:
                     json.dump(config_to_save, f, indent=2)
             else:
-                with open(self._config_file, 'w') as f:
+                with open(self._config_file, "w") as f:
                     yaml.dump(config_to_save, f, default_flow_style=False)
 
             logger.info(f"Configuration saved to {self._config_file}")
@@ -327,11 +338,7 @@ class SimpleConfig:
             self.load()
 
         # Add validation logic here based on your requirements
-        required_keys = [
-            "bot.guild_id",
-            "tokens.discord",
-            "channels.news"
-        ]
+        required_keys = ["bot.guild_id", "tokens.discord", "channels.news"]
 
         for key in required_keys:
             if not self.get(key):
@@ -368,7 +375,7 @@ class SimpleConfig:
         snapshot_file = os.path.join(snapshot_dir, f"{name}.yaml")
 
         try:
-            with open(snapshot_file, 'w') as f:
+            with open(snapshot_file, "w") as f:
                 yaml.dump(self._config, f, default_flow_style=False)
 
             logger.info("Configuration snapshot created")

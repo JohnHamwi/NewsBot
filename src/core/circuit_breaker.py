@@ -5,18 +5,20 @@ This module provides circuit breaker functionality to protect against cascading 
 when integrating with external services like Telegram and APIs.
 """
 
-import time
+import asyncio
 import datetime
 import enum
-import asyncio
-from typing import Callable, Optional, Any
+import time
+from typing import Any, Callable, Optional
+
 from src.utils.base_logger import base_logger as logger
 
 
 class CircuitState(enum.Enum):
     """Circuit breaker states."""
+
     CLOSED = "CLOSED"  # Normal operation
-    OPEN = "OPEN"      # Service calls blocked
+    OPEN = "OPEN"  # Service calls blocked
     HALF_OPEN = "HALF_OPEN"  # Testing if service is healthy
 
 
@@ -35,7 +37,7 @@ class CircuitBreaker:
         failure_threshold: int = 5,
         recovery_timeout: int = 60,
         half_open_success_threshold: int = 1,
-        reset_timeout: int = 300
+        reset_timeout: int = 300,
     ):
         """
         Initialize a new circuit breaker.
@@ -221,7 +223,7 @@ class CircuitBreaker:
             "failed_calls": self.failed_calls,
             "last_state_change": self.last_state_change,
             "last_failure_time": self.last_failure_time,
-            "last_error": str(self.last_error) if self.last_error else None
+            "last_error": str(self.last_error) if self.last_error else None,
         }
 
 

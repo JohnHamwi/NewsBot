@@ -4,14 +4,16 @@ Configuration Manager Module
 This module provides configuration management functionality for NewsBot.
 """
 
+import json
+import logging
 import os
 import re
-import yaml
-import json
 import time
-import logging
-from typing import Dict, Any, Optional, List, Tuple, Union
-from src.core.config_validator import validate_config, apply_defaults
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import yaml
+
+from src.core.config_validator import apply_defaults, validate_config
 from src.utils.base_logger import base_logger as logger
 
 
@@ -21,7 +23,7 @@ class ConfigManager:
     Supports type conversion, caching, and environment variable substitution.
     """
 
-    _instance: Optional['ConfigManager'] = None
+    _instance: Optional["ConfigManager"] = None
 
     def __new__(cls, config_file="config/config.yaml"):
         """
@@ -46,7 +48,7 @@ class ConfigManager:
             config_file (str): Path to the configuration file
         """
         # Only initialize once due to singleton pattern
-        if getattr(self, '_initialized', False):
+        if getattr(self, "_initialized", False):
             return
 
         self._config_file = config_file
@@ -70,10 +72,11 @@ class ConfigManager:
         try:
             # Load environment variables
             from dotenv import load_dotenv
+
             load_dotenv("config/.env")
 
             # Load YAML config
-            with open(self._config_file, 'r', encoding='utf-8') as file:
+            with open(self._config_file, "r", encoding="utf-8") as file:
                 self._config = yaml.safe_load(file) or {}
                 logger.debug(f"✅ Configuration loaded from {self._config_file}")
 
@@ -110,16 +113,24 @@ class ConfigManager:
         for key, value in config_dict.items():
             if isinstance(value, dict):
                 self._substitute_env_vars(value)
-            elif isinstance(value, str) and value.startswith('${') and value.endswith('}'):
+            elif (
+                isinstance(value, str)
+                and value.startswith("${")
+                and value.endswith("}")
+            ):
                 env_var = value[2:-1]  # Remove ${ and }
                 env_value = os.getenv(env_var)
                 if env_value is not None:
                     try:
                         # Try to convert to appropriate type
                         if env_value.isdigit():
-                            config_dict[key] = int(env_value)  # Convert to int if possible
-                        elif env_value.lower() in ('true', 'false'):
-                            config_dict[key] = env_value.lower() == 'true'  # Convert to bool
+                            config_dict[key] = int(
+                                env_value
+                            )  # Convert to int if possible
+                        elif env_value.lower() in ("true", "false"):
+                            config_dict[key] = (
+                                env_value.lower() == "true"
+                            )  # Convert to bool
                         else:
                             config_dict[key] = env_value
                     except BaseException:
@@ -146,7 +157,7 @@ class ConfigManager:
         if self._config is None:
             self.load()
 
-        keys = key_path.split('.')
+        keys = key_path.split(".")
         current = self._config
 
         for key in keys:

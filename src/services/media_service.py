@@ -9,15 +9,16 @@ import asyncio
 import os
 import tempfile
 import time
-from typing import Optional, List, Tuple, Any
+from typing import Any, List, Optional, Tuple
+
 from tqdm import tqdm
 
-from src.utils.base_logger import base_logger as logger
 from src.utils import error_handler
+from src.utils.base_logger import base_logger as logger
 from src.utils.media_validator import MediaValidator
 
 # Configuration constants
-DISCORD_MAX_FILESIZE_MB = int(os.getenv("DISCORD_MAX_FILESIZE_MB", "25"))
+DISCORD_MAX_FILESIZE_MB = int(os.getenv("DISCORD_MAX_FILESIZE_MB", "100"))
 MAX_DISCORD_FILE_SIZE = DISCORD_MAX_FILESIZE_MB * 1024 * 1024
 
 
@@ -51,10 +52,7 @@ class MediaService:
             return f"{hours:.1f}h"
 
     async def download_media_with_timeout(
-        self,
-        post: Any,
-        media: Any,
-        timeout: int = 180
+        self, post: Any, media: Any, timeout: int = 180
     ) -> Tuple[Optional[List], Optional[str]]:
         """
         Download media from a Telegram post with timeout.
@@ -69,31 +67,32 @@ class MediaService:
         """
         start_time = time.time()
         self.logger.info(f"[MEDIA] Starting media download (timeout: {timeout}s)")
-        
+
         try:
             return await asyncio.wait_for(
-                self._download_media_internal(post, media),
-                timeout=timeout
+                self._download_media_internal(post, media), timeout=timeout
             )
         except asyncio.TimeoutError:
             elapsed = time.time() - start_time
-            self.logger.error(f"[MEDIA] ⏰ Media download timed out after {elapsed:.1f}s (limit: {timeout}s)")
+            self.logger.error(
+                f"[MEDIA] ⏰ Media download timed out after {elapsed:.1f}s (limit: {timeout}s)"
+            )
             return None, None
         except Exception as e:
             elapsed = time.time() - start_time
-            self.logger.error(f"[MEDIA] ❌ Media download failed after {elapsed:.1f}s: {str(e)}")
+            self.logger.error(
+                f"[MEDIA] ❌ Media download failed after {elapsed:.1f}s: {str(e)}"
+            )
             await error_handler.send_error_embed(
                 "Media Download Error",
                 e,
                 context=f"Post ID: {getattr(post, 'id', 'unknown')}",
-                bot=self.bot
+                bot=self.bot,
             )
             return None, None
 
     async def _download_media_internal(
-        self,
-        post: Any,
-        media: Any
+        self, post: Any, media: Any
     ) -> Tuple[Optional[List], Optional[str]]:
         """Internal media download logic."""
         media_files = []
@@ -101,7 +100,7 @@ class MediaService:
 
         try:
             # Check if media is grouped (album)
-            if hasattr(media, 'grouped_id') and media.grouped_id:
+            if hasattr(media, "grouped_id") and media.grouped_id:
                 self.logger.info("[MEDIA] 📁 Processing grouped media (album)")
                 media_files, temp_path = await self._download_grouped_media(post, media)
             else:
@@ -115,9 +114,7 @@ class MediaService:
             raise
 
     async def _download_grouped_media(
-        self,
-        post: Any,
-        media: Any
+        self, post: Any, media: Any
     ) -> Tuple[List, Optional[str]]:
         """Download grouped media (album) from Telegram."""
         media_files = []
@@ -128,12 +125,12 @@ class MediaService:
             async def get_grouped_photos():
                 messages = []
                 async for message in self.bot.telegram_client.iter_messages(
-                    post.peer_id,
-                    limit=10,
-                    offset_id=post.id + 5
+                    post.peer_id, limit=10, offset_id=post.id + 5
                 ):
-                    if (hasattr(message, 'grouped_id') and
-                            message.grouped_id == media.grouped_id):
+                    if (
+                        hasattr(message, "grouped_id")
+                        and message.grouped_id == media.grouped_id
+                    ):
                         messages.append(message)
                     if len(messages) >= 10:  # Safety limit
                         break
@@ -143,7 +140,9 @@ class MediaService:
             self.logger.info(f"[MEDIA] 📊 Found {len(grouped_messages)} files in album")
 
             if not grouped_messages:
-                self.logger.warning("[MEDIA] No grouped messages found, falling back to single media")
+                self.logger.warning(
+                    "[MEDIA] No grouped messages found, falling back to single media"
+                )
                 return await self._download_single_media(post, media)
 
             # Create temporary directory for grouped media
@@ -158,40 +157,42 @@ class MediaService:
                 try:
                     file_start_time = time.time()
                     last_progress_time = time.time()
-                    
+
                     # Enhanced progress callback for album files
                     async def callback(current, total):
                         nonlocal last_progress_time
                         current_time = time.time()
-                        
+
                         # Only log progress every 2 seconds to avoid spam
                         if current_time - last_progress_time >= 2.0 or current == total:
                             if total > 0:
                                 percent = (current / total) * 100
                                 elapsed = current_time - file_start_time
-                                
+
                                 if current > 0 and elapsed > 0:
                                     speed = current / elapsed  # bytes per second
                                     remaining_bytes = total - current
                                     eta = remaining_bytes / speed if speed > 0 else 0
-                                    
+
                                     # Create progress bar
                                     bar_length = 20
                                     filled_length = int(bar_length * current // total)
-                                    bar = '█' * filled_length + '░' * (bar_length - filled_length)
-                                    
+                                    bar = "█" * filled_length + "░" * (
+                                        bar_length - filled_length
+                                    )
+
                                     progress_msg = (
                                         f"[MEDIA] 📥 File {i + 1}/{len(grouped_messages)} [{bar}] {percent:.1f}% "
                                         f"({self._format_file_size(current)}/{self._format_file_size(total)}) "
                                         f"- {self._format_file_size(speed)}/s - ETA: {self._format_time(eta)}"
                                     )
-                                    
+
                                     if current == total:
                                         # Final message - use normal logging
                                         self.logger.info(progress_msg)
                                     else:
                                         # Progress update - print with carriage return to overwrite
-                                        print(f"\r{progress_msg}", end='', flush=True)
+                                        print(f"\r{progress_msg}", end="", flush=True)
                                 else:
                                     progress_msg = (
                                         f"[MEDIA] 📥 File {i + 1}/{len(grouped_messages)} Downloading: {percent:.1f}% "
@@ -200,15 +201,15 @@ class MediaService:
                                     if current == total:
                                         self.logger.info(progress_msg)
                                     else:
-                                        print(f"\r{progress_msg}", end='', flush=True)
+                                        print(f"\r{progress_msg}", end="", flush=True)
                             last_progress_time = current_time
 
                     # Download the media file
-                    self.logger.info(f"[MEDIA] 🚀 Starting download of file {i + 1}/{len(grouped_messages)}")
+                    self.logger.info(
+                        f"[MEDIA] 🚀 Starting download of file {i + 1}/{len(grouped_messages)}"
+                    )
                     file_path = await self.bot.telegram_client.download_media(
-                        msg.media,
-                        file=temp_path,
-                        progress_callback=callback
+                        msg.media, file=temp_path, progress_callback=callback
                     )
 
                     # Ensure we have a newline after progress bar
@@ -217,7 +218,7 @@ class MediaService:
                     if file_path and os.path.exists(file_path):
                         file_size = os.path.getsize(file_path)
                         download_time = time.time() - file_start_time
-                        
+
                         if file_size <= MAX_DISCORD_FILE_SIZE:
                             media_files.append(file_path)
                             self.logger.info(
@@ -235,10 +236,14 @@ class MediaService:
                 except Exception as e:
                     # Ensure we have a newline after progress bar in case of error
                     print()
-                    self.logger.error(f"[MEDIA] ❌ Failed to download file {i + 1}/{len(grouped_messages)}: {str(e)}")
+                    self.logger.error(
+                        f"[MEDIA] ❌ Failed to download file {i + 1}/{len(grouped_messages)}: {str(e)}"
+                    )
                     continue
 
-            self.logger.info(f"[MEDIA] 🎉 Successfully downloaded {len(media_files)}/{len(grouped_messages)} album files")
+            self.logger.info(
+                f"[MEDIA] 🎉 Successfully downloaded {len(media_files)}/{len(grouped_messages)} album files"
+            )
             return media_files, temp_path
 
         except Exception as e:
@@ -248,9 +253,7 @@ class MediaService:
             raise
 
     async def _download_single_media(
-        self,
-        post: Any,
-        media: Any
+        self, post: Any, media: Any
     ) -> Tuple[List, Optional[str]]:
         """Download single media file from Telegram."""
         media_files = []
@@ -269,36 +272,38 @@ class MediaService:
             async def callback(current, total):
                 nonlocal last_progress_time, progress_logged
                 current_time = time.time()
-                
+
                 # Only log progress every 2 seconds to avoid spam
                 if current_time - last_progress_time >= 2.0 or current == total:
                     if total > 0:
                         percent = (current / total) * 100
                         elapsed = current_time - start_time
-                        
+
                         if current > 0 and elapsed > 0:
                             speed = current / elapsed  # bytes per second
                             remaining_bytes = total - current
                             eta = remaining_bytes / speed if speed > 0 else 0
-                            
+
                             # Create progress bar
                             bar_length = 20
                             filled_length = int(bar_length * current // total)
-                            bar = '█' * filled_length + '░' * (bar_length - filled_length)
-                            
+                            bar = "█" * filled_length + "░" * (
+                                bar_length - filled_length
+                            )
+
                             progress_msg = (
                                 f"[MEDIA] 📥 [{bar}] {percent:.1f}% "
                                 f"({self._format_file_size(current)}/{self._format_file_size(total)}) "
                                 f"- {self._format_file_size(speed)}/s - ETA: {self._format_time(eta)}"
                             )
-                            
+
                             if current == total:
                                 # Final message - use normal logging
                                 self.logger.info(progress_msg)
                                 progress_logged = True
                             else:
                                 # Progress update - print with carriage return to overwrite
-                                print(f"\r{progress_msg}", end='', flush=True)
+                                print(f"\r{progress_msg}", end="", flush=True)
                         else:
                             progress_msg = (
                                 f"[MEDIA] 📥 Downloading: {percent:.1f}% "
@@ -308,15 +313,13 @@ class MediaService:
                                 self.logger.info(progress_msg)
                                 progress_logged = True
                             else:
-                                print(f"\r{progress_msg}", end='', flush=True)
+                                print(f"\r{progress_msg}", end="", flush=True)
                     last_progress_time = current_time
 
             # Download the media file
             self.logger.info("[MEDIA] 🚀 Starting single file download")
             file_path = await self.bot.telegram_client.download_media(
-                media,
-                file=temp_path,
-                progress_callback=callback
+                media, file=temp_path, progress_callback=callback
             )
 
             # Ensure we have a newline after progress bar
@@ -326,7 +329,7 @@ class MediaService:
             if file_path and os.path.exists(file_path):
                 file_size = os.path.getsize(file_path)
                 download_time = time.time() - start_time
-                
+
                 if file_size <= MAX_DISCORD_FILE_SIZE:
                     media_files.append(file_path)
                     self.logger.info(
@@ -341,7 +344,9 @@ class MediaService:
                     os.remove(file_path)
                     media_files = []
             else:
-                self.logger.warning("[MEDIA] ❌ No file downloaded or file doesn't exist")
+                self.logger.warning(
+                    "[MEDIA] ❌ No file downloaded or file doesn't exist"
+                )
 
             return media_files, temp_path
 
@@ -362,12 +367,15 @@ class MediaService:
                     self.logger.debug(f"[MEDIA] Cleaned up temp file: {path}")
                 elif os.path.isdir(path):
                     import shutil
+
                     shutil.rmtree(path)
                     self.logger.debug(f"[MEDIA] Cleaned up temp directory: {path}")
             except Exception as e:
                 self.logger.warning(f"[MEDIA] Failed to cleanup {path}: {str(e)}")
 
-    def cleanup_media_files(self, media_files: List[str], temp_path: Optional[str]) -> None:
+    def cleanup_media_files(
+        self, media_files: List[str], temp_path: Optional[str]
+    ) -> None:
         """Public method to cleanup media files after use."""
         cleanup_paths = []
 
@@ -394,39 +402,71 @@ class MediaService:
 
             file_size = os.path.getsize(file_path)
             if file_size > MAX_DISCORD_FILE_SIZE:
-                self.logger.warning(f"[MEDIA] File too large: {file_path} ({file_size} bytes)")
+                self.logger.warning(
+                    f"[MEDIA] File too large: {file_path} ({file_size} bytes)"
+                )
                 continue
 
             # Enhanced validation using MediaValidator
             try:
                 from pathlib import Path
+
                 path_obj = Path(file_path)
-                
+
                 # Determine file type and validate accordingly
                 file_ext = path_obj.suffix.lower()
-                
-                if file_ext in {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'}:
+
+                if file_ext in {
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".gif",
+                    ".webp",
+                    ".bmp",
+                    ".tiff",
+                }:
                     # Validate image
-                    validation_result = self.media_validator._validate_image_file(path_obj)
-                elif file_ext in {'.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv', '.m4v'}:
+                    validation_result = self.media_validator._validate_image_file(
+                        path_obj
+                    )
+                elif file_ext in {
+                    ".mp4",
+                    ".avi",
+                    ".mov",
+                    ".wmv",
+                    ".flv",
+                    ".webm",
+                    ".mkv",
+                    ".m4v",
+                }:
                     # Validate video
-                    validation_result = self.media_validator._validate_video_file(path_obj)
+                    validation_result = self.media_validator._validate_video_file(
+                        path_obj
+                    )
                 else:
                     # Unknown file type, skip validation but allow
-                    self.logger.debug(f"[MEDIA] Unknown file type, allowing: {file_path}")
+                    self.logger.debug(
+                        f"[MEDIA] Unknown file type, allowing: {file_path}"
+                    )
                     valid_files.append(file_path)
                     continue
-                
-                if validation_result['valid']:
+
+                if validation_result["valid"]:
                     valid_files.append(file_path)
-                    self.logger.debug(f"[MEDIA] Validated {validation_result['type']}: {file_path}")
+                    self.logger.debug(
+                        f"[MEDIA] Validated {validation_result['type']}: {file_path}"
+                    )
                 else:
-                    self.logger.warning(f"[MEDIA] Invalid {validation_result['type']}: {file_path} - {validation_result.get('error', 'Unknown error')}")
-                    
+                    self.logger.warning(
+                        f"[MEDIA] Invalid {validation_result['type']}: {file_path} - {validation_result.get('error', 'Unknown error')}"
+                    )
+
             except Exception as e:
                 self.logger.error(f"[MEDIA] Error validating {file_path}: {str(e)}")
                 # If validation fails, still include the file (fallback)
                 valid_files.append(file_path)
 
-        self.logger.info(f"[MEDIA] Validated {len(valid_files)}/{len(media_files)} media files")
+        self.logger.info(
+            f"[MEDIA] Validated {len(valid_files)}/{len(media_files)} media files"
+        )
         return valid_files

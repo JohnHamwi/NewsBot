@@ -33,7 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger("TelegramAuth")
 
 # Load environment variables
-load_dotenv()
+load_dotenv("config/.env")
 
 async def fix_telegram_auth():
     """Run the Telegram authentication fix process"""

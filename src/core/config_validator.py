@@ -9,15 +9,16 @@ Features:
 - Detailed error messages
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union, Set
-import re
 import logging
+import re
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 logger = logging.getLogger("NewsBot")
 
 
 class ValidationError(Exception):
     """Exception raised for configuration validation errors."""
+
     pass
 
 
@@ -67,7 +68,9 @@ class ConfigValidator:
         return len(errors) == 0, errors
 
     @staticmethod
-    def _validate_value(key: str, value: Any, schema_item: Dict) -> Tuple[bool, List[str]]:
+    def _validate_value(
+        key: str, value: Any, schema_item: Dict
+    ) -> Tuple[bool, List[str]]:
         """
         Validate a single value against its schema.
 
@@ -85,54 +88,80 @@ class ConfigValidator:
         expected_type = schema_item.get("type")
         if expected_type:
             if expected_type == "str" and not isinstance(value, str):
-                errors.append(f"Key '{key}' must be a string, got {type(value).__name__}")
+                errors.append(
+                    f"Key '{key}' must be a string, got {type(value).__name__}"
+                )
             elif expected_type == "int" and not isinstance(value, int):
-                errors.append(f"Key '{key}' must be an integer, got {type(value).__name__}")
+                errors.append(
+                    f"Key '{key}' must be an integer, got {type(value).__name__}"
+                )
             elif expected_type == "float" and not isinstance(value, (int, float)):
-                errors.append(f"Key '{key}' must be a number, got {type(value).__name__}")
+                errors.append(
+                    f"Key '{key}' must be a number, got {type(value).__name__}"
+                )
             elif expected_type == "bool" and not isinstance(value, bool):
-                errors.append(f"Key '{key}' must be a boolean, got {type(value).__name__}")
+                errors.append(
+                    f"Key '{key}' must be a boolean, got {type(value).__name__}"
+                )
             elif expected_type == "list" and not isinstance(value, list):
                 errors.append(f"Key '{key}' must be a list, got {type(value).__name__}")
             elif expected_type == "dict" and not isinstance(value, dict):
-                errors.append(f"Key '{key}' must be a dictionary, got {type(value).__name__}")
+                errors.append(
+                    f"Key '{key}' must be a dictionary, got {type(value).__name__}"
+                )
             elif expected_type == "str_or_int" and not isinstance(value, (str, int)):
-                errors.append(f"Key '{key}' must be a string or integer, got {type(value).__name__}")
+                errors.append(
+                    f"Key '{key}' must be a string or integer, got {type(value).__name__}"
+                )
 
         # Check required
-        if schema_item.get("required", False) and (value is None or (isinstance(value, str) and value == "")):
+        if schema_item.get("required", False) and (
+            value is None or (isinstance(value, str) and value == "")
+        ):
             errors.append(f"Key '{key}' is required and cannot be empty")
 
         # Check pattern
         pattern = schema_item.get("pattern")
         if pattern and isinstance(value, str):
             if not re.match(pattern, value):
-                errors.append(f"Key '{key}' value '{value}' does not match pattern '{pattern}'")
+                errors.append(
+                    f"Key '{key}' value '{value}' does not match pattern '{pattern}'"
+                )
 
         # Check min/max for numeric values
         if isinstance(value, (int, float)):
             min_val = schema_item.get("min")
             if min_val is not None and value < min_val:
-                errors.append(f"Key '{key}' value {value} is less than minimum {min_val}")
+                errors.append(
+                    f"Key '{key}' value {value} is less than minimum {min_val}"
+                )
 
             max_val = schema_item.get("max")
             if max_val is not None and value > max_val:
-                errors.append(f"Key '{key}' value {value} is greater than maximum {max_val}")
+                errors.append(
+                    f"Key '{key}' value {value} is greater than maximum {max_val}"
+                )
 
         # Check min/max length for strings and lists
         if isinstance(value, (str, list)):
             min_length = schema_item.get("min_length")
             if min_length is not None and len(value) < min_length:
-                errors.append(f"Key '{key}' length {len(value)} is less than minimum length {min_length}")
+                errors.append(
+                    f"Key '{key}' length {len(value)} is less than minimum length {min_length}"
+                )
 
             max_length = schema_item.get("max_length")
             if max_length is not None and len(value) > max_length:
-                errors.append(f"Key '{key}' length {len(value)} is greater than maximum length {max_length}")
+                errors.append(
+                    f"Key '{key}' length {len(value)} is greater than maximum length {max_length}"
+                )
 
         # Check enum values
         enum_values = schema_item.get("enum")
         if enum_values and value not in enum_values:
-            errors.append(f"Key '{key}' value '{value}' must be one of: {', '.join(str(v) for v in enum_values)}")
+            errors.append(
+                f"Key '{key}' value '{value}' must be one of: {', '.join(str(v) for v in enum_values)}"
+            )
 
         return len(errors) == 0, errors
 
@@ -150,6 +179,7 @@ class ConfigValidator:
         """
         # Create a deep copy to avoid modifying the original
         import copy
+
         result = copy.deepcopy(config)
 
         for key, schema_item in schema.items():

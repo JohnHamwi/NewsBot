@@ -1,67 +1,72 @@
 """
-Rich Presence Module for NewsBot
+Rich Presence Module
 
-This module handles Discord rich presence status functions.
+This module handles Discord bot rich presence (status) updates.
 """
+
 import datetime
-from discord.ext import commands
+
 import discord
 
 
-async def set_maintenance_presence(bot: commands.Bot) -> None:
+async def set_maintenance_presence(bot: discord.Client) -> None:
     """
-    Set the bot's rich presence to show it's in maintenance mode.
+    Set the bot's presence to maintenance mode.
 
     Args:
-        bot (commands.Bot): The bot instance to update presence for
+        bot (discord.Client): The bot instance to update presence for
     """
-    await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name="⚠️ Maintenance Mode"
-        )
+    # Wait for bot to be ready before updating presence
+    if not bot.is_ready():
+        return
+        
+    activity = discord.Activity(
+        type=discord.ActivityType.playing, name="🔧 Under Maintenance"
     )
+    await bot.change_presence(status=discord.Status.idle, activity=activity)
 
 
-async def set_automatic_presence(bot: commands.Bot, seconds_until_next_post: int = 0) -> None:
+async def set_automatic_presence(
+    bot: discord.Client, seconds_until_next_post: int = 0
+) -> None:
     """
-    Set the bot's rich presence to show it's monitoring Telegram and when next post is due.
+    Set the bot's presence to show automatic monitoring status.
 
     Args:
-        bot (commands.Bot): The bot instance to update presence for
+        bot (discord.Client): The bot instance to update presence for
         seconds_until_next_post (int): Seconds until the next scheduled post
     """
-    if seconds_until_next_post <= 0 or bot.auto_post_interval <= 0:
-        # If auto-posting is disabled or we can't calculate next post
-        status = "📱 Monitoring Telegram..."
-    else:
-        # Calculate hours and minutes until next post
+    # Wait for bot to be ready before updating presence
+    if not bot.is_ready():
+        return
+        
+    if seconds_until_next_post > 0:
         hours = seconds_until_next_post // 3600
         minutes = (seconds_until_next_post % 3600) // 60
 
         if hours > 0:
-            status = f"Next post in {hours}h {minutes}m"
+            activity_name = f"⏰ Next post in {hours}h {minutes}m"
         else:
-            status = f"Next post in {minutes}m"
+            activity_name = f"⏰ Next post in {minutes}m"
+    else:
+        activity_name = "📰 Monitoring news channels"
 
-    await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name=status
-        )
-    )
+    activity = discord.Activity(type=discord.ActivityType.watching, name=activity_name)
+    await bot.change_presence(status=discord.Status.online, activity=activity)
 
 
-async def set_posted_presence(bot: commands.Bot) -> None:
+async def set_posted_presence(bot: discord.Client) -> None:
     """
-    Set the bot's rich presence to indicate a post was just made.
+    Set the bot's presence to show that news was just posted.
 
     Args:
-        bot (commands.Bot): The bot instance to update presence for
+        bot (discord.Client): The bot instance to update presence for
     """
-    await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.playing,
-            name="📰 Just posted news!"
-        )
+    # Wait for bot to be ready before updating presence
+    if not bot.is_ready():
+        return
+        
+    activity = discord.Activity(
+        type=discord.ActivityType.watching, name="📰 Just posted news!"
     )
+    await bot.change_presence(status=discord.Status.online, activity=activity)

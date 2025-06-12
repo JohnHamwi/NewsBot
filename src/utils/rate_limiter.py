@@ -13,11 +13,11 @@ import asyncio
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Callable, Any, TypeVar
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 from src.utils.base_logger import base_logger as logger
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class RateLimiter:
@@ -25,11 +25,13 @@ class RateLimiter:
     Rate limiter using token bucket algorithm.
     """
 
-    def __init__(self,
-                 name: str,
-                 calls_per_second: float = 1.0,
-                 burst_limit: int = 5,
-                 auto_wait: bool = True):
+    def __init__(
+        self,
+        name: str,
+        calls_per_second: float = 1.0,
+        burst_limit: int = 5,
+        auto_wait: bool = True,
+    ):
         """
         Initialize a rate limiter.
 
@@ -53,7 +55,9 @@ class RateLimiter:
         self.waited_calls = 0
         self.total_wait_time = 0.0
 
-        logger.debug(f"Rate limiter '{name}' initialized: {calls_per_second} calls/sec, burst: {burst_limit}")
+        logger.debug(
+            f"Rate limiter '{name}' initialized: {calls_per_second} calls/sec, burst: {burst_limit}"
+        )
 
     async def acquire(self) -> float:
         """
@@ -109,7 +113,9 @@ class RateLimiter:
             "total_calls": self.total_calls,
             "waited_calls": self.waited_calls,
             "total_wait_time": round(self.total_wait_time, 2),
-            "wait_percentage": round(100 * self.waited_calls / max(1, self.total_calls), 2),
+            "wait_percentage": round(
+                100 * self.waited_calls / max(1, self.total_calls), 2
+            ),
             "current_tokens": round(self.tokens, 2),
         }
 
@@ -137,11 +143,13 @@ class RateLimiterManager:
         # General API for other services
         self.add_limiter("default", calls_per_second=5.0, burst_limit=10)
 
-    def add_limiter(self,
-                    name: str,
-                    calls_per_second: float = 1.0,
-                    burst_limit: int = 5,
-                    auto_wait: bool = True) -> RateLimiter:
+    def add_limiter(
+        self,
+        name: str,
+        calls_per_second: float = 1.0,
+        burst_limit: int = 5,
+        auto_wait: bool = True,
+    ) -> RateLimiter:
         """
         Add a new rate limiter.
 
@@ -206,6 +214,7 @@ def rate_limited(limiter_name: str):
     Returns:
         Decorated function
     """
+
     def decorator(func):
         async def wrapper(*args, **kwargs):
             # Get global rate limiter manager
@@ -216,7 +225,9 @@ def rate_limited(limiter_name: str):
 
             # Call the function
             return await func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 

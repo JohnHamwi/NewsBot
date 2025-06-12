@@ -6,11 +6,14 @@ variables and providing validation to ensure all required settings are present.
 """
 
 import os
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from dotenv import load_dotenv
 
 # Load environment variables from config/.env
-config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config")
+config_dir = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config"
+)
 env_path = os.path.join(config_dir, ".env")
 load_dotenv(env_path)
 
@@ -39,21 +42,19 @@ class Config:
     DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN", "")
 
     # Server (Guild) Configuration
-    GUILD_ID: Optional[int] = int(
-        os.getenv("GUILD_ID")) if os.getenv("GUILD_ID") else None
+    GUILD_ID: Optional[int] = (
+        int(os.getenv("GUILD_ID")) if os.getenv("GUILD_ID") else None
+    )
 
     # Channel IDs
     LOG_CHANNEL_ID: Optional[int] = (
-        int(os.getenv("LOG_CHANNEL_ID")) if os.getenv(
-            "LOG_CHANNEL_ID") else None
+        int(os.getenv("LOG_CHANNEL_ID")) if os.getenv("LOG_CHANNEL_ID") else None
     )
     ERRORS_CHANNEL_ID: Optional[int] = (
-        int(os.getenv("ERRORS_CHANNEL_ID")) if os.getenv(
-            "ERRORS_CHANNEL_ID") else None
+        int(os.getenv("ERRORS_CHANNEL_ID")) if os.getenv("ERRORS_CHANNEL_ID") else None
     )
     NEWS_CHANNEL_ID: Optional[int] = (
-        int(os.getenv("NEWS_CHANNEL_ID")) if os.getenv(
-            "NEWS_CHANNEL_ID") else None
+        int(os.getenv("NEWS_CHANNEL_ID")) if os.getenv("NEWS_CHANNEL_ID") else None
     )
 
     # Role IDs
@@ -68,7 +69,6 @@ class Config:
     APPLICATION_ID = os.getenv("APPLICATION_ID")
 
     # Telegram Configuration
-    TELEGRAM_TOKEN: str = os.getenv("TELEGRAM_TOKEN", "")
     TELEGRAM_API_ID: int = int(os.getenv("TELEGRAM_API_ID", 0))
     TELEGRAM_API_HASH: str = os.getenv("TELEGRAM_API_HASH", "")
 
@@ -94,30 +94,31 @@ class Config:
 
         # Check Guild ID
         if not Config.GUILD_ID:
-            logger.error(
-                "❌ Missing or invalid GUILD_ID in environment variables")
+            logger.error("❌ Missing or invalid GUILD_ID in environment variables")
             return False
 
         # Check Channel IDs
         if not Config.LOG_CHANNEL_ID:
             logger.error(
-                "❌ Missing or invalid LOG_CHANNEL_ID in environment variables")
+                "❌ Missing or invalid LOG_CHANNEL_ID in environment variables"
+            )
             return False
 
         if not Config.ERRORS_CHANNEL_ID:
             logger.error(
-                "❌ Missing or invalid ERRORS_CHANNEL_ID in environment variables")
+                "❌ Missing or invalid ERRORS_CHANNEL_ID in environment variables"
+            )
             return False
 
         if not Config.NEWS_CHANNEL_ID:
             logger.error(
-                "❌ Missing or invalid NEWS_CHANNEL_ID in environment variables")
+                "❌ Missing or invalid NEWS_CHANNEL_ID in environment variables"
+            )
             return False
 
         # Check Role IDs
         if not Config.ADMIN_ROLE_ID:
-            logger.error(
-                "❌ Missing or invalid ADMIN_ROLE_ID in environment variables")
+            logger.error("❌ Missing or invalid ADMIN_ROLE_ID in environment variables")
             return False
 
         return True
@@ -138,13 +139,22 @@ class Config:
                 "value": "***" if cls.DISCORD_TOKEN else None,
             },
             "guild_id": {"is_set": bool(cls.GUILD_ID), "value": cls.GUILD_ID},
-            "log_channel_id": {"is_set": bool(cls.LOG_CHANNEL_ID), "value": cls.LOG_CHANNEL_ID},
+            "log_channel_id": {
+                "is_set": bool(cls.LOG_CHANNEL_ID),
+                "value": cls.LOG_CHANNEL_ID,
+            },
             "errors_channel_id": {
                 "is_set": bool(cls.ERRORS_CHANNEL_ID),
                 "value": cls.ERRORS_CHANNEL_ID,
             },
-            "news_channel_id": {"is_set": bool(cls.NEWS_CHANNEL_ID), "value": cls.NEWS_CHANNEL_ID},
-            "admin_role_id": {"is_set": bool(cls.ADMIN_ROLE_ID), "value": cls.ADMIN_ROLE_ID},
+            "news_channel_id": {
+                "is_set": bool(cls.NEWS_CHANNEL_ID),
+                "value": cls.NEWS_CHANNEL_ID,
+            },
+            "admin_role_id": {
+                "is_set": bool(cls.ADMIN_ROLE_ID),
+                "value": cls.ADMIN_ROLE_ID,
+            },
         }
 
     @classmethod
@@ -181,7 +191,7 @@ class Config:
             "log_channel_configured": bool(cls.LOG_CHANNEL_ID),
             "news_channel_configured": bool(cls.NEWS_CHANNEL_ID),
             "telegram_configured": all(
-                [cls.TELEGRAM_API_ID, cls.TELEGRAM_API_HASH, cls.TELEGRAM_TOKEN]
+                [cls.TELEGRAM_API_ID, cls.TELEGRAM_API_HASH]
             ),
         }
 
@@ -196,4 +206,8 @@ def get_guild_ids() -> List[int]:
         return []
 
     # Split by comma and convert to integers, ignoring empty strings
-    return [int(guild_id.strip()) for guild_id in guild_ids_str.split(",") if guild_id.strip()]
+    return [
+        int(guild_id.strip())
+        for guild_id in guild_ids_str.split(",")
+        if guild_id.strip()
+    ]

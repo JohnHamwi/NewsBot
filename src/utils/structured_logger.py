@@ -4,14 +4,26 @@ Structured Logger Module
 This module provides structured logging functionality with JSON output for production environments.
 """
 
-import os
 import json
-from typing import Dict, Any, Optional
+import os
+from datetime import datetime
+from typing import Any, Dict, Optional
+
 from dotenv import load_dotenv
+
 from .timezone_utils import now_eastern
 
 # Load environment variables
 load_dotenv()
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles datetime objects."""
+    
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 class StructuredLogger:
@@ -64,7 +76,7 @@ class StructuredLogger:
                 "message": str(error),
             }
 
-        return json.dumps(log_entry, ensure_ascii=False)
+        return json.dumps(log_entry, ensure_ascii=False, cls=DateTimeEncoder)
 
     def debug(self, message: str, extra_data: Optional[Dict[str, Any]] = None):
         """Log a debug message."""

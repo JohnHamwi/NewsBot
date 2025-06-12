@@ -5,14 +5,15 @@ Provides an admin-only /reload command to hot-reload all loaded cogs/extensions
 without restarting the bot.
 """
 
+from typing import List, Tuple
+
 import discord
 from discord import app_commands
 from discord.ext import commands
-from typing import List, Tuple
 
 from src.utils.base_logger import base_logger as logger
-from src.utils.error_handler import error_handler
 from src.utils.config import Config
+from src.utils.error_handler import error_handler
 
 # Configuration constants
 GUILD_ID = Config.GUILD_ID or 0
@@ -32,7 +33,9 @@ class ReloadCog(commands.Cog):
         self.bot = bot
         logger.info("🔧 ReloadCog initialized")
 
-    @app_commands.command(name="reload", description="Reload all cogs and sync commands (admin only)")
+    @app_commands.command(
+        name="reload", description="Reload all cogs and sync commands (admin only)"
+    )
     async def reload_command(self, interaction: discord.Interaction) -> None:
         """
         Reload all loaded cogs/extensions.
@@ -40,12 +43,16 @@ class ReloadCog(commands.Cog):
         Args:
             interaction: The Discord interaction object
         """
-        logger.info(f"[RELOAD][CMD] Reload command invoked by user {interaction.user.id}")
+        logger.info(
+            f"[RELOAD][CMD] Reload command invoked by user {interaction.user.id}"
+        )
 
         try:
             # Check authorization
             if interaction.user.id != ADMIN_USER_ID:
-                logger.warning(f"[RELOAD][CMD] Unauthorized access attempt by user {interaction.user.id}")
+                logger.warning(
+                    f"[RELOAD][CMD] Unauthorized access attempt by user {interaction.user.id}"
+                )
 
                 await interaction.response.send_message(
                     "❌ You are not authorized to use this command."
@@ -56,7 +63,7 @@ class ReloadCog(commands.Cog):
                     Exception("User is not authorized."),
                     context=f"User: {interaction.user} ({interaction.user.id}) | Command: reload",
                     bot=self.bot,
-                    channel=getattr(self.bot, 'log_channel', None)
+                    channel=getattr(self.bot, "log_channel", None),
                 )
                 return
 
@@ -83,7 +90,7 @@ class ReloadCog(commands.Cog):
             error_embed = discord.Embed(
                 title="❌ Reload Error",
                 description=f"An error occurred during reload: {str(e)}",
-                color=discord.Color.red()
+                color=discord.Color.red(),
             )
 
             try:
@@ -92,7 +99,9 @@ class ReloadCog(commands.Cog):
                 else:
                     await interaction.response.send_message(embed=error_embed)
             except discord.errors.NotFound:
-                logger.warning("[RELOAD][CMD] Could not send error response, interaction expired")
+                logger.warning(
+                    "[RELOAD][CMD] Could not send error response, interaction expired"
+                )
 
     async def _reload_all_extensions(self) -> Tuple[List[str], List[Tuple[str, str]]]:
         """
@@ -106,7 +115,9 @@ class ReloadCog(commands.Cog):
 
         # Get list of extensions to reload
         extensions_to_reload = list(self.bot.extensions.keys())
-        logger.debug(f"[RELOAD] Attempting to reload {len(extensions_to_reload)} extensions")
+        logger.debug(
+            f"[RELOAD] Attempting to reload {len(extensions_to_reload)} extensions"
+        )
 
         for ext_name in extensions_to_reload:
             try:
@@ -130,7 +141,9 @@ class ReloadCog(commands.Cog):
 
         return reloaded, failed
 
-    async def _create_reload_embed(self, reloaded: List[str], failed: List[Tuple[str, str]]) -> discord.Embed:
+    async def _create_reload_embed(
+        self, reloaded: List[str], failed: List[Tuple[str, str]]
+    ) -> discord.Embed:
         """
         Create embed showing reload and sync results.
 
@@ -153,9 +166,7 @@ class ReloadCog(commands.Cog):
             title = "⚠️ Reload & Sync Completed with Errors"
 
         embed = discord.Embed(
-            title=title,
-            color=color,
-            timestamp=discord.utils.utcnow()
+            title=title, color=color, timestamp=discord.utils.utcnow()
         )
 
         # Add successfully reloaded extensions
@@ -170,21 +181,19 @@ class ReloadCog(commands.Cog):
             embed.add_field(
                 name=f"Reloaded ({len(reloaded)})",
                 value=f"```{reloaded_text}```",
-                inline=False
+                inline=False,
             )
         else:
-            embed.add_field(
-                name="Reloaded (0)",
-                value="```None```",
-                inline=False
-            )
+            embed.add_field(name="Reloaded (0)", value="```None```", inline=False)
 
         # Add failed extensions
         if failed:
             # Truncate list if too long for Discord embed
             failed_display = failed[:5]  # Show max 5 failures
-            failed_text = "\n".join(f"❌ {ext}: {err[:50]}..." if len(err) > 50 else f"❌ {ext}: {err}"
-                                    for ext, err in failed_display)
+            failed_text = "\n".join(
+                f"❌ {ext}: {err[:50]}..." if len(err) > 50 else f"❌ {ext}: {err}"
+                for ext, err in failed_display
+            )
 
             if len(failed) > 5:
                 failed_text += f"\n... and {len(failed) - 5} more failures"
@@ -192,10 +201,12 @@ class ReloadCog(commands.Cog):
             embed.add_field(
                 name=f"Failed ({len(failed)})",
                 value=f"```{failed_text}```",
-                inline=False
+                inline=False,
             )
 
-        embed.set_footer(text=f"Total extensions processed: {len(reloaded) + len(failed)}")
+        embed.set_footer(
+            text=f"Total extensions processed: {len(reloaded) + len(failed)}"
+        )
 
         return embed
 

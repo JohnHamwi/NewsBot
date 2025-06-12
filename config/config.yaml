@@ -1,6 +1,6 @@
 # Bot Configuration
 bot:
-  version: "2.0.0"
+  version: "3.0.0"
   debug_mode: true
   application_id: ${APPLICATION_ID}
   guild_id: ${GUILD_ID}
@@ -61,5 +61,4 @@ cache:
 # Telegram configuration
 telegram:
   api_id: ${TELEGRAM_API_ID}
-  api_hash: ${TELEGRAM_API_HASH}
-  token: ${TELEGRAM_TOKEN} 
+  api_hash: ${TELEGRAM_API_HASH} 

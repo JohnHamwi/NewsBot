@@ -8,22 +8,23 @@ This module handles the Telegram bot integration, including:
 - Event forwarding to Discord
 """
 
-from telethon import TelegramClient, events
-from telethon.errors import SessionPasswordNeededError, FloodWaitError, RpcError
 import asyncio
-from typing import Optional, Dict, Any, List, Union, Callable
 from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional, Union
+
 import discord
+from telethon import TelegramClient, events
+from telethon.errors import FloodWaitError, RPCError, SessionPasswordNeededError
+
 from src.utils.base_logger import base_logger as logger
 from src.utils.config import Config
-from src.utils.error_handler import error_handler, ErrorContext
-from src.utils.rate_limiter import rate_limiter_manager, rate_limited
-from discord.ext import commands
-from src.utils.structured_logger import structured_logger
 from src.utils.content_cleaner import clean_news_content
+from src.utils.error_handler import ErrorContext, error_handler
+from src.utils.rate_limiter import rate_limited, rate_limiter_manager
+from src.utils.structured_logger import structured_logger
 from src.utils.syrian_locations import format_syrian_location_tags
 from src.utils.syrian_time import format_syrian_time, now_syrian
-from src.utils.translator import translate_arabic_to_english, generate_arabic_title
+from src.utils.translator import generate_arabic_title, translate_arabic_to_english
 
 
 class TelegramManager:
@@ -38,12 +39,12 @@ class TelegramManager:
     - Event logging
     """
 
-    def __init__(self, discord_bot: commands.Bot):
+    def __init__(self, discord_bot: discord.Client):
         """
         Initialize the Telegram manager.
 
         Args:
-            discord_bot (commands.Bot): The Discord bot instance for forwarding messages
+            discord_bot (discord.Client): The Discord bot instance for forwarding messages
         """
         self.client: Optional[TelegramClient] = None
         self.discord_bot = discord_bot
@@ -52,7 +53,6 @@ class TelegramManager:
         self.message_cache: Dict[int, datetime] = {}
         self.max_cache_size = 1000
 
-    @error_handler.with_error_handling(retries=3, retry_delay=5.0)
     @rate_limited("telegram")
     async def connect(self) -> None:
         """
@@ -67,9 +67,9 @@ class TelegramManager:
                 "newsbot_session", Config.TELEGRAM_API_ID, Config.TELEGRAM_API_HASH
             )
 
-            # Connect to Telegram
+            # Connect to Telegram using user authentication (not bot)
             logger.info("Connecting to Telegram...")
-            await self.client.start(bot_token=Config.TELEGRAM_TOKEN)
+            await self.client.start()  # This will prompt for phone/code if needed
 
             # Set up event handlers
             self._setup_event_handlers()
@@ -90,8 +90,8 @@ class TelegramManager:
                 extra_data={
                     "api_id": Config.TELEGRAM_API_ID,
                     "connection_state": self.connected,
-                    "error": str(e)
-                }
+                    "error": str(e),
+                },
             )
             raise
 
@@ -119,11 +119,13 @@ class TelegramManager:
             except FloodWaitError as e:
                 # Handle Telegram's built-in rate limiting
                 wait_time = e.seconds
-                logger.warning(f"Telegram FloodWaitError: waiting for {wait_time} seconds")
+                logger.warning(
+                    f"Telegram FloodWaitError: waiting for {wait_time} seconds"
+                )
                 await asyncio.sleep(wait_time)
                 # Retry after waiting
                 return await original_method(*args, **kwargs)
-            except RpcError as e:
+            except RPCError as e:
                 # Handle RPC errors (often rate-limit related)
                 logger.error(f"Telegram RPC error: {str(e)}")
                 # Add exponential backoff
@@ -131,11 +133,18 @@ class TelegramManager:
                 return await original_method(*args, **kwargs)
 
         # Apply patches
-        self.client.get_entity = lambda *args, **kwargs: rate_limited_method(original_get_entity, *args, **kwargs)
-        self.client.get_messages = lambda *args, **kwargs: rate_limited_method(original_get_messages, *args, **kwargs)
-        self.client.send_message = lambda *args, **kwargs: rate_limited_method(original_send_message, *args, **kwargs)
+        self.client.get_entity = lambda *args, **kwargs: rate_limited_method(
+            original_get_entity, *args, **kwargs
+        )
+        self.client.get_messages = lambda *args, **kwargs: rate_limited_method(
+            original_get_messages, *args, **kwargs
+        )
+        self.client.send_message = lambda *args, **kwargs: rate_limited_method(
+            original_send_message, *args, **kwargs
+        )
         self.client.download_media = lambda *args, **kwargs: rate_limited_method(
-            original_download_media, *args, **kwargs)
+            original_download_media, *args, **kwargs
+        )
 
         logger.debug("Applied rate limiting to Telegram client methods")
 
@@ -153,7 +162,10 @@ class TelegramManager:
                 tracked_channels = await self.get_tracked_channels()
                 chat = await event.get_chat()
                 channel_username = getattr(chat, "username", None)
-                if not channel_username or channel_username.lower() not in tracked_channels:
+                if (
+                    not channel_username
+                    or channel_username.lower() not in tracked_channels
+                ):
                     return
 
                 # Avoid duplicate messages
@@ -163,20 +175,19 @@ class TelegramManager:
                 # Add to cache and maintain cache size
                 self.message_cache[event.message.id] = datetime.now()
                 if len(self.message_cache) > self.max_cache_size:
-                    oldest_id = min(self.message_cache,
-                                    key=self.message_cache.get)
+                    oldest_id = min(self.message_cache, key=self.message_cache.get)
                     del self.message_cache[oldest_id]
 
                 # Create Discord embed
                 embed = await self._create_message_embed(event)
 
                 # Send to Discord news channel
-                news_channel = self.discord_bot.get_channel(
-                    Config.NEWS_CHANNEL_ID)
+                news_channel = self.discord_bot.get_channel(Config.NEWS_CHANNEL_ID)
                 if news_channel:
                     await news_channel.send(embed=embed)
                     logger.info(
-                        f"Forwarded Telegram message {event.message.id} to Discord")
+                        f"Forwarded Telegram message {event.message.id} to Discord"
+                    )
                 else:
                     logger.error("Could not find Discord news channel")
 
@@ -186,8 +197,8 @@ class TelegramManager:
                     extra_data={
                         "message_id": event.message.id if event.message else None,
                         "channel_id": event.chat_id if event.chat else None,
-                        "error": str(e)
-                    }
+                        "error": str(e),
+                    },
                 )
                 await error_handler.send_error_embed(
                     "Telegram Message Error",
@@ -208,38 +219,46 @@ class TelegramManager:
         """
         # Get channel/chat information
         chat = await event.get_chat()
-        
+
         # Get original message text
         original_text = event.message.message or ""
-        
+
         # Clean the content (remove sources, emojis, links, hashtags)
         cleaned_text = clean_news_content(original_text)
-        
+
         # Generate Arabic title using ChatGPT (3-6 words)
         arabic_title = generate_arabic_title(cleaned_text)
-        
+
         # Translate the cleaned content to English using ChatGPT
         english_translation = translate_arabic_to_english(cleaned_text)
-        
+
         # Detect Syrian locations in the cleaned text
         location_tags = format_syrian_location_tags(cleaned_text)
-        
+
         # Convert message timestamp to Syrian time
-        syrian_time = format_syrian_time(event.message.date, format_style='short')
-        message_date = format_syrian_time(event.message.date, format_style='date_only')
-        
+        syrian_time = format_syrian_time(event.message.date, format_style="short")
+        message_date = format_syrian_time(event.message.date, format_style="date_only")
+
         # Create title with calendar emoji, date, and ChatGPT-generated Arabic title
-        title = f"📅 {message_date} | {arabic_title}" if arabic_title else f"📅 {message_date} | أخبار سورية"
-        
+        title = (
+            f"📅 {message_date} | {arabic_title}"
+            if arabic_title
+            else f"📅 {message_date} | أخبار سورية"
+        )
+
         # Create description with Arabic text and English translation
         description_parts = []
         if cleaned_text:
             description_parts.append(f"**العربية:**\n{cleaned_text}")
         if english_translation and english_translation != cleaned_text:
             description_parts.append(f"**English:**\n{english_translation}")
-        
-        description = "\n\n".join(description_parts) if description_parts else "*(Content removed during cleaning)*"
-        
+
+        description = (
+            "\n\n".join(description_parts)
+            if description_parts
+            else "*(Content removed during cleaning)*"
+        )
+
         # Create embed with enhanced content
         embed = discord.Embed(
             title=title,
@@ -247,32 +266,24 @@ class TelegramManager:
             color=discord.Color.blue(),
             timestamp=event.message.date,
         )
-        
+
         # Add Syrian location tags if detected
         if location_tags:
-            embed.add_field(
-                name="📍 Locations",
-                value=location_tags,
-                inline=False
-            )
-        
+            embed.add_field(name="📍 Locations", value=location_tags, inline=False)
+
         # Add Syrian time
-        embed.add_field(
-            name="🕐 Syrian Time",
-            value=syrian_time,
-            inline=True
-        )
-        
+        embed.add_field(name="🕐 Syrian Time", value=syrian_time, inline=True)
+
         # Add media info if present (but don't include source links)
         if event.message.media:
             media_type = type(event.message.media).__name__
-            if 'Photo' in media_type:
+            if "Photo" in media_type:
                 embed.add_field(name="📷 Media", value="Image attached", inline=True)
-            elif 'Video' in media_type or 'Document' in media_type:
+            elif "Video" in media_type or "Document" in media_type:
                 embed.add_field(name="🎥 Media", value="Video attached", inline=True)
             else:
                 embed.add_field(name="📎 Media", value="Media attached", inline=True)
-        
+
         # Add footer with Syrian time and no source info
         embed.set_footer(
             text=f"Syrian News • {format_syrian_time(now_syrian(), format_style='time_only')}"
@@ -333,7 +344,72 @@ class TelegramManager:
             self.retrying = False
 
     async def get_tracked_channels(self) -> list:
-        """Fetch the current list of tracked Telegram channels from JSONCache."""
-        if hasattr(self.discord_bot, "json_cache"):
-            return await self.discord_bot.json_cache.list_telegram_channels()
+        """Get list of tracked Telegram channels."""
+        # This would typically come from config or database
+        # For now, return empty list - implement based on your needs
         return []
+
+    async def get_entity(self, entity):
+        """
+        Get a Telegram entity (channel, user, etc.) by username or ID.
+        
+        Args:
+            entity: Channel username, ID, or entity object
+            
+        Returns:
+            Telegram entity object
+        """
+        if not self.client or not self.connected:
+            raise Exception("Telegram client not connected")
+            
+        try:
+            return await self.client.get_entity(entity)
+        except Exception as e:
+            logger.error(f"Failed to get entity {entity}: {e}")
+            raise
+
+    async def get_messages(self, entity, limit=10, offset_date=None):
+        """
+        Get messages from a Telegram channel.
+        
+        Args:
+            entity: Channel entity or username
+            limit: Number of messages to fetch
+            offset_date: Date to start fetching from
+            
+        Returns:
+            List of messages
+        """
+        if not self.client or not self.connected:
+            raise Exception("Telegram client not connected")
+            
+        try:
+            return await self.client.get_messages(
+                entity, limit=limit, offset_date=offset_date
+            )
+        except Exception as e:
+            logger.error(f"Failed to get messages from {entity}: {e}")
+            raise
+
+    async def download_media(self, message, file=None, progress_callback=None):
+        """
+        Download media from a Telegram message.
+        
+        Args:
+            message: Telegram message with media
+            file: File path or file-like object to save to
+            progress_callback: Optional callback for download progress
+            
+        Returns:
+            Path to downloaded file or file-like object
+        """
+        if not self.client or not self.connected:
+            raise Exception("Telegram client not connected")
+            
+        try:
+            return await self.client.download_media(
+                message, file=file, progress_callback=progress_callback
+            )
+        except Exception as e:
+            logger.error(f"Failed to download media: {e}")
+            raise

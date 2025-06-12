@@ -4,17 +4,18 @@ Role-Based Access Control Module
 This module provides RBAC functionality for command and resource access control.
 """
 
-from typing import Dict, List, Set, Optional
-import discord
-from datetime import datetime, timedelta
 import logging
-from src.utils.config import Config
 import os
 import traceback
 import uuid
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Set
+
+import discord
 
 # Use the same base logger as the rest of the bot for consistent formatting
 from src.utils.base_logger import base_logger as rbac_logger
+from src.utils.config import Config
 
 
 class Permission:
@@ -68,7 +69,7 @@ class RBACManager:
     def __init__(self):
         """Initialize RBAC manager."""
         # Prevent multiple initialization of the same instance
-        if hasattr(self, '_initialized'):
+        if hasattr(self, "_initialized"):
             return
         self._initialized = True
 
@@ -78,18 +79,28 @@ class RBACManager:
         # Initialize default permissions
         self._setup_default_permissions()
 
+    async def initialize(self):
+        """Initialize the RBAC system asynchronously."""
+        try:
+            # Load permissions and roles
+            self.load_permissions()
+            rbac_logger.info("✅ RBAC system initialized successfully")
+        except Exception as e:
+            rbac_logger.error(f"❌ Failed to initialize RBAC system: {e}")
+            raise
+
     def _setup_default_permissions(self) -> None:
         """Set up default permissions."""
         default_permissions = {
-            'commands.execute': 'Execute basic commands',
-            'commands.manage': 'Manage bot commands',
-            'news.read': 'Read news updates',
-            'news.post': 'Post news updates',
-            'news.manage': 'Manage news settings',
-            'admin.access': 'Access admin features',
-            'admin.manage': 'Manage bot settings',
-            'system.view': 'View system metrics',
-            'system.manage': 'Manage system settings'
+            "commands.execute": "Execute basic commands",
+            "commands.manage": "Manage bot commands",
+            "news.read": "Read news updates",
+            "news.post": "Post news updates",
+            "news.manage": "Manage news settings",
+            "admin.access": "Access admin features",
+            "admin.manage": "Manage bot settings",
+            "system.view": "View system metrics",
+            "system.manage": "Manage system settings",
         }
 
         for name, description in default_permissions.items():
@@ -133,7 +144,8 @@ class RBACManager:
         if role_name in self.roles and permission_name in self.permissions:
             self.roles[role_name].add_permission(permission_name)
             rbac_logger.info(
-                f"Assigned permission {permission_name} to role {role_name}")
+                f"Assigned permission {permission_name} to role {role_name}"
+            )
             return True
         return False
 
@@ -151,7 +163,8 @@ class RBACManager:
         if role_name in self.roles:
             self.roles[role_name].remove_permission(permission_name)
             rbac_logger.info(
-                f"Removed permission {permission_name} from role {role_name}")
+                f"Removed permission {permission_name} from role {role_name}"
+            )
             return True
         return False
 
@@ -173,7 +186,9 @@ class RBACManager:
         # Check each role the member has
         for role in member.roles:
             for bot_role in self.roles.values():
-                if bot_role.discord_role_id == role.id and bot_role.has_permission(permission):
+                if bot_role.discord_role_id == role.id and bot_role.has_permission(
+                    permission
+                ):
                     return True
         return False
 
@@ -216,9 +231,9 @@ class RBACManager:
 
         role = self.roles[role_name]
         return {
-            'name': role.name,
-            'discord_role_id': role.discord_role_id,
-            'permissions': sorted(list(role.permissions))
+            "name": role.name,
+            "discord_role_id": role.discord_role_id,
+            "permissions": sorted(list(role.permissions)),
         }
 
     def get_permission_info(self, permission_name: str) -> Optional[Dict]:
@@ -236,12 +251,13 @@ class RBACManager:
 
         permission = self.permissions[permission_name]
         return {
-            'name': permission.name,
-            'description': permission.description,
-            'roles': [
-                role.name for role in self.roles.values()
+            "name": permission.name,
+            "description": permission.description,
+            "roles": [
+                role.name
+                for role in self.roles.values()
                 if permission.name in role.permissions
-            ]
+            ],
         }
 
     def get_all_roles(self) -> List[Dict]:
@@ -251,10 +267,7 @@ class RBACManager:
         Returns:
             List[Dict]: List of role information
         """
-        return [
-            self.get_role_info(role_name)
-            for role_name in self.roles.keys()
-        ]
+        return [self.get_role_info(role_name) for role_name in self.roles.keys()]
 
     def get_all_permissions(self) -> List[Dict]:
         """
@@ -274,9 +287,9 @@ class RBACManager:
 
         # Add default roles
         default_roles = {
-            'admin': int(os.getenv('ADMIN_ROLE_ID', '0')),
-            'moderator': int(os.getenv('MOD_ROLE_ID', '0')),
-            'user': int(os.getenv('USER_ROLE_ID', '0'))
+            "admin": int(os.getenv("ADMIN_ROLE_ID", "0")),
+            "moderator": int(os.getenv("MOD_ROLE_ID", "0")),
+            "user": int(os.getenv("USER_ROLE_ID", "0")),
         }
 
         for role_name, role_id in default_roles.items():

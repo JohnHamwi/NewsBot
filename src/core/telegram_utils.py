@@ -5,11 +5,12 @@ This module provides utility functions and extensions for Telegram client operat
 It extends the TelegramClient with additional functionality needed by the NewsBot.
 """
 
-from telethon import TelegramClient
-from typing import List, Union, Any
 import asyncio
-import logging
 import functools
+import logging
+from typing import Any, List, Union
+
+from telethon import TelegramClient
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,11 @@ async def extend_telegram_client(client: TelegramClient):
     Args:
         client: The TelegramClient instance to extend
     """
+
     # Define the get_posts method
-    async def get_posts(client_instance, channel: Union[str, int], limit: int = 1) -> List[Any]:
+    async def get_posts(
+        client_instance, channel: Union[str, int], limit: int = 1
+    ) -> List[Any]:
         """
         Get recent posts from a Telegram channel.
 

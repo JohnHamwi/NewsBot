@@ -9,7 +9,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
-from src.utils.base_logger import base_logger as logger
+from utils.base_logger import base_logger as logger
 
 
 class JSONCache:
@@ -24,8 +24,21 @@ class JSONCache:
         self.json_path = os.path.abspath(json_path)
         self._ensure_file()
 
+    async def initialize(self):
+        """Initialize the cache system."""
+        try:
+            # Ensure the data directory exists
+            os.makedirs(os.path.dirname(self.json_path), exist_ok=True)
+            self._ensure_file()
+            logger.info(f"✅ JSON cache initialized at {self.json_path}")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize JSON cache: {e}")
+            raise
+
     def _ensure_file(self):
         if not os.path.exists(self.json_path):
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.json_path), exist_ok=True)
             with open(self.json_path, "w") as f:
                 json.dump({"latest_news": [], "telegram_channels": []}, f)
 
@@ -59,13 +72,13 @@ class JSONCache:
             logger.error(f"Failed to set cache key {key}: {str(e)}")
             return False
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str, default: Any = None) -> Optional[Any]:
         try:
             data = self._read()
-            return data.get(key)
+            return data.get(key, default)
         except Exception as e:
             logger.error(f"Failed to get cache key {key}: {str(e)}")
-            return None
+            return default
 
     async def delete(self, key: str) -> bool:
         try:
@@ -201,4 +214,4 @@ class JSONCache:
             return True
         except Exception as e:
             logger.error(f"Failed to set status for channel {channel}: {str(e)}")
-            return False
+            return False 

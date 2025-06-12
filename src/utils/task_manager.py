@@ -14,12 +14,12 @@ import functools
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import Callable, Coroutine, Dict, List, Optional, Any, TypeVar, Set
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, TypeVar
 
 from src.utils.base_logger import base_logger as logger
 from src.utils.error_handler import error_handler
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class TaskManager:
@@ -49,7 +49,7 @@ class TaskManager:
         coro: Callable[..., Coroutine],
         *args,
         restart_on_failure: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         """
         Start a background task with error recovery.
@@ -66,9 +66,13 @@ class TaskManager:
             return
 
         self.restart_counts.setdefault(name, 0)
-        self.last_restart_time.setdefault(name, datetime.now() - timedelta(seconds=self.restart_window))
+        self.last_restart_time.setdefault(
+            name, datetime.now() - timedelta(seconds=self.restart_window)
+        )
 
-        wrapped_coro = self._create_wrapped_task(name, coro, restart_on_failure, *args, **kwargs)
+        wrapped_coro = self._create_wrapped_task(
+            name, coro, restart_on_failure, *args, **kwargs
+        )
         task = asyncio.create_task(wrapped_coro)
         self.tasks[name] = task
         logger.info(f"Started task: {name}")
@@ -79,7 +83,7 @@ class TaskManager:
         coro: Callable[..., Coroutine],
         restart_on_failure: bool,
         *args,
-        **kwargs
+        **kwargs,
     ) -> Coroutine:
         """
         Create a wrapped task with error handling and recovery.
@@ -94,6 +98,7 @@ class TaskManager:
         Returns:
             Wrapped coroutine
         """
+
         async def wrapped_task():
             while not self.shutdown_requested:
                 try:
@@ -115,10 +120,12 @@ class TaskManager:
                                 error_title=f"Task Error: {name}",
                                 error=e,
                                 context=f"Background task failure in {name}",
-                                bot=self.bot
+                                bot=self.bot,
                             )
                         except Exception as report_error:
-                            logger.error(f"Failed to report task error: {str(report_error)}")
+                            logger.error(
+                                f"Failed to report task error: {str(report_error)}"
+                            )
 
                     # Handle task restart
                     if not restart_on_failure:
@@ -127,7 +134,9 @@ class TaskManager:
 
                     # Check if we should restart (rate limiting)
                     now = datetime.now()
-                    time_since_last_restart = (now - self.last_restart_time[name]).total_seconds()
+                    time_since_last_restart = (
+                        now - self.last_restart_time[name]
+                    ).total_seconds()
 
                     # Reset restart count if outside window
                     if time_since_last_restart > self.restart_window:
@@ -139,21 +148,27 @@ class TaskManager:
 
                     # Check if we've hit the restart limit
                     if self.restart_counts[name] > self.max_restarts:
-                        logger.error(f"Task {name} failed too many times ({self.restart_counts[name]}), not restarting")
+                        logger.error(
+                            f"Task {name} failed too many times ({self.restart_counts[name]}), not restarting"
+                        )
                         if self.bot:
                             try:
                                 await error_handler.send_error_embed(
                                     error_title=f"Task Terminated: {name}",
-                                    error=Exception(f"Task failed after {self.restart_counts[name]} restart attempts"),
+                                    error=Exception(
+                                        f"Task failed after {self.restart_counts[name]} restart attempts"
+                                    ),
                                     context=f"Task {name} has been terminated due to too many failures",
-                                    bot=self.bot
+                                    bot=self.bot,
                                 )
                             except Exception:
                                 pass
                         break
 
                     # Calculate backoff time
-                    backoff_time = min(60, 2 * (self.backoff_factor ** (self.restart_counts[name] - 1)))
+                    backoff_time = min(
+                        60, 2 * (self.backoff_factor ** (self.restart_counts[name] - 1))
+                    )
                     logger.warning(
                         f"Task {name} will restart in {backoff_time:.1f} seconds "
                         f"(attempt {self.restart_counts[name]})"
@@ -231,6 +246,22 @@ class TaskManager:
         for name in list(self.tasks.keys()):
             await self.stop_task(name, timeout)
 
+    async def start_all_tasks(self) -> None:
+        """
+        Start all configured background tasks.
+        
+        This method is called during bot startup to initialize background tasks.
+        Currently, no default tasks are configured, but this method can be extended
+        to start specific tasks as needed.
+        """
+        logger.info("🚀 Starting background tasks...")
+        
+        # For now, we don't have any default tasks to start
+        # This method exists to satisfy the interface expected by the bot
+        # Future tasks can be added here as needed
+        
+        logger.info("✅ Background tasks startup completed")
+
     def get_task_stats(self) -> Dict[str, Dict[str, Any]]:
         """
         Get statistics about all tasks.
@@ -245,8 +276,13 @@ class TaskManager:
                 "restart_count": self.restart_counts.get(name, 0),
                 "last_restart": self.last_restart_time.get(name),
                 "cancelled": task.cancelled() if hasattr(task, "cancelled") else None,
-                "exception": (task.exception() if hasattr(task, "exception") and
-                              task.done() and not task.cancelled() else None),
+                "exception": (
+                    task.exception()
+                    if hasattr(task, "exception")
+                    and task.done()
+                    and not task.cancelled()
+                    else None
+                ),
             }
         return stats
 

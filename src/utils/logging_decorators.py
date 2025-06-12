@@ -12,7 +12,7 @@ from typing import Callable, TypeVar, cast
 
 from src.utils.structured_logger import structured_logger
 
-F = TypeVar('F', bound=Callable)
+F = TypeVar("F", bound=Callable)
 
 
 def log_command(component: str = None) -> Callable[[F], F]:
@@ -25,6 +25,7 @@ def log_command(component: str = None) -> Callable[[F], F]:
     Returns:
         Decorated function
     """
+
     def decorator(func: F) -> F:
         is_async = asyncio.iscoroutinefunction(func)
 
@@ -34,27 +35,32 @@ def log_command(component: str = None) -> Callable[[F], F]:
 
             # Set up logging context
             start_time = time.time()
-            structured_logger.info(f"Executing command: {command_name}", extras={
-                'args': str(args),
-                'kwargs': str(kwargs),
-                'user': str(interaction.user),
-                'channel': str(getattr(interaction, 'channel', None)),
-            })
+            structured_logger.info(
+                f"Executing command: {command_name}",
+                extras={
+                    "args": str(args),
+                    "kwargs": str(kwargs),
+                    "user": str(interaction.user),
+                    "channel": str(getattr(interaction, "channel", None)),
+                },
+            )
 
             try:
                 result = await func(self, interaction, *args, **kwargs)
                 duration = time.time() - start_time
-                structured_logger.info(f"Command executed: {command_name} (took {duration:.3f}s)")
+                structured_logger.info(
+                    f"Command executed: {command_name} (took {duration:.3f}s)"
+                )
                 return result
             except Exception as e:
                 duration = time.time() - start_time
                 structured_logger.error(
                     f"Error executing command: {command_name}",
                     extras={
-                        'duration': duration,
-                        'exception_type': type(e).__name__,
-                        'exception': str(e),
-                    }
+                        "duration": duration,
+                        "exception_type": type(e).__name__,
+                        "exception": str(e),
+                    },
                 )
                 raise
 
@@ -64,27 +70,32 @@ def log_command(component: str = None) -> Callable[[F], F]:
 
             # Set up logging context
             start_time = time.time()
-            structured_logger.info(f"Executing command: {command_name}", extras={
-                'args': str(args),
-                'kwargs': str(kwargs),
-                'user': str(interaction.user),
-                'channel': str(getattr(interaction, 'channel', None)),
-            })
+            structured_logger.info(
+                f"Executing command: {command_name}",
+                extras={
+                    "args": str(args),
+                    "kwargs": str(kwargs),
+                    "user": str(interaction.user),
+                    "channel": str(getattr(interaction, "channel", None)),
+                },
+            )
 
             try:
                 result = func(self, interaction, *args, **kwargs)
                 duration = time.time() - start_time
-                structured_logger.info(f"Command executed: {command_name} (took {duration:.3f}s)")
+                structured_logger.info(
+                    f"Command executed: {command_name} (took {duration:.3f}s)"
+                )
                 return result
             except Exception as e:
                 duration = time.time() - start_time
                 structured_logger.error(
                     f"Error executing command: {command_name}",
                     extra_data={
-                        'duration': duration,
-                        'exception_type': type(e).__name__,
-                        'exception': str(e),
-                    }
+                        "duration": duration,
+                        "exception_type": type(e).__name__,
+                        "exception": str(e),
+                    },
                 )
                 raise
 
@@ -103,6 +114,7 @@ def log_method(component: str = None) -> Callable[[F], F]:
     Returns:
         Decorated function
     """
+
     def decorator(func: F) -> F:
         is_async = asyncio.iscoroutinefunction(func)
 
@@ -110,10 +122,13 @@ def log_method(component: str = None) -> Callable[[F], F]:
         async def async_wrapper(self, *args, **kwargs):
             method_name = func.__name__
 
-            structured_logger.debug(f"Executing method: {method_name}", extra_data={
-                'args': str(args) if args else None,
-                'class': self.__class__.__name__,
-            })
+            structured_logger.debug(
+                f"Executing method: {method_name}",
+                extra_data={
+                    "args": str(args) if args else None,
+                    "class": self.__class__.__name__,
+                },
+            )
 
             try:
                 result = await func(self, *args, **kwargs)
@@ -122,9 +137,9 @@ def log_method(component: str = None) -> Callable[[F], F]:
                 structured_logger.error(
                     f"Error executing method: {method_name}",
                     extra_data={
-                        'exception_type': type(e).__name__,
-                        'exception': str(e),
-                    }
+                        "exception_type": type(e).__name__,
+                        "exception": str(e),
+                    },
                 )
                 raise
 
@@ -132,10 +147,13 @@ def log_method(component: str = None) -> Callable[[F], F]:
         def sync_wrapper(self, *args, **kwargs):
             method_name = func.__name__
 
-            structured_logger.debug(f"Executing method: {method_name}", extra_data={
-                'args': str(args) if args else None,
-                'class': self.__class__.__name__,
-            })
+            structured_logger.debug(
+                f"Executing method: {method_name}",
+                extra_data={
+                    "args": str(args) if args else None,
+                    "class": self.__class__.__name__,
+                },
+            )
 
             try:
                 result = func(self, *args, **kwargs)
@@ -144,9 +162,9 @@ def log_method(component: str = None) -> Callable[[F], F]:
                 structured_logger.error(
                     f"Error executing method: {method_name}",
                     extra_data={
-                        'exception_type': type(e).__name__,
-                        'exception': str(e),
-                    }
+                        "exception_type": type(e).__name__,
+                        "exception": str(e),
+                    },
                 )
                 raise
 
@@ -165,6 +183,7 @@ def log_function(component: str) -> Callable[[F], F]:
     Returns:
         Decorated function
     """
+
     def decorator(func: F) -> F:
         is_async = asyncio.iscoroutinefunction(func)
 
@@ -181,9 +200,9 @@ def log_function(component: str) -> Callable[[F], F]:
                 structured_logger.error(
                     f"Error executing function: {func_name}",
                     extra_data={
-                        'exception_type': type(e).__name__,
-                        'exception': str(e),
-                    }
+                        "exception_type": type(e).__name__,
+                        "exception": str(e),
+                    },
                 )
                 raise
 
@@ -200,9 +219,9 @@ def log_function(component: str) -> Callable[[F], F]:
                 structured_logger.error(
                     f"Error executing function: {func_name}",
                     extra_data={
-                        'exception_type': type(e).__name__,
-                        'exception': str(e),
-                    }
+                        "exception_type": type(e).__name__,
+                        "exception": str(e),
+                    },
                 )
                 raise
 
@@ -221,6 +240,7 @@ def log_task(component: str) -> Callable[[F], F]:
     Returns:
         Decorated function
     """
+
     def decorator(func: F) -> F:
         is_async = asyncio.iscoroutinefunction(func)
         if not is_async:
@@ -245,9 +265,9 @@ def log_task(component: str) -> Callable[[F], F]:
                 structured_logger.error(
                     f"Error in background task: {task_name}",
                     extra_data={
-                        'exception_type': type(e).__name__,
-                        'exception': str(e),
-                    }
+                        "exception_type": type(e).__name__,
+                        "exception": str(e),
+                    },
                 )
                 raise
 

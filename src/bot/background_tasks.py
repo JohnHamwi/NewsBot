@@ -9,23 +9,23 @@ import asyncio
 import datetime
 import os
 import platform
-import psutil
 from typing import TYPE_CHECKING
 
 import discord
+import psutil
 from discord.ext import commands
 
 from src.core.config_manager import config
-from src.utils.base_logger import base_logger as logger
-from src.utils.timezone_utils import now_eastern
-from src.utils.task_manager import task_manager
 from src.utils import error_handler
+from src.utils.base_logger import base_logger as logger
+from src.utils.task_manager import task_manager
+from src.utils.timezone_utils import now_eastern
 
 if TYPE_CHECKING:
     from .newsbot import NewsBot
 
 # Configuration constants
-__version__ = config.get('bot.version') or "2.0.0"
+__version__ = config.get("bot.version") or "2.0.0"
 
 
 async def send_startup_notification(bot: "NewsBot") -> None:
@@ -56,11 +56,15 @@ async def send_startup_notification(bot: "NewsBot") -> None:
                 color=discord.Color.red(),
                 timestamp=discord.utils.utcnow(),
             )
-            embed.add_field(name="📱 Telegram Status", value="```❌ Authentication Failed```", inline=False)
+            embed.add_field(
+                name="📱 Telegram Status",
+                value="```❌ Authentication Failed```",
+                inline=False,
+            )
             embed.add_field(
                 name="🔧 How to Fix",
                 value="Run `python fix_telegram_auth.py` and restart the bot",
-                inline=False
+                inline=False,
             )
         else:
             embed = discord.Embed(
@@ -69,14 +73,21 @@ async def send_startup_notification(bot: "NewsBot") -> None:
                 color=discord.Color.green(),
                 timestamp=discord.utils.utcnow(),
             )
-            embed.add_field(name="📱 Telegram Status", value="```✅ Connected```", inline=False)
+            embed.add_field(
+                name="📱 Telegram Status", value="```✅ Connected```", inline=False
+            )
 
         embed.add_field(name="💻 System Info", value=f"```{sys_info}```", inline=False)
-        embed.add_field(name="🌐 Connection Info", value=f"```{conn_info}```", inline=False)
-        embed.set_footer(
-            text=f"🤖 Bot ID: {bot.user.id} • Version: {__version__}"
+        embed.add_field(
+            name="🌐 Connection Info", value=f"```{conn_info}```", inline=False
         )
+        embed.set_footer(text=f"🤖 Bot ID: {bot.user.id} • Version: {__version__}")
 
+        # Check if log channel is available before sending
+        if not bot.log_channel:
+            logger.warning("⚠️ Log channel not available for startup notification")
+            return
+            
         await bot.log_channel.send(embed=embed)
         logger.debug("✅ Sent startup notification")
 
@@ -96,9 +107,10 @@ async def send_shutdown_notification(bot: "NewsBot") -> None:
         if bot.startup_time.tzinfo is None:
             # If startup_time is naive, make current_time naive too
             import datetime as dt
+
             current_time = dt.datetime.utcnow()
         uptime = current_time - bot.startup_time
-        uptime_str = str(uptime).split('.')[0]  # Remove microseconds
+        uptime_str = str(uptime).split(".")[0]  # Remove microseconds
 
         # Gather final system stats
         process = psutil.Process()
@@ -115,7 +127,9 @@ async def send_shutdown_notification(bot: "NewsBot") -> None:
             color=discord.Color.orange(),
             timestamp=discord.utils.utcnow(),
         )
-        embed.add_field(name="📊 Final Statistics", value=f"```{final_stats}```", inline=False)
+        embed.add_field(
+            name="📊 Final Statistics", value=f"```{final_stats}```", inline=False
+        )
         embed.set_footer(text=f"🤖 Bot ID: {bot.user.id} • Version: {__version__}")
 
         await bot.log_channel.send(embed=embed)
@@ -188,7 +202,9 @@ async def resource_monitor(bot: "NewsBot") -> None:
         raise
 
 
-async def send_resource_alert(bot: "NewsBot", cpu: float, ram: float, pid: int, admin_user_id: int) -> None:
+async def send_resource_alert(
+    bot: "NewsBot", cpu: float, ram: float, pid: int, admin_user_id: int
+) -> None:
     """Send resource usage alert to admin."""
     try:
         if not bot.errors_channel:
@@ -198,19 +214,19 @@ async def send_resource_alert(bot: "NewsBot", cpu: float, ram: float, pid: int, 
             title="⚠️ High Resource Usage Alert",
             description=f"The bot is experiencing high resource usage.",
             color=discord.Color.red(),
-            timestamp=discord.utils.utcnow()
+            timestamp=discord.utils.utcnow(),
         )
 
         embed.add_field(
             name="📊 Current Usage",
             value=f"**CPU:** {cpu:.1f}%\n**RAM:** {ram:.1f}%\n**PID:** {pid}",
-            inline=False
+            inline=False,
         )
 
         embed.add_field(
             name="🔧 Recommended Actions",
             value="• Check for memory leaks\n• Monitor background tasks\n• Consider restarting if usage remains high",
-            inline=False
+            inline=False,
         )
 
         await bot.errors_channel.send(f"<@{admin_user_id}>", embed=embed)
@@ -227,17 +243,20 @@ async def update_metrics(bot: "NewsBot") -> None:
     try:
         while True:
             try:
-                if hasattr(bot, 'metrics') and bot.metrics:
+                if hasattr(bot, "metrics") and bot.metrics:
                     # Update basic metrics
-                    bot.metrics.update_metric('bot_latency', bot.latency * 1000)
-                    bot.metrics.update_metric('guild_count', len(bot.guilds))
-                    bot.metrics.update_metric('user_count', sum(guild.member_count or 0 for guild in bot.guilds))
+                    bot.metrics.update_metric("bot_latency", bot.latency * 1000)
+                    bot.metrics.update_metric("guild_count", len(bot.guilds))
+                    bot.metrics.update_metric(
+                        "user_count",
+                        sum(guild.member_count or 0 for guild in bot.guilds),
+                    )
 
                     # Update system metrics
                     process = psutil.Process()
-                    bot.metrics.update_metric('cpu_usage', psutil.cpu_percent())
-                    bot.metrics.update_metric('memory_usage', process.memory_percent())
-                    bot.metrics.update_metric('thread_count', process.num_threads())
+                    bot.metrics.update_metric("cpu_usage", psutil.cpu_percent())
+                    bot.metrics.update_metric("memory_usage", process.memory_percent())
+                    bot.metrics.update_metric("thread_count", process.num_threads())
 
                 await asyncio.sleep(60)  # Update every minute
 
@@ -263,43 +282,64 @@ async def log_tail_task(bot: "NewsBot"):
                 log_file_path = "logs/newsbot.log"
                 if os.path.exists(log_file_path):
                     try:
-                        with open(log_file_path, 'r', encoding='utf-8') as f:
+                        with open(log_file_path, "r", encoding="utf-8") as f:
                             lines = f.readlines()
                             recent_lines = lines[-50:] if len(lines) > 50 else lines
 
                             if recent_lines:
                                 # Count log levels
-                                error_count = sum(1 for line in recent_lines if 'ERROR' in line)
-                                warning_count = sum(1 for line in recent_lines if 'WARNING' in line)
-                                info_count = sum(1 for line in recent_lines if 'INFO' in line)
+                                error_count = sum(
+                                    1 for line in recent_lines if "ERROR" in line
+                                )
+                                warning_count = sum(
+                                    1 for line in recent_lines if "WARNING" in line
+                                )
+                                info_count = sum(
+                                    1 for line in recent_lines if "INFO" in line
+                                )
 
-                                if error_count > 0 or warning_count > 5:  # Only send if there are issues
+                                if (
+                                    error_count > 0 or warning_count > 5
+                                ):  # Only send if there are issues
                                     embed = discord.Embed(
                                         title="📝 Hourly Log Summary",
                                         description=f"Recent activity from the last hour",
-                                        color=discord.Color.red() if error_count > 0 else discord.Color.orange(),
-                                        timestamp=discord.utils.utcnow()
+                                        color=(
+                                            discord.Color.red()
+                                            if error_count > 0
+                                            else discord.Color.orange()
+                                        ),
+                                        timestamp=discord.utils.utcnow(),
                                     )
 
                                     embed.add_field(
                                         name="📊 Log Counts",
                                         value=f"❌ Errors: {error_count}\n⚠️ Warnings: {warning_count}\nℹ️ Info: {info_count}",
-                                        inline=False)
+                                        inline=False,
+                                    )
 
                                     if error_count > 0:
                                         # Show recent errors
-                                        error_lines = [line.strip() for line in recent_lines if 'ERROR' in line][-3:]
-                                        error_text = '\n'.join(error_lines)
+                                        error_lines = [
+                                            line.strip()
+                                            for line in recent_lines
+                                            if "ERROR" in line
+                                        ][-3:]
+                                        error_text = "\n".join(error_lines)
                                         if len(error_text) > 1000:
                                             error_text = error_text[-1000:]
 
                                         embed.add_field(
                                             name="🔴 Recent Errors",
                                             value=f"```\n{error_text}\n```",
-                                            inline=False
+                                            inline=False,
                                         )
 
-                                    await bot.log_channel.send(embed=embed)
+                                    # Check if log channel is available before sending
+                                    if bot.log_channel:
+                                        await bot.log_channel.send(embed=embed)
+                                    else:
+                                        logger.debug("📝 Log channel not available for log summary")
 
                     except Exception as e:
                         logger.error(f"❌ Error reading log file: {str(e)}")
@@ -320,10 +360,18 @@ async def rich_presence_task(bot: "NewsBot"):
     try:
         while True:
             try:
+                # Wait for bot to be ready before updating presence
+                if not bot.is_ready():
+                    logger.debug("📱 Bot not ready yet, waiting...")
+                    await asyncio.sleep(5)
+                    continue
+                
                 if bot.rich_presence_mode == "automatic":
                     # Calculate time until next post
                     if bot.auto_post_interval > 0 and bot.last_post_time:
-                        next_post = bot.last_post_time + datetime.timedelta(seconds=bot.auto_post_interval)
+                        next_post = bot.last_post_time + datetime.timedelta(
+                            seconds=bot.auto_post_interval
+                        )
                         time_until = next_post - now_eastern()
 
                         logger.debug(
@@ -342,10 +390,14 @@ async def rich_presence_task(bot: "NewsBot"):
                                 logger.debug("📱 Rich presence: Just posted news!")
                             elif hours > 0:
                                 activity_name = f"⏰ Next post in {hours}h {minutes}m"
-                                logger.debug(f"📱 Rich presence: Next post in {hours}h {minutes}m")
+                                logger.debug(
+                                    f"📱 Rich presence: Next post in {hours}h {minutes}m"
+                                )
                             else:
                                 activity_name = f"⏰ Next post in {minutes}m"
-                                logger.debug(f"📱 Rich presence: Next post in {minutes}m")
+                                logger.debug(
+                                    f"📱 Rich presence: Next post in {minutes}m"
+                                )
                         else:
                             activity_name = "📰 Ready to post news"
                             logger.debug("📱 Rich presence: Ready to post news")
@@ -357,17 +409,19 @@ async def rich_presence_task(bot: "NewsBot"):
                         )
 
                     activity = discord.Activity(
-                        type=discord.ActivityType.watching,
-                        name=activity_name
+                        type=discord.ActivityType.watching, name=activity_name
                     )
-                    await bot.change_presence(status=discord.Status.online, activity=activity)
+                    await bot.change_presence(
+                        status=discord.Status.online, activity=activity
+                    )
 
                 elif bot.rich_presence_mode == "maintenance":
                     activity = discord.Activity(
-                        type=discord.ActivityType.playing,
-                        name="🔧 Under Maintenance"
+                        type=discord.ActivityType.playing, name="🔧 Under Maintenance"
                     )
-                    await bot.change_presence(status=discord.Status.idle, activity=activity)
+                    await bot.change_presence(
+                        status=discord.Status.idle, activity=activity
+                    )
                     logger.debug("📱 Rich presence: Maintenance mode")
 
                 await asyncio.sleep(30)  # Update every 30 seconds
@@ -394,14 +448,23 @@ async def auto_post_task(bot: "NewsBot"):
                     await asyncio.sleep(300)  # Check every 5 minutes
                     continue
 
-                logger.debug(f"🔍 Auto-post check: interval={bot.auto_post_interval}s, force_flag={bot.force_auto_post}")
+                logger.debug(
+                    f"🔍 Auto-post check: interval={bot.auto_post_interval}s, force_flag={bot.force_auto_post}"
+                )
 
                 # Check if it's time to post
                 if bot.last_post_time:
-                    time_since_last = (now_eastern() - bot.last_post_time).total_seconds()
-                    logger.debug(f"⏱️ Time since last post: {time_since_last:.0f}s (need {bot.auto_post_interval}s)")
+                    time_since_last = (
+                        now_eastern() - bot.last_post_time
+                    ).total_seconds()
+                    logger.debug(
+                        f"⏱️ Time since last post: {time_since_last:.0f}s (need {bot.auto_post_interval}s)"
+                    )
 
-                    if time_since_last < bot.auto_post_interval and not bot.force_auto_post:
+                    if (
+                        time_since_last < bot.auto_post_interval
+                        and not bot.force_auto_post
+                    ):
                         remaining = bot.auto_post_interval - time_since_last
                         logger.debug(f"⏳ Not time yet, waiting {remaining:.0f}s more")
                         await asyncio.sleep(60)  # Check every minute
@@ -411,86 +474,76 @@ async def auto_post_task(bot: "NewsBot"):
 
                 # Reset force flag if it was set
                 if bot.force_auto_post:
-                    logger.info("🚀 Force auto-post flag detected - posting immediately")
+                    logger.info(
+                        "🚀 Force auto-post flag detected - posting immediately"
+                    )
                     bot.force_auto_post = False
 
                 # Trigger auto-post
                 logger.info("🔄 Triggering automatic news post")
 
-                # List available cogs for debugging
-                available_cogs = list(bot.cogs.keys())
-                logger.debug(f"📋 Available cogs: {available_cogs}")
-
-                # Try to find the correct fetch cog
-                fetch_cog = None
-                for cog_name in ['FetchCog', 'FetchView', 'Fetch']:
-                    cog = bot.get_cog(cog_name)
-                    if cog:
-                        logger.debug(f"✅ Found {cog_name} cog")
-                        fetch_cog = cog
-                        break
-
-                if not fetch_cog:
-                    logger.error("❌ No fetch cog found! Available cogs: " + ", ".join(available_cogs))
+                # Check if the fetch_and_post_auto method is available on the bot
+                if not hasattr(bot, "fetch_and_post_auto"):
+                    logger.error("❌ No fetch_and_post_auto method found on bot!")
                     await asyncio.sleep(300)  # Wait 5 minutes before retrying
                     continue
 
-                # Check what methods are available
-                fetch_methods = [method for method in dir(
-                    fetch_cog) if 'fetch' in method.lower() and not method.startswith('_')]
-                logger.debug(f"🔍 Available fetch methods: {fetch_methods}")
+                logger.debug("✅ Found fetch_and_post_auto method on bot")
 
-                # Try different method names
+                # Try posting from active channels
                 post_successful = False
-                for method_name in ['fetch_and_post_auto', 'fetch_and_post', 'auto_post']:
-                    if hasattr(fetch_cog, method_name):
-                        logger.info(f"🎯 Attempting to call {method_name}")
+                try:
+                    # Get active channels from cache
+                    active_channels = await bot.json_cache.list_telegram_channels(
+                        "activated"
+                    )
+
+                    if not active_channels:
+                        logger.warning(
+                            "⚠️ No active channels configured for auto-posting"
+                        )
+                        logger.info(
+                            "💡 Use /news add_channel <channel_name> to add channels for auto-posting"
+                        )
+                        await asyncio.sleep(300)  # Wait 5 minutes before retrying
+                        continue
+
+                    logger.info(f"📡 Active channels: {active_channels}")
+
+                    # Try posting from each channel until successful
+                    for channel in active_channels:
+                        logger.info(f"🔄 Attempting to fetch from channel: {channel}")
+
                         try:
-                            # Get active channels from cache using the correct method
-                            active_channels = await bot.json_cache.list_telegram_channels("activated")
-
-                            if not active_channels:
-                                logger.warning("⚠️ No active channels configured for auto-posting")
-                                logger.info("💡 Use /news add_channel <channel_name> to add channels for auto-posting")
-                                break
-
-                            logger.info(f"📡 Active channels: {active_channels}")
-
-                            # Try posting from each channel until successful
-                            for channel in active_channels:
-                                logger.info(f"🔄 Attempting to fetch from channel: {channel}")
-
-                                if method_name == 'fetch_and_post_auto':
-                                    result = await fetch_cog.fetch_and_post_auto(channel)
-                                    if result:
-                                        logger.info(f"✅ Successfully posted from {channel}")
-                                        post_successful = True
-                                        break
-                                    else:
-                                        logger.debug(f"❌ No post made from {channel}")
-                                else:
-                                    # For other methods, try calling without parameters
-                                    await getattr(fetch_cog, method_name)()
-                                    logger.info(f"✅ Called {method_name} successfully")
-                                    post_successful = True
-                                    break
-
-                            if post_successful:
-                                bot.last_post_time = now_eastern()
-                                bot.mark_just_posted()
-                                logger.info("✅ Auto-post completed successfully")
-                                await bot.save_auto_post_config()
+                            result = await bot.fetch_and_post_auto(channel)
+                            if result:
+                                logger.info(f"✅ Successfully posted from {channel}")
+                                post_successful = True
                                 break
                             else:
-                                logger.warning("⚠️ No successful posts from any active channel")
-
+                                logger.debug(f"❌ No post made from {channel}")
                         except Exception as e:
-                            logger.error(f"❌ Auto-post method {method_name} failed: {str(e)}")
-                            import traceback
-                            logger.error(f"📋 Traceback: {traceback.format_exc()}")
+                            logger.error(f"❌ Failed to fetch from {channel}: {str(e)}")
+                            continue
 
-                if not post_successful:
-                    logger.warning("⚠️ All auto-post attempts failed")
+                    if post_successful:
+                        bot.last_post_time = now_eastern()
+                        bot.mark_just_posted()
+                        logger.info("✅ Auto-post completed successfully")
+                        await bot.save_auto_post_config()
+                        
+                        # Sleep for the full interval after successful post
+                        logger.info(f"😴 Sleeping for {bot.auto_post_interval}s until next auto-post")
+                        await asyncio.sleep(bot.auto_post_interval)
+                        continue
+                    else:
+                        logger.warning("⚠️ No successful posts from any active channel")
+
+                except Exception as e:
+                    logger.error(f"❌ Auto-post failed: {str(e)}")
+                    import traceback
+
+                    logger.error(f"📋 Traceback: {traceback.format_exc()}")
 
                 logger.debug("😴 Auto-post cycle complete, sleeping for 1 minute")
                 await asyncio.sleep(60)  # Check every minute
@@ -498,6 +551,7 @@ async def auto_post_task(bot: "NewsBot"):
             except Exception as e:
                 logger.error(f"❌ Error in auto-post task: {str(e)}")
                 import traceback
+
                 logger.error(f"📋 Traceback: {traceback.format_exc()}")
                 await asyncio.sleep(300)  # Wait 5 minutes before retrying
 

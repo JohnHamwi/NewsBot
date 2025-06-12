@@ -4,13 +4,14 @@ Configuration Command Module for NewsBot
 This module provides Discord slash commands for managing the bot's configuration.
 """
 
-import discord
-from discord import app_commands
-from discord.ext import commands
-from typing import Optional, List
 import json
 import os
+from typing import List, Optional
+
+import discord
 import yaml
+from discord import app_commands
+from discord.ext import commands
 
 from src.core.simple_config import config
 from src.utils.base_logger import base_logger as logger
@@ -23,31 +24,34 @@ class ConfigCommands(commands.Cog):
         self.bot = bot
 
     @app_commands.command(
-        name="config",
-        description="Manage bot configuration (admin only)"
+        name="config", description="Manage bot configuration (admin only)"
     )
     @app_commands.describe(
         action="What configuration action to perform",
         key="Configuration key (for get/set actions, e.g. 'bot.debug_mode')",
         value="Value to set (for set action)",
         profile="Profile to switch to (for profile action)",
-        filename="Filename for save action (without extension)"
+        filename="Filename for save action (without extension)",
     )
-    @app_commands.choices(action=[
-        app_commands.Choice(name="📄 Get Value", value="get"),
-        app_commands.Choice(name="✏️ Set Override", value="set"),
-        app_commands.Choice(name="🗑️ Clear Overrides", value="clear"),
-        app_commands.Choice(name="🔄 Reload Config", value="reload"),
-        app_commands.Choice(name="💾 Save Config", value="save"),
-        app_commands.Choice(name="🔧 Switch Profile", value="profile"),
-        app_commands.Choice(name="📋 Show Profile", value="show_profile"),
-    ])
-    @app_commands.choices(profile=[
-        app_commands.Choice(name="Default", value="default"),
-        app_commands.Choice(name="Development", value="dev"),
-        app_commands.Choice(name="Testing", value="test"),
-        app_commands.Choice(name="Production", value="prod")
-    ])
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="📄 Get Value", value="get"),
+            app_commands.Choice(name="✏️ Set Override", value="set"),
+            app_commands.Choice(name="🗑️ Clear Overrides", value="clear"),
+            app_commands.Choice(name="🔄 Reload Config", value="reload"),
+            app_commands.Choice(name="💾 Save Config", value="save"),
+            app_commands.Choice(name="🔧 Switch Profile", value="profile"),
+            app_commands.Choice(name="📋 Show Profile", value="show_profile"),
+        ]
+    )
+    @app_commands.choices(
+        profile=[
+            app_commands.Choice(name="Default", value="default"),
+            app_commands.Choice(name="Development", value="dev"),
+            app_commands.Choice(name="Testing", value="test"),
+            app_commands.Choice(name="Production", value="prod"),
+        ]
+    )
     async def config_command(
         self,
         interaction: discord.Interaction,
@@ -55,7 +59,7 @@ class ConfigCommands(commands.Cog):
         key: str = None,
         value: str = None,
         profile: app_commands.Choice[str] = None,
-        filename: str = None
+        filename: str = None,
     ):
         """
         Consolidated configuration management command (admin only).
@@ -71,13 +75,14 @@ class ConfigCommands(commands.Cog):
         # Check if user has admin permissions
         if not self._is_admin(interaction.user):
             await interaction.response.send_message(
-                "❌ You don't have permission to use this command.",
-                ephemeral=False
+                "❌ You don't have permission to use this command.", ephemeral=False
             )
             return
 
         action_value = action.value
-        logger.info(f"[CONFIG][CMD] Config command invoked by user {interaction.user.id}, action={action_value}")
+        logger.info(
+            f"[CONFIG][CMD] Config command invoked by user {interaction.user.id}, action={action_value}"
+        )
 
         try:
             if action_value == "get":
@@ -96,18 +101,19 @@ class ConfigCommands(commands.Cog):
                 await self._handle_show_profile(interaction)
             else:
                 await interaction.response.send_message(
-                    "❌ Invalid action specified.",
-                    ephemeral=False
+                    "❌ Invalid action specified.", ephemeral=False
                 )
 
         except Exception as e:
-            logger.error(f"[CONFIG][CMD] Error in config command: {str(e)}", exc_info=True)
+            logger.error(
+                f"[CONFIG][CMD] Error in config command: {str(e)}", exc_info=True
+            )
 
             error_embed = discord.Embed(
                 title="❌ Configuration Error",
                 description=f"An error occurred: {str(e)}",
                 color=discord.Color.red(),
-                timestamp=discord.utils.utcnow()
+                timestamp=discord.utils.utcnow(),
             )
 
             try:
@@ -122,16 +128,14 @@ class ConfigCommands(commands.Cog):
         """Handle config get action."""
         if not key:
             await interaction.response.send_message(
-                "❌ Please specify a configuration key to get.",
-                ephemeral=False
+                "❌ Please specify a configuration key to get.", ephemeral=False
             )
             return
 
         value = config.get(key)
 
         embed = discord.Embed(
-            title="🔧 Configuration Value",
-            color=discord.Color.blue()
+            title="🔧 Configuration Value", color=discord.Color.blue()
         )
         embed.add_field(name="Key", value=f"`{key}`", inline=False)
         embed.add_field(name="Value", value=f"`{value}`", inline=False)
@@ -139,12 +143,14 @@ class ConfigCommands(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
-    async def _handle_config_set(self, interaction: discord.Interaction, key: str, value: str):
+    async def _handle_config_set(
+        self, interaction: discord.Interaction, key: str, value: str
+    ):
         """Handle config set action."""
         if not key or value is None:
             await interaction.response.send_message(
                 "❌ Please specify both a key and value for set action.",
-                ephemeral=False
+                ephemeral=False,
             )
             return
 
@@ -157,12 +163,12 @@ class ConfigCommands(commands.Cog):
         embed = discord.Embed(
             title="🔧 Configuration Override Set",
             description=f"Set override for **{key}** to **{converted_value}**",
-            color=discord.Color.green()
+            color=discord.Color.green(),
         )
         embed.add_field(
             name="⚠️ Note",
             value="This override is temporary and will be reset when the bot restarts.",
-            inline=False
+            inline=False,
         )
         await interaction.response.send_message(embed=embed)
 
@@ -173,7 +179,7 @@ class ConfigCommands(commands.Cog):
         embed = discord.Embed(
             title="🔧 Configuration Overrides Cleared",
             description="All configuration overrides have been cleared.",
-            color=discord.Color.green()
+            color=discord.Color.green(),
         )
         await interaction.response.send_message(embed=embed)
 
@@ -185,28 +191,29 @@ class ConfigCommands(commands.Cog):
             embed = discord.Embed(
                 title="🔧 Configuration Reloaded",
                 description="Configuration reloaded successfully from file.",
-                color=discord.Color.green()
+                color=discord.Color.green(),
             )
         else:
             embed = discord.Embed(
                 title="❌ Configuration Reload Failed",
                 description="Failed to reload configuration from file.",
-                color=discord.Color.red()
+                color=discord.Color.red(),
             )
 
         await interaction.response.send_message(embed=embed)
 
-    async def _handle_config_save(self, interaction: discord.Interaction, filename: str):
+    async def _handle_config_save(
+        self, interaction: discord.Interaction, filename: str
+    ):
         """Handle config save action."""
         if not filename:
             await interaction.response.send_message(
-                "❌ Please specify a filename for save action.",
-                ephemeral=False
+                "❌ Please specify a filename for save action.", ephemeral=False
             )
             return
 
         # Ensure filename has no path components or extension
-        safe_filename = os.path.basename(filename).split('.')[0]
+        safe_filename = os.path.basename(filename).split(".")[0]
 
         # Create path in configs directory
         os.makedirs("configs", exist_ok=True)
@@ -219,23 +226,24 @@ class ConfigCommands(commands.Cog):
             embed = discord.Embed(
                 title="🔧 Configuration Saved",
                 description=f"Configuration saved to **{filepath}**",
-                color=discord.Color.green()
+                color=discord.Color.green(),
             )
         else:
             embed = discord.Embed(
                 title="❌ Configuration Save Failed",
                 description=f"Failed to save configuration to **{filepath}**",
-                color=discord.Color.red()
+                color=discord.Color.red(),
             )
 
         await interaction.response.send_message(embed=embed)
 
-    async def _handle_config_profile(self, interaction: discord.Interaction, profile: app_commands.Choice[str]):
+    async def _handle_config_profile(
+        self, interaction: discord.Interaction, profile: app_commands.Choice[str]
+    ):
         """Handle config profile switch action."""
         if not profile:
             await interaction.response.send_message(
-                "❌ Please specify a profile to switch to.",
-                ephemeral=False
+                "❌ Please specify a profile to switch to.", ephemeral=False
             )
             return
 
@@ -246,13 +254,13 @@ class ConfigCommands(commands.Cog):
             embed = discord.Embed(
                 title="🔧 Configuration Profile",
                 description=f"Switched to profile: **{profile_value}**",
-                color=discord.Color.green()
+                color=discord.Color.green(),
             )
         else:
             embed = discord.Embed(
                 title="❌ Profile Switch Failed",
                 description=f"Failed to switch to profile: **{profile_value}**",
-                color=discord.Color.red()
+                color=discord.Color.red(),
             )
 
         await interaction.response.send_message(embed=embed)
@@ -264,15 +272,18 @@ class ConfigCommands(commands.Cog):
         embed = discord.Embed(
             title="🔧 Current Configuration Profile",
             description=f"Active profile: **{current_profile}**",
-            color=discord.Color.blue()
+            color=discord.Color.blue(),
         )
 
         # Add available profiles
         available_profiles = ["default", "dev", "test", "prod"]
         embed.add_field(
             name="Available Profiles",
-            value="\n".join(f"{'✅' if p == current_profile else '⚪'} {p}" for p in available_profiles),
-            inline=False
+            value="\n".join(
+                f"{'✅' if p == current_profile else '⚪'} {p}"
+                for p in available_profiles
+            ),
+            inline=False,
         )
 
         await interaction.response.send_message(embed=embed)
@@ -288,13 +299,13 @@ class ConfigCommands(commands.Cog):
             bool: True if user is an admin
         """
         # Check if user ID matches admin user ID
-        admin_user_id = config.get('bot.admin_user_id')
+        admin_user_id = config.get("bot.admin_user_id")
         if admin_user_id and str(user.id) == str(admin_user_id):
             return True
 
         # Check if user has admin role
         if hasattr(user, "roles"):
-            admin_role_id = config.get('bot.admin_role_id')
+            admin_role_id = config.get("bot.admin_role_id")
             if admin_role_id:
                 return any(role.id == admin_role_id for role in user.roles)
 
@@ -321,11 +332,11 @@ class ConfigCommands(commands.Cog):
             pass
 
         # Try to convert to bool
-        if value.lower() in ['true', 'false']:
-            return value.lower() == 'true'
+        if value.lower() in ["true", "false"]:
+            return value.lower() == "true"
 
         # Try to convert to None
-        if value.lower() in ['none', 'null']:
+        if value.lower() in ["none", "null"]:
             return None
 
         # Try to convert to JSON

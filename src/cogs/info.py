@@ -7,18 +7,17 @@ Handles bot information, features, commands, technologies, and credits.
 
 import traceback
 
-
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.components.embeds.base_embed import ErrorEmbed, InfoEmbed
 from src.core.config_manager import config
 from src.utils.base_logger import base_logger as logger
 from src.utils.structured_logger import structured_logger
-from src.components.embeds.base_embed import InfoEmbed, ErrorEmbed
 
 # Configuration constants
-GUILD_ID = config.get('bot.guild_id') or 0
+GUILD_ID = config.get("bot.guild_id") or 0
 
 
 class InfoCommands(commands.Cog):
@@ -37,20 +36,22 @@ class InfoCommands(commands.Cog):
     @app_commands.command(name="info", description="Show bot information and features")
     @app_commands.describe(
         section="Choose what information to display",
-        detailed="Show more detailed information"
+        detailed="Show more detailed information",
     )
-    @app_commands.choices(section=[
-        app_commands.Choice(name="Overview", value="overview"),
-        app_commands.Choice(name="Features", value="features"),
-        app_commands.Choice(name="Commands", value="commands"),
-        app_commands.Choice(name="Technologies", value="technologies"),
-        app_commands.Choice(name="Credits", value="credits"),
-    ])
+    @app_commands.choices(
+        section=[
+            app_commands.Choice(name="Overview", value="overview"),
+            app_commands.Choice(name="Features", value="features"),
+            app_commands.Choice(name="Commands", value="commands"),
+            app_commands.Choice(name="Technologies", value="technologies"),
+            app_commands.Choice(name="Credits", value="credits"),
+        ]
+    )
     async def info(
         self,
         interaction: discord.Interaction,
         section: app_commands.Choice[str] = None,
-        detailed: bool = False
+        detailed: bool = False,
     ) -> None:
         """
         Show comprehensive bot information and features.
@@ -71,7 +72,9 @@ class InfoCommands(commands.Cog):
                 if not interaction.response.is_done():
                     await interaction.response.defer(thinking=True)
             except discord.errors.NotFound:
-                structured_logger.warning("Interaction already timed out or was responded to")
+                structured_logger.warning(
+                    "Interaction already timed out or was responded to"
+                )
                 return
 
             # Get the selected section or default to overview
@@ -83,25 +86,29 @@ class InfoCommands(commands.Cog):
             # Send the response
             try:
                 await interaction.followup.send(embed=embed)
-                logger.info(f"[INFO][CMD] Info command completed successfully for user {interaction.user.id}")
+                logger.info(
+                    f"[INFO][CMD] Info command completed successfully for user {interaction.user.id}"
+                )
             except discord.errors.NotFound:
                 logger.warning("Could not send response, interaction may have expired")
 
         except Exception as e:
             structured_logger.error(
                 "Error executing info command",
-                extra_data={"error": str(e), "traceback": traceback.format_exc()}
+                extra_data={"error": str(e), "traceback": traceback.format_exc()},
             )
 
             error_embed = ErrorEmbed(
                 "Info Command Error",
-                f"An error occurred while processing the command: {str(e)}"
+                f"An error occurred while processing the command: {str(e)}",
             )
 
             try:
                 await interaction.followup.send(embed=error_embed)
             except discord.errors.NotFound:
-                structured_logger.warning("Could not send error response, interaction may have expired")
+                structured_logger.warning(
+                    "Could not send error response, interaction may have expired"
+                )
 
     async def _build_info_embed(self, section: str, detailed: bool) -> InfoEmbed:
         """Build the appropriate embed based on the selected section."""
@@ -124,15 +131,19 @@ class InfoCommands(commands.Cog):
             "📰 NewsBot Information",
             "NewsBot is a specialized Discord bot for aggregating, translating, and posting "
             "news from Telegram channels to your Discord server. It features automatic content "
-            "curation, media handling, and Arabic-to-English translation."
+            "curation, media handling, and Arabic-to-English translation.",
         )
 
         # Get bot metrics for accurate data
-        uptime = discord.utils.utcnow() - self.bot.startup_time if hasattr(self.bot, 'startup_time') else None
-        uptime_str = str(uptime).split('.')[0] if uptime else "Unknown"
+        uptime = (
+            discord.utils.utcnow() - self.bot.startup_time
+            if hasattr(self.bot, "startup_time")
+            else None
+        )
+        uptime_str = str(uptime).split(".")[0] if uptime else "Unknown"
 
         # Get version from config
-        bot_version = config.get('bot.version', '2.0.0')
+        bot_version = config.get("bot.version", "2.0.0")
 
         # Bot Details
         bot_details = (
@@ -181,8 +192,7 @@ class InfoCommands(commands.Cog):
     async def _build_features_embed(self, detailed: bool) -> InfoEmbed:
         """Build the features embed."""
         embed = InfoEmbed(
-            "✨ NewsBot Features",
-            "Discover what NewsBot can do for your server"
+            "✨ NewsBot Features", "Discover what NewsBot can do for your server"
         )
         embed.color = discord.Color.green()
 
@@ -207,7 +217,9 @@ class InfoCommands(commands.Cog):
                 "• 🛡️ **RBAC Security** - Role-based access control for commands\n"
                 "• 📈 **Resource Monitoring** - Alerts for high CPU/RAM usage"
             )
-            embed.add_field(name="🔥 Advanced Features", value=advanced_features, inline=False)
+            embed.add_field(
+                name="🔥 Advanced Features", value=advanced_features, inline=False
+            )
 
         # Background Tasks
         background_tasks = (
@@ -227,8 +239,7 @@ class InfoCommands(commands.Cog):
     async def _build_commands_embed(self, detailed: bool) -> InfoEmbed:
         """Build the commands embed."""
         embed = InfoEmbed(
-            "🔧 NewsBot Commands",
-            "Here are the available commands you can use"
+            "🔧 NewsBot Commands", "Here are the available commands you can use"
         )
         embed.color = discord.Color.gold()
 
@@ -272,8 +283,7 @@ class InfoCommands(commands.Cog):
     async def _build_technologies_embed(self, detailed: bool) -> InfoEmbed:
         """Build the technologies embed."""
         embed = InfoEmbed(
-            "🔧 Technologies Used",
-            "NewsBot is built with these technologies"
+            "🔧 Technologies Used", "NewsBot is built with these technologies"
         )
         embed.color = discord.Color.purple()
 
@@ -328,13 +338,12 @@ class InfoCommands(commands.Cog):
     async def _build_credits_embed(self, detailed: bool) -> InfoEmbed:
         """Build the credits embed."""
         embed = InfoEmbed(
-            "👏 Credits",
-            "Solo-developed NewsBot - built entirely by one developer"
+            "👏 Credits", "Solo-developed NewsBot - built entirely by one developer"
         )
         embed.color = discord.Color.magenta()
 
         # Developer info
-        admin_user_id = config.get('bot.admin_user_id')
+        admin_user_id = config.get("bot.admin_user_id")
         developer_info = "Unknown developer"
 
         if admin_user_id:
@@ -384,7 +393,9 @@ class InfoCommands(commands.Cog):
         embed.add_field(name="🔖 Release", value=release_info, inline=False)
 
         # Footer
-        embed.set_footer(text="NewsBot - Solo-developed Discord bot bringing news to your server since 2025")
+        embed.set_footer(
+            text="NewsBot - Solo-developed Discord bot bringing news to your server since 2025"
+        )
 
         return embed
 
@@ -393,3 +404,83 @@ async def setup(bot: commands.Bot) -> None:
     """Set up the InfoCommands cog."""
     await bot.add_cog(InfoCommands(bot))
     logger.info("✅ InfoCommands cog loaded")
+
+
+def setup_info_commands(bot):
+    """Setup info commands for discord.Client (non-cog approach)."""
+
+    @bot.tree.command(name="info", description="Show comprehensive bot information")
+    @discord.app_commands.describe(
+        section="Choose what information to display",
+        detailed="Show more detailed information",
+    )
+    @discord.app_commands.choices(
+        section=[
+            discord.app_commands.Choice(name="Overview", value="overview"),
+            discord.app_commands.Choice(name="Features", value="features"),
+            discord.app_commands.Choice(name="Commands", value="commands"),
+            discord.app_commands.Choice(name="Technologies", value="technologies"),
+            discord.app_commands.Choice(name="Credits", value="credits"),
+        ]
+    )
+    async def info_command(
+        interaction: discord.Interaction,
+        section: discord.app_commands.Choice[str] = None,
+        detailed: bool = False,
+    ) -> None:
+        """Show comprehensive bot information."""
+        await interaction.response.defer()
+
+        try:
+            # Create an instance of InfoCommands to use its methods
+            info_cog = InfoCommands(bot)
+
+            # Determine which section to show
+            selected_section = section.value if section else "overview"
+
+            # Build the appropriate embed
+            embed = await info_cog._build_info_embed(selected_section, detailed)
+
+            # Send the response
+            await interaction.followup.send(embed=embed)
+            logger.info(
+                f"[INFO][CMD] Info command completed successfully for user {interaction.user.id}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error in info command: {str(e)}")
+            error_embed = ErrorEmbed(
+                "Info Command Error", f"An error occurred: {str(e)}"
+            )
+            try:
+                await interaction.followup.send(embed=error_embed)
+            except:
+                pass
+
+    @bot.tree.command(name="help", description="Show available commands and usage")
+    async def help_command(interaction: discord.Interaction) -> None:
+        """Show available commands and usage."""
+        await interaction.response.defer()
+
+        try:
+            # Create an instance of InfoCommands to use its methods
+            info_cog = InfoCommands(bot)
+
+            # Build the commands embed with detailed info
+            embed = await info_cog._build_commands_embed(detailed=True)
+
+            # Send the response
+            await interaction.followup.send(embed=embed)
+            logger.info(
+                f"[INFO][CMD] Help command completed successfully for user {interaction.user.id}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error in help command: {str(e)}")
+            error_embed = ErrorEmbed(
+                "Help Command Error", f"An error occurred: {str(e)}"
+            )
+            try:
+                await interaction.followup.send(embed=error_embed)
+            except:
+                pass

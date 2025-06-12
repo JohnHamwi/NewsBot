@@ -18,10 +18,10 @@ def clean_text_output(text: str) -> str:
     - Collapses multiple spaces into one
     - Removes empty lines
     """
-    lines = [line.strip() for line in text.split('\n') if line.strip()]
-    cleaned = '\n'.join(lines)
-    cleaned = re.sub(r'\n+', '\n', cleaned)
-    cleaned = re.sub(r' +', ' ', cleaned)
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    cleaned = "\n".join(lines)
+    cleaned = re.sub(r"\n+", "\n", cleaned)
+    cleaned = re.sub(r" +", " ", cleaned)
     return cleaned
 
 
@@ -73,10 +73,10 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful translator."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=1000,
         )
 
         raw_result = response.choices[0].message.content
@@ -88,26 +88,34 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
         result = {}
 
         # Extract title
-        title_match = re.search(r'TITLE:\s*(.*?)(?:\n|$)', raw_result)
+        title_match = re.search(r"TITLE:\s*(.*?)(?:\n|$)", raw_result)
         if title_match:
             result["title"] = title_match.group(1).strip()
         else:
             result["title"] = "News Update"
 
         # Extract translation
-        translation_match = re.search(r'TRANSLATION:\s*(.*?)(?:\n(?:IS_AD|IS_SYRIA_RELATED)|$)', raw_result, re.DOTALL)
+        translation_match = re.search(
+            r"TRANSLATION:\s*(.*?)(?:\n(?:IS_AD|IS_SYRIA_RELATED)|$)",
+            raw_result,
+            re.DOTALL,
+        )
         if translation_match:
             result["translation"] = translation_match.group(1).strip()
         else:
             result["translation"] = raw_result  # Fallback to entire response
 
         # Extract if it's an ad
-        ad_match = re.search(r'IS_AD:\s*(true|false)', raw_result, re.IGNORECASE)
+        ad_match = re.search(r"IS_AD:\s*(true|false)", raw_result, re.IGNORECASE)
         result["is_ad"] = ad_match and ad_match.group(1).lower() == "true"
 
         # Extract if it's Syria-related
-        syria_match = re.search(r'IS_SYRIA_RELATED:\s*(true|false)', raw_result, re.IGNORECASE)
-        result["is_syria_related"] = not syria_match or syria_match.group(1).lower() == "true"
+        syria_match = re.search(
+            r"IS_SYRIA_RELATED:\s*(true|false)", raw_result, re.IGNORECASE
+        )
+        result["is_syria_related"] = (
+            not syria_match or syria_match.group(1).lower() == "true"
+        )
 
         # Clean up the translation further
         result["translation"] = clean_translation(result["translation"])
@@ -119,7 +127,10 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
     except Exception as e:
         if logger:
             logger.error(f"[AI_UTILS] Error calling OpenAI API: {str(e)}")
-        return {"title": "News Update", "translation": f"Translation unavailable: {str(e)}"}
+        return {
+            "title": "News Update",
+            "translation": f"Translation unavailable: {str(e)}",
+        }
 
 
 def clean_translation(text):
@@ -131,76 +142,81 @@ def clean_translation(text):
     - Remove phrases like .شبكةاخبارسوريا_الحرة
     """
     # First, handle hashtags - completely remove them
-    text = re.sub(r'#\w+', '', text)
-    text = re.sub(r'#', '', text)  # Remove any lone # symbols
+    text = re.sub(r"#\w+", "", text)
+    text = re.sub(r"#", "", text)  # Remove any lone # symbols
 
     # Remove ALL URLs
-    text = re.sub(r'https?://\S+', '', text)
-    text = re.sub(r'(?:www|t\.me)\.\S+', '', text)  # Catch www and t.me links without http
+    text = re.sub(r"https?://\S+", "", text)
+    text = re.sub(
+        r"(?:www|t\.me)\.\S+", "", text
+    )  # Catch www and t.me links without http
 
     # Remove all emoji
-    emoji_pattern = re.compile("["
-                               u"\U0001F600-\U0001F64F"  # emoticons
-                               u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-                               u"\U0001F680-\U0001F6FF"  # transport & map symbols
-                               u"\U0001F700-\U0001F77F"  # alchemical symbols
-                               u"\U0001F780-\U0001F7FF"  # Geometric Shapes
-                               u"\U0001F800-\U0001F8FF"  # Supplemental Arrows-C
-                               u"\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
-                               u"\U0001FA00-\U0001FA6F"  # Chess Symbols
-                               u"\U0001FA70-\U0001FAFF"  # Symbols and Pictographs Extended-A
-                               u"\U00002702-\U000027B0"  # Dingbats
-                               u"\U000024C2-\U0001F251"
-                               "]+", flags=re.UNICODE)
-    text = emoji_pattern.sub(r'', text)
+    emoji_pattern = re.compile(
+        "["
+        "\U0001f600-\U0001f64f"  # emoticons
+        "\U0001f300-\U0001f5ff"  # symbols & pictographs
+        "\U0001f680-\U0001f6ff"  # transport & map symbols
+        "\U0001f700-\U0001f77f"  # alchemical symbols
+        "\U0001f780-\U0001f7ff"  # Geometric Shapes
+        "\U0001f800-\U0001f8ff"  # Supplemental Arrows-C
+        "\U0001f900-\U0001f9ff"  # Supplemental Symbols and Pictographs
+        "\U0001fa00-\U0001fa6f"  # Chess Symbols
+        "\U0001fa70-\U0001faff"  # Symbols and Pictographs Extended-A
+        "\U00002702-\U000027b0"  # Dingbats
+        "\U000024c2-\U0001f251"
+        "]+",
+        flags=re.UNICODE,
+    )
+    text = emoji_pattern.sub(r"", text)
 
     # Remove common promotional phrases - more aggressive list
     promo_phrases = [
-        r'(?i)subscribe to our channel',
-        r'(?i)follow us on telegram',
-        r'(?i)join our channel',
-        r'(?i)subscribe to the telegram channel',
-        r'(?i)telegram channel',
-        r'(?i)urgent service',
-        r'(?i)free.*news network',
-        r'(?i)news network.*service',
-        r'(?i)subscribe',
-        r'(?i)follow',
-        r'(?i)👇',
-        r'(?i)channel.*👇',
-        r'(?i)service \|\|',
-        r'(?i)urgent',  # Often part of promotional headlines
-        r'(?i)🔵',      # Common emoji used in promotions
-        r'(?i)free syria news network',
-        r'(?i)urgent service',
-        r'(?i)for more',
-        r'(?i)t\.me',
-        r'(?i)telegram',
-        r'(?i)our service',
-        r'(?i)our network',
-        r'(?i)channel',
-        r'(?i)bot news',
-        r'(?i)news service',
-        r'(?i)service$',
-        r'(?i)free.*service',
-        r'(?i)join',
-        r'(?i)شبكة.?اخبار.?سوريا.?_?الحرة',  # Remove .شبكةاخبارسوريا_الحرة and variants
+        r"(?i)subscribe to our channel",
+        r"(?i)follow us on telegram",
+        r"(?i)join our channel",
+        r"(?i)subscribe to the telegram channel",
+        r"(?i)telegram channel",
+        r"(?i)urgent service",
+        r"(?i)free.*news network",
+        r"(?i)news network.*service",
+        r"(?i)subscribe",
+        r"(?i)follow",
+        r"(?i)👇",
+        r"(?i)channel.*👇",
+        r"(?i)service \|\|",
+        r"(?i)urgent",  # Often part of promotional headlines
+        r"(?i)🔵",  # Common emoji used in promotions
+        r"(?i)free syria news network",
+        r"(?i)urgent service",
+        r"(?i)for more",
+        r"(?i)t\.me",
+        r"(?i)telegram",
+        r"(?i)our service",
+        r"(?i)our network",
+        r"(?i)channel",
+        r"(?i)bot news",
+        r"(?i)news service",
+        r"(?i)service$",
+        r"(?i)free.*service",
+        r"(?i)join",
+        r"(?i)شبكة.?اخبار.?سوريا.?_?الحرة",  # Remove .شبكةاخبارسوريا_الحرة and variants
     ]
     for phrase in promo_phrases:
-        text = re.sub(phrase, '', text)
+        text = re.sub(phrase, "", text)
 
     # Remove lines that are too short (likely just promotional leftovers)
-    lines = text.split('\n')
+    lines = text.split("\n")
     filtered_lines = [line for line in lines if len(line.strip()) > 5]
-    text = '\n'.join(filtered_lines)
+    text = "\n".join(filtered_lines)
 
     # Clean up any excess whitespace from removals
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'\n\s*\n', '\n', text)
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\n\s*\n", "\n", text)
     text = text.strip()
 
     # Remove any remaining promotional phrases that might be at the beginning or end
-    text = re.sub(r'^.*(news service|network)\s*[:]\s*', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\s+$', '', text)  # Remove trailing whitespace
+    text = re.sub(r"^.*(news service|network)\s*[:]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+$", "", text)  # Remove trailing whitespace
 
     return text

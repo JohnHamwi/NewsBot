@@ -4,13 +4,14 @@ Base Logger Module
 This module provides basic logging functionality without configuration dependencies.
 """
 
-import os
 import logging
-import colorlog
-from logging.handlers import TimedRotatingFileHandler
-from dotenv import load_dotenv
+import os
 from datetime import datetime
+from logging.handlers import TimedRotatingFileHandler
 from zoneinfo import ZoneInfo
+
+import colorlog
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
@@ -21,21 +22,40 @@ EASTERN = ZoneInfo("America/New_York")
 
 class EasternTimedRotatingFileHandler(TimedRotatingFileHandler):
     """Custom TimedRotatingFileHandler that uses Eastern timezone for rotation."""
-    
-    def __init__(self, filename, when='midnight', interval=1, backupCount=0, encoding=None, delay=False, utc=False, atTime=None):
+
+    def __init__(
+        self,
+        filename,
+        when="midnight",
+        interval=1,
+        backupCount=0,
+        encoding=None,
+        delay=False,
+        utc=False,
+        atTime=None,
+    ):
         """Initialize with Eastern timezone."""
         # Force UTC to False since we want Eastern time
-        super().__init__(filename, when, interval, backupCount, encoding, delay, utc=False, atTime=atTime)
-    
+        super().__init__(
+            filename,
+            when,
+            interval,
+            backupCount,
+            encoding,
+            delay,
+            utc=False,
+            atTime=atTime,
+        )
+
     def computeRollover(self, currentTime):
         """Override to use Eastern timezone for rollover calculation."""
         # Convert current time to Eastern timezone
         dt = datetime.fromtimestamp(currentTime, tz=EASTERN)
-        
+
         # Calculate next midnight in Eastern time
         next_midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
         next_midnight = next_midnight.replace(day=next_midnight.day + 1)
-        
+
         # Convert back to timestamp
         return next_midnight.timestamp()
 
@@ -67,7 +87,7 @@ class EasternColoredFormatter(colorlog.ColoredFormatter):
 def setup_logger(name: str) -> logging.Logger:
     """
     Set up a basic logger with console and daily rotating file output.
-    
+
     Creates a new log file every day at midnight EST with format: newsbot_YYYY-MM-DD.log
 
     Args:
@@ -109,7 +129,8 @@ def setup_logger(name: str) -> logging.Logger:
     )
 
     file_formatter = EasternFormatter(
-        "%(asctime)s | [%(levelname)-5s] | %(message)s", datefmt="%Y-%m-%d | %I:%M:%S %p"
+        "%(asctime)s | [%(levelname)-5s] | %(message)s",
+        datefmt="%Y-%m-%d | %I:%M:%S %p",
     )
 
     # Create console handler
@@ -126,24 +147,23 @@ def setup_logger(name: str) -> logging.Logger:
         when="midnight",
         interval=1,
         backupCount=30,  # Keep 30 days of logs
-        encoding='utf-8'
+        encoding="utf-8",
     )
-    
+
     # Set the suffix for rotated files to include the date
     file_handler.suffix = "%Y-%m-%d"
-    
+
     file_handler.setFormatter(file_formatter)
     file_handler.setLevel(logging.DEBUG if debug_mode else logging.INFO)
     logger.addHandler(file_handler)
 
     # Log initial debug mode status
     if debug_mode:
-        logger.debug(
-            "🔍 Debug mode is enabled - additional logging will be shown")
+        logger.debug("🔍 Debug mode is enabled - additional logging will be shown")
         logger.debug(f"🔧 Logger '{name}' initialized with DEBUG level")
     else:
         logger.info(f"🔧 Logger '{name}' initialized with INFO level")
-    
+
     logger.info(f"📅 Daily log rotation enabled - new file created at midnight EST")
     logger.info(f"📁 Log files will be kept for 30 days")
 

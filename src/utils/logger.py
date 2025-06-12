@@ -9,7 +9,8 @@ This module provides a custom logging setup for the bot with:
 - Performance metrics
 """
 
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
+
 from src.utils.base_logger import base_logger
 
 
@@ -41,7 +42,9 @@ class BotLogger:
         self.command_usage: Dict[str, int] = {}
         self.logger = base_logger
 
-    def debug(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
+    def debug(
+        self, message: str, context: str = "", extras: Dict[str, Any] = None
+    ) -> None:
         """
         Log a debug message.
 
@@ -55,7 +58,9 @@ class BotLogger:
         else:
             self.logger.debug(message)
 
-    def info(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
+    def info(
+        self, message: str, context: str = "", extras: Dict[str, Any] = None
+    ) -> None:
         """
         Log an info message.
 
@@ -69,7 +74,9 @@ class BotLogger:
         else:
             self.logger.info(message)
 
-    def warning(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
+    def warning(
+        self, message: str, context: str = "", extras: Dict[str, Any] = None
+    ) -> None:
         """
         Log a warning message.
 
@@ -83,7 +90,9 @@ class BotLogger:
         else:
             self.logger.warning(message)
 
-    def error(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
+    def error(
+        self, message: str, context: str = "", extras: Dict[str, Any] = None
+    ) -> None:
         """
         Log an error message and increment error count.
 
@@ -99,7 +108,9 @@ class BotLogger:
 
         self.error_count += 1
 
-    def critical(self, message: str, context: str = "", extras: Dict[str, Any] = None) -> None:
+    def critical(
+        self, message: str, context: str = "", extras: Dict[str, Any] = None
+    ) -> None:
         """
         Log a critical message and increment error count.
 
@@ -115,7 +126,9 @@ class BotLogger:
 
         self.error_count += 1
 
-    def command(self, command_name: str, duration: float, extras: Dict[str, Any] = None) -> None:
+    def command(
+        self, command_name: str, duration: float, extras: Dict[str, Any] = None
+    ) -> None:
         """
         Log command execution and update metrics.
 
@@ -126,14 +139,12 @@ class BotLogger:
         """
         # Update metrics
         self.command_count += 1
-        self.command_usage[command_name] = self.command_usage.get(
-            command_name, 0) + 1
+        self.command_usage[command_name] = self.command_usage.get(command_name, 0) + 1
 
         # Update average latency
         current_avg = self.command_latencies.get(command_name, 0)
         current_count = self.command_usage[command_name]
-        new_avg = ((current_avg * (current_count - 1)) +
-                   duration) / current_count
+        new_avg = ((current_avg * (current_count - 1)) + duration) / current_count
         self.command_latencies[command_name] = new_avg
 
         # Log command execution in debug mode
@@ -156,10 +167,10 @@ class BotLogger:
                 - command_latencies: Average latency per command
         """
         return {
-            'command_count': self.command_count,
-            'error_count': self.error_count,
-            'command_usage': self.command_usage.copy(),
-            'command_latencies': self.command_latencies.copy()
+            "command_count": self.command_count,
+            "error_count": self.error_count,
+            "command_usage": self.command_usage.copy(),
+            "command_latencies": self.command_latencies.copy(),
         }
 
     def reset_metrics(self) -> None:
