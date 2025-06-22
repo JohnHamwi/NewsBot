@@ -1,10 +1,14 @@
-"""
-Media Validation Module
+# =============================================================================
+# NewsBot Media Validation Module
+# =============================================================================
+# This module provides functionality to validate that images and videos
+# have been properly downloaded and are accessible, including file type
+# validation, size checking, and async media downloading capabilities.
+# Last updated: 2025-01-16
 
-This module provides functionality to validate that images and videos
-have been properly downloaded and are accessible.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import hashlib
 import logging
@@ -13,14 +17,32 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import aiofiles
 import aiohttp
 
-logger = logging.getLogger(__name__)
+# =============================================================================
+# Local Application Imports
+# =============================================================================
+from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Media Validator Main Class
+# =============================================================================
 class MediaValidator:
-    """Validates media files and downloads."""
+    """
+    Validates media files and downloads.
+    
+    Features:
+    - Async media downloading with size limits
+    - Image and video format validation
+    - File integrity checking with hashing
+    - Cache management with cleanup
+    - Support for multiple media formats
+    """
 
     def __init__(self, cache_dir: str = "data/cache/media"):
         """
@@ -60,6 +82,9 @@ class MediaValidator:
         # Session for HTTP requests
         self.session = None
 
+    # =========================================================================
+    # Context Manager Methods
+    # =========================================================================
     async def __aenter__(self):
         """Async context manager entry."""
         self.session = aiohttp.ClientSession(
@@ -73,6 +98,9 @@ class MediaValidator:
         if self.session:
             await self.session.close()
 
+    # =========================================================================
+    # File Utility Methods
+    # =========================================================================
     def _get_file_hash(self, file_path: Path) -> str:
         """Generate hash for file content."""
         hash_md5 = hashlib.md5()
@@ -90,6 +118,9 @@ class MediaValidator:
         url_hash = hashlib.md5(url.encode()).hexdigest()
         return self.cache_dir / f"{url_hash}"
 
+    # =========================================================================
+    # Media Download Methods
+    # =========================================================================
     async def _download_media(self, url: str, max_size: int) -> Optional[Path]:
         """
         Download media file from URL.
@@ -147,6 +178,9 @@ class MediaValidator:
                 cached_path.unlink()
             return None
 
+    # =========================================================================
+    # File Validation Methods
+    # =========================================================================
     def _validate_image_file(self, file_path: Path) -> Dict[str, any]:
         """
         Validate an image file.

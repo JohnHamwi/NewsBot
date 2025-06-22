@@ -1,18 +1,29 @@
-"""
-Base Logger Module
+# =============================================================================
+# NewsBot Base Logger Module
+# =============================================================================
+# This module provides basic logging functionality without configuration 
+# dependencies. It includes timezone-aware logging with Eastern time zone
+# support, colored console output, and daily rotating file handlers.
+# Last updated: 2025-01-16
 
-This module provides basic logging functionality without configuration dependencies.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import logging
 import os
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from zoneinfo import ZoneInfo
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import colorlog
 from dotenv import load_dotenv
 
+# =============================================================================
+# Environment Configuration
+# =============================================================================
 # Load environment variables
 load_dotenv()
 
@@ -20,6 +31,9 @@ load_dotenv()
 EASTERN = ZoneInfo("America/New_York")
 
 
+# =============================================================================
+# Custom Handler Classes
+# =============================================================================
 class EasternTimedRotatingFileHandler(TimedRotatingFileHandler):
     """Custom TimedRotatingFileHandler that uses Eastern timezone for rotation."""
 
@@ -60,6 +74,9 @@ class EasternTimedRotatingFileHandler(TimedRotatingFileHandler):
         return next_midnight.timestamp()
 
 
+# =============================================================================
+# Custom Formatter Classes
+# =============================================================================
 class EasternFormatter(logging.Formatter):
     """Custom formatter that uses Eastern timezone."""
 
@@ -84,6 +101,9 @@ class EasternColoredFormatter(colorlog.ColoredFormatter):
             return dt.isoformat()
 
 
+# =============================================================================
+# Logger Setup Function
+# =============================================================================
 def setup_logger(name: str) -> logging.Logger:
     """
     Set up a basic logger with console and daily rotating file output.
@@ -170,5 +190,8 @@ def setup_logger(name: str) -> logging.Logger:
     return logger
 
 
+# =============================================================================
+# Base Logger Instance
+# =============================================================================
 # Create a base logger instance
 base_logger = setup_logger("NewsBot")

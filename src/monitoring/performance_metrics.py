@@ -1,12 +1,14 @@
-"""
-Performance Metrics Service for Syrian NewsBot
+# =============================================================================
+# NewsBot Performance Metrics Service Module
+# =============================================================================
+# Advanced performance monitoring and metrics collection system with
+# comprehensive analysis capabilities, threshold monitoring, and
+# detailed performance tracking for all bot operations.
+# Last updated: 2025-01-16
 
-Advanced performance monitoring and metrics collection system.
-
-Author: حَـــــنَّـــــا
-Version: 3.0.0
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 from __future__ import annotations
 
 import asyncio
@@ -15,13 +17,32 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import psutil
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Performance Metrics Main Class
+# =============================================================================
 class PerformanceMetrics:
-    """Comprehensive performance metrics collection and analysis system."""
+    """
+    Comprehensive performance metrics collection and analysis system.
+    
+    Features:
+    - Real-time system metrics monitoring
+    - Command execution performance tracking
+    - Error tracking and analysis
+    - Auto-posting performance metrics
+    - Health score calculation
+    - Threshold-based alerting
+    """
 
     def __init__(self, bot: Any, retention_hours: int = 24) -> None:
         """Initialize performance metrics system."""
@@ -78,6 +99,9 @@ class PerformanceMetrics:
 
         logger.info("📊 Performance metrics system initialized")
 
+    # =========================================================================
+    # Monitoring Management Methods
+    # =========================================================================
     async def start_monitoring(self) -> None:
         """Start the performance monitoring task."""
         if self._is_monitoring:
@@ -112,6 +136,9 @@ class PerformanceMetrics:
                 logger.error(f"❌ Error in monitoring loop: {e}")
                 await asyncio.sleep(60)
 
+    # =========================================================================
+    # System Metrics Collection Methods
+    # =========================================================================
     async def _collect_system_metrics(self) -> None:
         """Collect current system metrics."""
         try:
@@ -167,6 +194,9 @@ class PerformanceMetrics:
         elif bot["latency_ms"] >= self.thresholds["latency_warning"]:
             logger.warning(f"⚠️ WARNING: Discord latency {bot['latency_ms']:.1f}ms")
 
+    # =========================================================================
+    # Performance Recording Methods
+    # =========================================================================
     def record_command_execution(
         self,
         command_name: str,

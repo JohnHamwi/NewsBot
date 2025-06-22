@@ -1,9 +1,14 @@
-"""
-Configuration Manager Module
+# =============================================================================
+# NewsBot Configuration Manager Module
+# =============================================================================
+# This module provides comprehensive configuration management functionality
+# for NewsBot, including YAML file loading, environment variable substitution,
+# runtime overrides, validation, and hot-reloading capabilities.
+# Last updated: 2025-01-16
 
-This module provides configuration management functionality for NewsBot.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import json
 import logging
 import os
@@ -11,15 +16,33 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import yaml
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.core.config_validator import apply_defaults, validate_config
 from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Configuration Manager Class
+# =============================================================================
 class ConfigManager:
     """
-    Configuration manager that loads settings from a YAML file and environment variables.
+    Advanced configuration manager with YAML file loading and environment variable support.
+
+    Features:
+    - YAML configuration file loading with environment variable substitution
+    - Singleton pattern for global configuration access
+    - Runtime configuration overrides for dynamic updates
+    - Hot-reloading with file modification time checking
+    - Type conversion and validation with comprehensive error handling
+    - Caching for improved performance
+
     Supports type conversion, caching, and environment variable substitution.
     """
 
@@ -58,17 +81,16 @@ class ConfigManager:
         self._runtime_overrides = {}
         self._initialized = True
 
+    # =========================================================================
+    # Configuration Loading Methods
+    # =========================================================================
     def load(self):
-        """
-        Load configuration from the YAML file and substitute environment variables.
-        """
+        """Load configuration from the YAML file and substitute environment variables."""
         if not self._config:  # Only load if not already loaded
             self._load_config()
 
     def _load_config(self):
-        """
-        Internal method to load configuration from the YAML file.
-        """
+        """Internal method to load configuration from the YAML file."""
         try:
             # Load environment variables
             from dotenv import load_dotenv
@@ -98,9 +120,7 @@ class ConfigManager:
             self._config = {}
 
     def reload_config(self):
-        """
-        Force reload the configuration file.
-        """
+        """Force reload the configuration file."""
         self._load_config()
 
     def _substitute_env_vars(self, config_dict):
@@ -136,6 +156,9 @@ class ConfigManager:
                     except BaseException:
                         config_dict[key] = env_value
 
+    # =========================================================================
+    # Configuration Access Methods
+    # =========================================================================
     def get(self, key_path, default=None):
         """
         Get a configuration value by its path.
@@ -169,6 +192,9 @@ class ConfigManager:
         # Return the actual value type, don't convert to string
         return current
 
+    # =========================================================================
+    # Runtime Override Methods
+    # =========================================================================
     def set_override(self, key_path, value):
         """
         Set a runtime override for a configuration value.
@@ -191,10 +217,11 @@ class ConfigManager:
         elif key_path in self._runtime_overrides:
             del self._runtime_overrides[key_path]
 
+    # =========================================================================
+    # Configuration Monitoring Methods
+    # =========================================================================
     def check_for_changes(self):
-        """
-        Check if the configuration file has changed and reload if necessary.
-        """
+        """Check if the configuration file has changed and reload if necessary."""
         now = time.time()
         if now - self._last_check_time < 5:
             return False

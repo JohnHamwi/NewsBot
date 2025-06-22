@@ -1,28 +1,43 @@
-"""
-Rate Limiter
+# =============================================================================
+# NewsBot Rate Limiter Module
+# =============================================================================
+# This module provides rate limiting functionality for API calls and commands.
+# Features token bucket algorithm, per-endpoint rate limits, automatic waiting
+# when rate limited, and configurable retry behavior.
+# Last updated: 2025-01-16
 
-This module provides rate limiting functionality for API calls and commands.
-Features:
-- Token bucket algorithm
-- Per-endpoint rate limits
-- Automatic waiting when rate limited
-- Configurable retry behavior
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Optional, TypeVar
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.base_logger import base_logger as logger
 
+# =============================================================================
+# Type Variables
+# =============================================================================
 T = TypeVar("T")
 
 
+# =============================================================================
+# Rate Limiter Main Class
+# =============================================================================
 class RateLimiter:
     """
     Rate limiter using token bucket algorithm.
+    
+    Features:
+    - Token bucket implementation for smooth rate limiting
+    - Configurable calls per second and burst limits
+    - Automatic waiting when rate limited
+    - Comprehensive statistics tracking
     """
 
     def __init__(
@@ -59,6 +74,9 @@ class RateLimiter:
             f"Rate limiter '{name}' initialized: {calls_per_second} calls/sec, burst: {burst_limit}"
         )
 
+    # =========================================================================
+    # Token Acquisition Methods
+    # =========================================================================
     async def acquire(self) -> float:
         """
         Acquire a token from the bucket.
@@ -99,6 +117,9 @@ class RateLimiter:
         self.tokens = 0.0  # We've consumed the token we waited for
         return wait_time
 
+    # =========================================================================
+    # Statistics Methods
+    # =========================================================================
     def get_stats(self) -> Dict[str, Any]:
         """
         Get rate limiter statistics.
@@ -120,9 +141,17 @@ class RateLimiter:
         }
 
 
+# =============================================================================
+# Rate Limiter Manager Class
+# =============================================================================
 class RateLimiterManager:
     """
     Manages multiple rate limiters for different API endpoints.
+    
+    Features:
+    - Centralized management of multiple rate limiters
+    - Default limiters for common APIs (Telegram, Discord)
+    - Statistics collection across all limiters
     """
 
     def __init__(self):
@@ -143,6 +172,9 @@ class RateLimiterManager:
         # General API for other services
         self.add_limiter("default", calls_per_second=5.0, burst_limit=10)
 
+    # =========================================================================
+    # Limiter Management Methods
+    # =========================================================================
     def add_limiter(
         self,
         name: str,

@@ -1,30 +1,46 @@
-"""
-Configuration Validator Module
+# =============================================================================
+# NewsBot Configuration Validator Module
+# =============================================================================
+# This module provides schema-based validation for the NewsBot configuration
+# including type validation, required field checking, default value handling,
+# and detailed error messages for configuration management.
+# Last updated: 2025-01-16
 
-This module provides schema-based validation for the NewsBot configuration.
-Features:
-- Type validation
-- Required field checking
-- Default value handling
-- Detailed error messages
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import logging
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-logger = logging.getLogger("NewsBot")
+# =============================================================================
+# Local Application Imports
+# =============================================================================
+from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Exception Classes
+# =============================================================================
 class ValidationError(Exception):
     """Exception raised for configuration validation errors."""
-
     pass
 
 
+# =============================================================================
+# Configuration Validator Main Class
+# =============================================================================
 class ConfigValidator:
     """
     Validates configuration against a schema.
+    
+    Features:
+    - Type validation for all configuration values
+    - Required field checking with detailed error messages
+    - Default value application from schema
+    - Pattern matching for string validation
+    - Range validation for numeric values
+    - Enum validation for restricted value sets
     """
 
     @staticmethod
@@ -67,6 +83,9 @@ class ConfigValidator:
 
         return len(errors) == 0, errors
 
+    # =========================================================================
+    # Value Validation Methods
+    # =========================================================================
     @staticmethod
     def _validate_value(
         key: str, value: Any, schema_item: Dict
@@ -165,6 +184,9 @@ class ConfigValidator:
 
         return len(errors) == 0, errors
 
+    # =========================================================================
+    # Default Value Application Methods
+    # =========================================================================
     @staticmethod
     def apply_defaults(config: Dict, schema: Dict) -> Dict:
         """

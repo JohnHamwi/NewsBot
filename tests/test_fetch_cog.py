@@ -233,7 +233,7 @@ async def test_fetch_command_unauthorized(mock_unauthorized_interaction):
         patch("src.cogs.fetch_cog.Config", MockConfig),
         patch("src.core.config_manager.config.get", side_effect=mock_config_get),
         patch(
-            "src.cogs.ai_utils.call_chatgpt_for_news",
+            "src.utils.ai_utils.call_chatgpt_for_news",
             side_effect=mock_call_chatgpt_for_news,
         ),
     ):
@@ -262,7 +262,7 @@ async def test_fetch_command_no_channel(mock_bot, mock_interaction):
         patch("src.cogs.fetch_cog.Config", MockConfig),
         patch("src.core.config_manager.config.get", side_effect=mock_config_get),
         patch(
-            "src.cogs.ai_utils.call_chatgpt_for_news",
+            "src.utils.ai_utils.call_chatgpt_for_news",
             side_effect=mock_call_chatgpt_for_news,
         ),
     ):
@@ -287,7 +287,7 @@ async def test_fetch_command_invalid_number(mock_bot, mock_interaction):
         patch("src.cogs.fetch_cog.Config", MockConfig),
         patch("src.core.config_manager.config.get", side_effect=mock_config_get),
         patch(
-            "src.cogs.ai_utils.call_chatgpt_for_news",
+            "src.utils.ai_utils.call_chatgpt_for_news",
             side_effect=mock_call_chatgpt_for_news,
         ),
     ):
@@ -313,7 +313,7 @@ async def test_fetch_command_success(mock_bot, mock_message, mock_interaction):
         patch("src.cogs.fetch_cog.Config", MockConfig),
         patch("src.core.config_manager.config.get", side_effect=mock_config_get),
         patch(
-            "src.cogs.ai_utils.call_chatgpt_for_news",
+            "src.utils.ai_utils.call_chatgpt_for_news",
             side_effect=mock_call_chatgpt_for_news,
         ),
     ):
@@ -344,7 +344,7 @@ async def test_fetch_command_no_messages(mock_bot, mock_interaction):
         patch("src.cogs.fetch_cog.Config", MockConfig),
         patch("src.core.config_manager.config.get", side_effect=mock_config_get),
         patch(
-            "src.cogs.ai_utils.call_chatgpt_for_news",
+            "src.utils.ai_utils.call_chatgpt_for_news",
             side_effect=mock_call_chatgpt_for_news,
         ),
     ):
@@ -378,7 +378,7 @@ async def test_fetch_command_error(mock_bot, mock_interaction):
         patch("src.cogs.fetch_cog.Config", MockConfig),
         patch("src.core.config_manager.config.get", side_effect=mock_config_get),
         patch(
-            "src.cogs.ai_utils.call_chatgpt_for_news",
+            "src.utils.ai_utils.call_chatgpt_for_news",
             side_effect=mock_call_chatgpt_for_news,
         ),
     ):
@@ -410,7 +410,7 @@ async def test_auto_post_success(mock_bot, mock_message):
         patch("src.cogs.fetch_cog.Config", MockConfig),
         patch("src.core.config_manager.config.get", side_effect=mock_config_get),
         patch(
-            "src.cogs.ai_utils.call_chatgpt_for_news",
+            "src.utils.ai_utils.call_chatgpt_for_news",
             side_effect=mock_call_chatgpt_for_news,
         ),
     ):
@@ -473,7 +473,7 @@ async def test_auto_post_no_messages(mock_bot):
         patch("src.cogs.fetch_cog.Config", MockConfig),
         patch("src.core.config_manager.config.get", side_effect=mock_config_get),
         patch(
-            "src.cogs.ai_utils.call_chatgpt_for_news",
+            "src.utils.ai_utils.call_chatgpt_for_news",
             side_effect=mock_call_chatgpt_for_news,
         ),
     ):
@@ -505,7 +505,7 @@ async def test_auto_post_error(mock_bot):
         patch("src.cogs.fetch_cog.Config", MockConfig),
         patch("src.core.config_manager.config.get", side_effect=mock_config_get),
         patch(
-            "src.cogs.ai_utils.call_chatgpt_for_news",
+            "src.utils.ai_utils.call_chatgpt_for_news",
             side_effect=mock_call_chatgpt_for_news,
         ),
     ):

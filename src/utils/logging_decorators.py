@@ -1,20 +1,33 @@
-"""
-Logging Decorators Module
+# =============================================================================
+# NewsBot Logging Decorators Module
+# =============================================================================
+# This module provides decorators for easy integration of structured logging
+# throughout the codebase, including command logging, method logging, and
+# function execution tracking with timing and context information.
+# Last updated: 2025-01-16
 
-This module provides decorators for easy integration of structured logging
-throughout the codebase.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import functools
 import time
 from typing import Callable, TypeVar, cast
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.structured_logger import structured_logger
 
+# =============================================================================
+# Type Variables
+# =============================================================================
 F = TypeVar("F", bound=Callable)
 
 
+# =============================================================================
+# Command Logging Decorators
+# =============================================================================
 def log_command(component: str = None) -> Callable[[F], F]:
     """
     Decorator for logging Discord command execution with timing and context.
@@ -104,6 +117,9 @@ def log_command(component: str = None) -> Callable[[F], F]:
     return decorator
 
 
+# =============================================================================
+# Method Logging Decorators
+# =============================================================================
 def log_method(component: str = None) -> Callable[[F], F]:
     """
     Decorator for logging method execution with timing and context.
@@ -173,6 +189,9 @@ def log_method(component: str = None) -> Callable[[F], F]:
     return decorator
 
 
+# =============================================================================
+# Function Logging Decorators
+# =============================================================================
 def log_function(component: str) -> Callable[[F], F]:
     """
     Decorator for logging function execution with timing and context.

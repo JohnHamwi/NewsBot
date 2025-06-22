@@ -21,7 +21,7 @@ The main configuration file is `config.yaml` in the project root. It uses a hier
 ```yaml
 # Bot settings
 bot:
-  version: "2.0.0"
+  version: "4.5.0"
   debug_mode: true
 
 # Channel IDs
@@ -36,7 +36,7 @@ channels:
 from src.core.simple_config import config
 
 # Get a value with dot notation
-version = config.get('bot.version')  # "2.0.0"
+version = config.get('bot.version')  # "4.5.0"
 news_channel = config.get('channels.news')  # 123456789
 
 # Provide a default value if key doesn't exist
@@ -163,7 +163,7 @@ if not config.validate():
 
 ```yaml
 bot:
-  version: "2.0.0"
+  version: "4.5.0"
   application_id: ${APPLICATION_ID}
   guild_id: ${GUILD_ID}
   admin_role_id: ${ADMIN_ROLE_ID}

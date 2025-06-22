@@ -1,26 +1,40 @@
-"""
-Media Service
+# =============================================================================
+# NewsBot Media Service Module
+# =============================================================================
+# Media downloading, processing, and file management for the NewsBot
+# Extracted from fetch_view.py for better separation of concerns
+# Last updated: 2025-01-16
 
-This service handles all media downloading, processing, and file management
-for the NewsBot. Extracted from fetch_view.py for better separation of concerns.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import os
 import tempfile
 import time
 from typing import Any, List, Optional, Tuple
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 from tqdm import tqdm
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils import error_handler
 from src.utils.base_logger import base_logger as logger
 from src.utils.media_validator import MediaValidator
 
-# Configuration constants
+# =============================================================================
+# Configuration Constants
+# =============================================================================
 DISCORD_MAX_FILESIZE_MB = int(os.getenv("DISCORD_MAX_FILESIZE_MB", "100"))
 MAX_DISCORD_FILE_SIZE = DISCORD_MAX_FILESIZE_MB * 1024 * 1024
 
+# =============================================================================
+# Media Service Class
+# =============================================================================
 
 class MediaService:
     """Service for handling media downloads and processing."""
@@ -123,6 +137,7 @@ class MediaService:
         try:
             # Get all messages in the group
             async def get_grouped_photos():
+                """Get all messages in a grouped media album from Telegram."""
                 messages = []
                 async for message in self.bot.telegram_client.iter_messages(
                     post.peer_id, limit=10, offset_id=post.id + 5

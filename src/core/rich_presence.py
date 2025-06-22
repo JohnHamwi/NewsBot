@@ -1,14 +1,25 @@
-"""
-Rich Presence Module
+# =============================================================================
+# NewsBot Rich Presence Module
+# =============================================================================
+# This module handles Discord bot rich presence (status) updates including
+# maintenance mode, automatic monitoring status, and post notifications
+# with dynamic countdown timers and activity indicators.
+# Last updated: 2025-01-16
 
-This module handles Discord bot rich presence (status) updates.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import datetime
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 
 
+# =============================================================================
+# Maintenance Presence Functions
+# =============================================================================
 async def set_maintenance_presence(bot: discord.Client) -> None:
     """
     Set the bot's presence to maintenance mode.
@@ -26,6 +37,9 @@ async def set_maintenance_presence(bot: discord.Client) -> None:
     await bot.change_presence(status=discord.Status.idle, activity=activity)
 
 
+# =============================================================================
+# Automatic Monitoring Presence Functions
+# =============================================================================
 async def set_automatic_presence(
     bot: discord.Client, seconds_until_next_post: int = 0
 ) -> None:
@@ -55,6 +69,9 @@ async def set_automatic_presence(
     await bot.change_presence(status=discord.Status.online, activity=activity)
 
 
+# =============================================================================
+# Post Notification Presence Functions
+# =============================================================================
 async def set_posted_presence(bot: discord.Client) -> None:
     """
     Set the bot's presence to show that news was just posted.

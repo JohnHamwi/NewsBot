@@ -1,14 +1,14 @@
-"""
-Task Manager Module
+# =============================================================================
+# NewsBot Task Manager Module
+# =============================================================================
+# This module provides utilities for managing background tasks with error 
+# recovery, automatic restarts, graceful shutdown, rate limiting, and 
+# comprehensive error logging and reporting capabilities.
+# Last updated: 2025-01-16
 
-This module provides utilities for managing background tasks with error recovery.
-Features:
-- Automatic task recovery
-- Graceful shutdown
-- Error logging and reporting
-- Rate limiting for restarts
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import functools
 import logging
@@ -16,15 +16,31 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, TypeVar
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.base_logger import base_logger as logger
 from src.utils.error_handler import error_handler
 
+# =============================================================================
+# Type Variables
+# =============================================================================
 T = TypeVar("T")
 
 
+# =============================================================================
+# Task Manager Main Class
+# =============================================================================
 class TaskManager:
     """
     Manages background tasks with error recovery and graceful shutdown.
+    
+    Features:
+    - Automatic task recovery with exponential backoff
+    - Rate limiting for restart attempts
+    - Graceful shutdown handling
+    - Comprehensive error logging and reporting
+    - Task status monitoring and metrics
     """
 
     def __init__(self, bot=None):
@@ -43,6 +59,9 @@ class TaskManager:
         self.backoff_factor = 1.5  # Exponential backoff factor
         self.shutdown_requested = False
 
+    # =========================================================================
+    # Task Management Methods
+    # =========================================================================
     async def start_task(
         self,
         name: str,
@@ -183,6 +202,9 @@ class TaskManager:
 
         return wrapped_task()
 
+    # =========================================================================
+    # Task Query and Control Methods
+    # =========================================================================
     def get_task(self, name: str) -> Optional[asyncio.Task]:
         """
         Get a task by name.

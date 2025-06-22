@@ -1,18 +1,31 @@
-"""
-Base Embed Components
+# =============================================================================
+# NewsBot Base Embed Components Module
+# =============================================================================
+# Provides standardized embed classes and builders to ensure consistent
+# formatting and styling across all bot embeds including specialized
+# embeds for news, status, commands, and configuration displays.
+# Last updated: 2025-01-16
 
-Provides standardized embed classes and builders to ensure consistent
-formatting and styling across all bot embeds.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.core.config_manager import config
 
 
+# =============================================================================
+# Base Embed Classes
+# =============================================================================
 class BaseEmbed(discord.Embed):
     """
     Base embed class with consistent styling and footer.
@@ -45,13 +58,16 @@ class BaseEmbed(discord.Embed):
         )
 
         # Set standard footer
-        bot_version = config.get("bot.version", "2.0.0")
+        bot_version = config.get("bot.version", "4.5.0")
         self.set_footer(
             text=f"NewsBot v{bot_version}",
             icon_url="https://cdn.discordapp.com/attachments/placeholder/newsbot-icon.png",
         )
 
 
+# =============================================================================
+# Status Embed Classes
+# =============================================================================
 class SuccessEmbed(BaseEmbed):
     """Embed for successful operations."""
 
@@ -80,6 +96,9 @@ class InfoEmbed(BaseEmbed):
         super().__init__(title, description, discord.Color.blue())
 
 
+# =============================================================================
+# Specialized Embed Classes
+# =============================================================================
 class StatusEmbed(BaseEmbed):
     """
     Specialized embed for status information.

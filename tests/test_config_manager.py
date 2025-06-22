@@ -16,7 +16,7 @@ def sample_config():
     return """
 bot:
   name: "TestBot"
-  version: "2.0.0"
+  version: "4.5.0"
   debug: true
   application_id: ${APP_ID}
 channels:
@@ -57,14 +57,14 @@ def test_get_with_dot_notation():
     config._config = {
         "bot": {
             "name": "TestBot",
-            "version": "2.0.0",
+            "version": "4.5.0",
             "debug": True,
             "nested": {"value": 42},
         },
         "channels": {"news": "123"},
     }
 
-    assert config.get("bot.version") == "2.0.0"
+    assert config.get("bot.version") == "4.5.0"
     assert config.get("channels.news") == "123"
     assert config.get("nonexistent.path") is None
     assert config.get("nonexistent.path", "default") == "default"
@@ -89,7 +89,7 @@ def test_config_validation(mock_file):
     valid_config = """
 bot:
   name: "TestBot"
-  version: "2.0.0"
+  version: "4.5.0"
   debug: true
   application_id: ${APP_ID}
   guild_id: ${GUILD_ID}
@@ -117,7 +117,7 @@ def test_config_validation_missing_required(mock_file):
     invalid_config = """
 bot:
   name: "TestBot"
-  version: "2.0.0"
+  version: "4.5.0"
   debug: true
 channels:
   news: ""

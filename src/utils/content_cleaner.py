@@ -1,21 +1,42 @@
-"""
-Content Cleaner Module
+# =============================================================================
+# NewsBot Content Cleaner Module
+# =============================================================================
+# This module provides functionality to clean news content by removing sources,
+# emojis, Telegram links, hashtags, media references, and other unwanted 
+# elements from news text with comprehensive pattern matching.
+# Last updated: 2025-01-16
 
-This module provides functionality to clean news content by removing sources,
-emojis, Telegram links, hashtags, and other unwanted elements.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import re
 from typing import List, Tuple
 
 
+# =============================================================================
+# Content Cleaner Main Class
+# =============================================================================
 class ContentCleaner:
-    """Cleans news content by removing unwanted elements."""
+    """
+    Cleans news content by removing unwanted elements.
+    
+    Features:
+    - Source attribution removal (Arabic and English)
+    - Emoji and special character cleaning
+    - URL and Telegram link removal
+    - Hashtag removal
+    - Media reference code cleaning
+    - Whitespace normalization
+    - Comprehensive pattern matching
+    """
 
     def __init__(self):
         """Initialize the content cleaner with compiled patterns."""
         self.patterns = self._compile_patterns()
 
+    # =========================================================================
+    # Pattern Compilation Methods
+    # =========================================================================
     def _compile_patterns(self) -> dict:
         """Compile regex patterns for efficient content cleaning."""
         patterns = {}
@@ -163,6 +184,9 @@ class ContentCleaner:
 
         return patterns
 
+    # =========================================================================
+    # Content Cleaning Methods
+    # =========================================================================
     def remove_sources(self, text: str) -> str:
         """Remove source attributions from text."""
         for pattern in self.patterns["sources"]:

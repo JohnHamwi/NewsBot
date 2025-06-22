@@ -1,4 +1,4 @@
-# Production Requirements for Syrian NewsBot VPS Deployment
+# Production Requirements for Syrian NewsBot
 # Optimized for stability and performance
 
 # Core Discord & Telegram
@@ -37,7 +37,7 @@ passlib==1.7.4
 # Data Processing
 redis==5.0.1
 
-# Optional: Process Management (if using PM2 alternatives)
+# Optional: Process Management
 # supervisor==4.2.5
 
 # Optional: Database (if you want to add persistent storage)

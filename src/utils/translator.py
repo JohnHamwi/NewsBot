@@ -1,24 +1,49 @@
-"""
-Translation Module
+# =============================================================================
+# NewsBot Translation Module
+# =============================================================================
+# This module provides functionality to translate Arabic news content to English
+# using OpenAI ChatGPT API for better accessibility in Discord posts, including
+# title generation and fallback translation capabilities.
+# Last updated: 2025-01-16
 
-This module provides functionality to translate Arabic news content to English
-using OpenAI ChatGPT API for better accessibility in Discord posts.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import logging
 import re
 from typing import Dict, Optional
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 from openai import OpenAI
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.config import Config
 
-logger = logging.getLogger(__name__)
+# =============================================================================
+# Local Application Imports (continued)
+# =============================================================================
+from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# ChatGPT Translator Main Class
+# =============================================================================
 class ChatGPTTranslator:
-    """Handles Arabic to English translation using ChatGPT."""
+    """
+    Handles Arabic to English translation using ChatGPT.
+    
+    Features:
+    - Arabic to English translation using OpenAI API
+    - Arabic title generation from news content
+    - Fallback translation using vocabulary mapping
+    - Text cleaning and validation
+    - Professional news formatting
+    """
 
     def __init__(self):
         """Initialize the ChatGPT translator."""
@@ -42,6 +67,9 @@ class ChatGPTTranslator:
             "هجوم": "attack",
         }
 
+    # =========================================================================
+    # Title Generation Methods
+    # =========================================================================
     def generate_title(self, arabic_text: str) -> str:
         """
         Generate a concise Arabic title (3-6 words) using ChatGPT.
@@ -161,6 +189,9 @@ class ChatGPTTranslator:
 
         return " ".join(meaningful_words[:6]) if meaningful_words else "أخبار سورية"
 
+    # =========================================================================
+    # Translation Methods
+    # =========================================================================
     def translate_to_english(self, arabic_text: str) -> str:
         """
         Translate Arabic text to English using ChatGPT.

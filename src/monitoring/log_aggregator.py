@@ -1,10 +1,13 @@
-"""
-Log Aggregator Module
+# =============================================================================
+# NewsBot Log Aggregator Module
+# =============================================================================
+# Log aggregation functionality for collecting, processing, and analyzing logs
+# from the structured logging system with real-time processing and filtering
+# Last updated: 2025-01-16
 
-This module provides log aggregation functionality for collecting, processing,
-and analyzing logs from the structured logging system.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import json
 import os
@@ -14,7 +17,9 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-
+# =============================================================================
+# Log Entry Class
+# =============================================================================
 class LogEntry:
     """
     Represents a structured log entry with parsing and filtering capabilities.
@@ -93,7 +98,9 @@ class LogEntry:
         """
         return f"[{self.timestamp.isoformat()}] {self.level}: {self.message}"
 
-
+# =============================================================================
+# Log Aggregator Class
+# =============================================================================
 class LogAggregator:
     """
     Aggregates and analyzes logs from the structured logging system.
@@ -134,6 +141,9 @@ class LogAggregator:
         self._running = False
         self._lock = threading.RLock()
 
+    # =========================================================================
+    # Core Processing Methods
+    # =========================================================================
     async def start(self):
         """
         Start the log aggregator.
@@ -199,39 +209,46 @@ class LogAggregator:
         Process a single log entry.
 
         Args:
-            log_data: Raw log data
+            log_data: Raw log data dictionary
         """
-        with self._lock:
+        try:
             entry = LogEntry(log_data)
 
-            # Add to main collection
-            self.entries.append(entry)
+            with self._lock:
+                # Add to main entries
+                self.entries.append(entry)
 
-            # Index the entry
-            if entry.request_id:
-                self.request_index[entry.request_id].append(entry)
-            if entry.user_id:
-                self.user_index[entry.user_id].append(entry)
-            if entry.command_name:
-                self.command_index[entry.command_name].append(entry)
-            if entry.component:
-                self.component_index[entry.component].append(entry)
-
-            # Index by level
-            self.level_index[entry.level].append(entry)
-
-            # Track errors
-            if entry.level in ("ERROR", "CRITICAL"):
-                self.errors.append(entry)
+                # Update indexes
+                if entry.request_id:
+                    self.request_index[entry.request_id].append(entry)
+                if entry.user_id:
+                    self.user_index[entry.user_id].append(entry)
+                if entry.command_name:
+                    self.command_index[entry.command_name].append(entry)
                 if entry.component:
-                    self.error_count_by_component[entry.component] += 1
+                    self.component_index[entry.component].append(entry)
+                self.level_index[entry.level].append(entry)
 
-            # Track performance metrics
-            if "duration" in entry.extras and entry.command_name:
-                duration = entry.extras["duration"]
-                if isinstance(duration, (int, float)):
-                    self.command_durations[entry.command_name].append(duration)
+                # Track errors
+                if entry.level in ["ERROR", "CRITICAL"]:
+                    self.errors.append(entry)
+                    if entry.component:
+                        self.error_count_by_component[entry.component] += 1
 
+                # Track command durations if available
+                if entry.command_name and "duration" in entry.extras:
+                    try:
+                        duration = float(entry.extras["duration"])
+                        self.command_durations[entry.command_name].append(duration)
+                    except (ValueError, TypeError):
+                        pass
+
+        except Exception as e:
+            print(f"Error processing log entry: {e}")
+
+    # =========================================================================
+    # Query and Retrieval Methods
+    # =========================================================================
     def get_logs(
         self,
         level: Optional[str] = None,

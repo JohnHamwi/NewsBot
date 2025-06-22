@@ -117,7 +117,7 @@ def test_validate_config_function():
     # Create a minimal valid config
     config = {
         "bot": {
-            "version": "2.0.0",
+            "version": "4.5.0",
             "guild_id": 123456789,
             "application_id": "987654321",
             "admin_role_id": 123456,
@@ -157,7 +157,7 @@ def test_apply_defaults_function():
     # Create a minimal config
     config = {
         "bot": {
-            "version": "2.0.0",
+            "version": "4.5.0",
             "guild_id": 123456789,
             "application_id": "987654321",
             "admin_role_id": 123456,

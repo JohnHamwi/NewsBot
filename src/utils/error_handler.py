@@ -1,9 +1,14 @@
-"""
-Error Handler Module
+# =============================================================================
+# NewsBot Error Handler Module
+# =============================================================================
+# This module provides comprehensive error handling functionality for the 
+# NewsBot, including error tracking, rate limiting, metrics collection,
+# and Discord error reporting with enhanced context information.
+# Last updated: 2025-01-16
 
-This module provides comprehensive error handling functionality for the NewsBot.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import traceback
 from dataclasses import dataclass
@@ -11,17 +16,29 @@ from datetime import datetime, timedelta
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, ParamSpec, TypeVar, Union
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.components.embeds.base_embed import ErrorEmbed
 from src.utils.base_logger import base_logger as logger
 from src.utils.structured_logger import structured_logger
 
+# =============================================================================
+# Type Variables
+# =============================================================================
 # Type variables for generic function handling
 P = ParamSpec("P")
 T = TypeVar("T")
 
 
+# =============================================================================
+# Error Context Data Class
+# =============================================================================
 @dataclass
 class ErrorContext:
     """Stores context about an error occurrence."""
@@ -47,6 +64,9 @@ class ErrorContext:
         }
 
 
+# =============================================================================
+# Rate Limiting Class
+# =============================================================================
 class RateLimit:
     """Rate limiting for error reporting."""
 
@@ -67,6 +87,9 @@ class RateLimit:
         return False
 
 
+# =============================================================================
+# Error Handler Main Class
+# =============================================================================
 class ErrorHandler:
     """Handles error reporting and tracking."""
 
@@ -78,6 +101,9 @@ class ErrorHandler:
         self.total_errors = 0
         self.max_history = 100
 
+    # =========================================================================
+    # Error History Management
+    # =========================================================================
     def _add_to_history(self, error_ctx: ErrorContext) -> None:
         """Add error to history, maintaining max size."""
         self.error_history.append(error_ctx)
@@ -85,6 +111,9 @@ class ErrorHandler:
             self.error_history.pop(0)
         self.total_errors += 1
 
+    # =========================================================================
+    # Error Metrics and Reporting
+    # =========================================================================
     def get_error_metrics(self) -> Dict[str, Any]:
         """Get error metrics for the last 24 hours."""
         now = datetime.now()
@@ -124,6 +153,9 @@ class ErrorHandler:
             details.append(f"{err_type}: {count}")
         return "\n".join(details)
 
+    # =========================================================================
+    # Discord Error Reporting
+    # =========================================================================
     async def send_error_embed(
         self,
         error_title: str,
@@ -194,6 +226,9 @@ class ErrorHandler:
                 logger.error(f"Failed to send error embed: {str(e)}")
 
 
+# =============================================================================
+# Global Error Handler Instance
+# =============================================================================
 # Global instance
 error_handler = ErrorHandler()
 

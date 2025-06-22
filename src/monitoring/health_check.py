@@ -1,27 +1,49 @@
-"""
-Health Check Service for Syrian NewsBot
+# =============================================================================
+# NewsBot Health Check Service Module
+# =============================================================================
+# Provides comprehensive health monitoring endpoints and system status checks
+# for production monitoring and alerting systems. Includes HTTP endpoints for
+# health, metrics, readiness, and liveness probes.
+# Last updated: 2025-01-16
 
-Provides comprehensive health monitoring endpoints and system status checks
-for production monitoring and alerting systems.
-
-Author: حَـــــنَّـــــا
-Version: 3.0.0
-"""
-
+# =============================================================================
+# Future Imports
+# =============================================================================
 from __future__ import annotations
 
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import psutil
 from aiohttp import web
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Health Check Service Main Class
+# =============================================================================
 class HealthCheckService:
-    """Comprehensive health check service for monitoring bot status."""
+    """
+    Comprehensive health check service for monitoring bot status.
+    
+    Features:
+    - HTTP endpoints for health monitoring
+    - Kubernetes-style readiness and liveness probes
+    - Prometheus-compatible metrics endpoint
+    - Detailed system and service status reporting
+    - Production-ready monitoring capabilities
+    """
 
     def __init__(self, bot: Any, port: int = 8080) -> None:
         """Initialize health check service."""
@@ -38,6 +60,9 @@ class HealthCheckService:
         self._setup_routes()
         logger.info(f"🏥 Health check service initialized on port {port}")
 
+    # =========================================================================
+    # Route Setup Methods
+    # =========================================================================
     def _setup_routes(self) -> None:
         """Setup HTTP routes for health check endpoints."""
         self.app.router.add_get("/health", self.health_endpoint)
@@ -46,12 +71,17 @@ class HealthCheckService:
         self.app.router.add_get("/ready", self.readiness_endpoint)
         self.app.router.add_get("/live", self.liveness_endpoint)
 
+    # =========================================================================
+    # Server Lifecycle Methods
+    # =========================================================================
     async def start(self) -> None:
         """Start the health check HTTP server."""
         try:
+            # Initialize the runner
             self.runner = web.AppRunner(self.app)
             await self.runner.setup()
 
+            # Create and start the site
             self.site = web.TCPSite(self.runner, "0.0.0.0", self.port)
             await self.site.start()
 
@@ -61,19 +91,55 @@ class HealthCheckService:
         except Exception as e:
             logger.error(f"❌ Failed to start health check server: {e}")
             self.health_status = "unhealthy"
+            
+            # Clean up any partial initialization
+            try:
+                if self.runner:
+                    await self.runner.cleanup()
+                    self.runner = None
+                self.site = None
+            except Exception as cleanup_error:
+                logger.debug(f"Cleanup during start failure: {cleanup_error}")
+            
             raise
 
     async def stop(self) -> None:
         """Stop the health check HTTP server."""
         try:
+            # Stop the site first if it exists and is running
             if self.site:
-                await self.site.stop()
+                try:
+                    await self.site.stop()
+                    logger.debug("🛑 Health check site stopped")
+                except Exception as site_error:
+                    # This is expected if the site wasn't properly started or registered
+                    logger.debug(f"Health check site stop warning: {site_error}")
+            
+            # Clean up the runner
             if self.runner:
-                await self.runner.cleanup()
-            logger.info("🛑 Health check server stopped")
+                try:
+                    await self.runner.cleanup()
+                    logger.debug("🛑 Health check runner cleaned up")
+                except Exception as runner_error:
+                    logger.debug(f"Health check runner cleanup warning: {runner_error}")
+            
+            # Reset state
+            self.site = None
+            self.runner = None
+            
+            logger.info("🏥 Health check service stopped")
+            
         except Exception as e:
-            logger.error(f"❌ Error stopping health check server: {e}")
+            # Log expected shutdown errors as debug, unexpected ones as error
+            error_msg = str(e).lower()
+            if "not registered" in error_msg or "site" in error_msg:
+                logger.debug(f"Health check shutdown warning: {e}")
+            else:
+                logger.error(f"❌ Error stopping health check server: {e}")
 
+    # =========================================================================
+    # Health Check Endpoints
+    # =========================================================================
     async def health_endpoint(self, request: web.Request) -> web.Response:
         """Basic health check endpoint."""
         try:
@@ -108,6 +174,9 @@ class HealthCheckService:
             logger.error(f"❌ Metrics endpoint error: {e}")
             return web.json_response({"error": str(e)}, status=500)
 
+    # =========================================================================
+    # Kubernetes-Style Probe Endpoints
+    # =========================================================================
     async def readiness_endpoint(self, request: web.Request) -> web.Response:
         """Kubernetes-style readiness probe."""
         try:
@@ -128,6 +197,9 @@ class HealthCheckService:
         except Exception as e:
             return web.json_response({"status": "error", "message": str(e)}, status=500)
 
+    # =========================================================================
+    # Health Data Collection Methods
+    # =========================================================================
     async def _get_basic_health(self) -> Dict[str, Any]:
         """Get basic health status."""
         uptime = datetime.now(timezone.utc) - self.start_time
@@ -139,7 +211,7 @@ class HealthCheckService:
             "bot_connected": (
                 self.bot.is_ready() if hasattr(self.bot, "is_ready") else False
             ),
-            "version": "3.0.0",
+            "version": "4.5.0",
         }
 
     async def _get_detailed_health(self) -> Dict[str, Any]:

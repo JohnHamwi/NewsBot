@@ -1,4 +1,5 @@
-"""
-Command modules for the NewsBot.
-Each module should have a register(bot) function that registers its commands.
-"""
+# =============================================================================
+# NewsBot Commands Package
+# =============================================================================
+# Command modules for the NewsBot - each module should have a register(bot) function
+# Last updated: 2025-01-16

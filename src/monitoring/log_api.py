@@ -1,25 +1,46 @@
-"""
-Log API Module
+# =============================================================================
+# NewsBot Log API Module
+# =============================================================================
+# This module provides an API for accessing and querying logs through Discord 
+# bot commands, integrating with the log aggregator to fetch structured logs
+# with comprehensive filtering and admin access controls.
+# Last updated: 2025-01-16
 
-This module provides an API for accessing and querying logs through Discord bot commands.
-It integrates with the log aggregator to fetch structured logs.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.monitoring.log_aggregator import log_aggregator
 from src.utils.structured_logger import structured_logger
+from src.utils.config import config
 
 
+# =============================================================================
+# Log API Cog Main Class
+# =============================================================================
 class LogAPICog(commands.Cog):
     """
     Discord cog providing commands for accessing logs and metrics through the bot.
+    
+    Features:
+    - Structured log viewing with filtering
+    - Error summary and analysis
+    - Performance metrics display
+    - User activity tracking
+    - Admin-only access controls
     """
 
     def __init__(self, bot):
@@ -33,6 +54,9 @@ class LogAPICog(commands.Cog):
         self._lock = asyncio.Lock()
         self._last_initialization = None
 
+    # =========================================================================
+    # Initialization Methods
+    # =========================================================================
     async def ensure_aggregator_initialized(self):
         """
         Ensure the log aggregator is initialized.
@@ -53,9 +77,13 @@ class LogAPICog(commands.Cog):
                 except Exception as e:
                     structured_logger.error(f"Failed to initialize log aggregator: {e}")
 
+    # =========================================================================
+    # Log Viewing Commands
+    # =========================================================================
     @app_commands.command(
-        name="logs", description="View recent logs with filtering options"
+        name="logs", description="View recent logs with filtering options (admin only)"
     )
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         level="Log level filter (INFO, WARNING, ERROR, etc.)",
         component="Component filter (e.g., FetchCog, TaskManager)",
@@ -73,6 +101,27 @@ class LogAPICog(commands.Cog):
         """
         Command to view recent logs with filtering options.
         """
+        # Check admin permissions
+        admin_role_id = config.get("bot.admin_role_id")
+        admin_user_id = config.get("bot.admin_user_id")
+        
+        is_admin = False
+        if admin_user_id and interaction.user.id == int(admin_user_id):
+            is_admin = True
+        elif admin_role_id and interaction.guild:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                is_admin = True
+        
+        if not is_admin:
+            embed = discord.Embed(
+                title="❌ Access Denied",
+                description="This command is restricted to administrators only.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
         await interaction.response.defer(ephemeral=True)
 
         # Initialize log aggregator if needed
@@ -175,12 +224,13 @@ class LogAPICog(commands.Cog):
             if len(embeds) > 1:
                 await interaction.followup.send(
                     "There are more logs than can be displayed. Try filtering further or reducing the time range.",
-                    ephemeral=True,
+                    ephemeral=True
                 )
 
     @app_commands.command(
-        name="error_summary", description="View a summary of recent errors"
+        name="error_summary", description="View a summary of recent errors (admin only)"
     )
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(hours="Hours to look back (default: 24)")
     async def error_summary_command(
         self, interaction: discord.Interaction, hours: Optional[int] = 24
@@ -188,6 +238,27 @@ class LogAPICog(commands.Cog):
         """
         Command to view a summary of recent errors.
         """
+        # Check admin permissions
+        admin_role_id = config.get("bot.admin_role_id")
+        admin_user_id = config.get("bot.admin_user_id")
+        
+        is_admin = False
+        if admin_user_id and interaction.user.id == int(admin_user_id):
+            is_admin = True
+        elif admin_role_id and interaction.guild:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                is_admin = True
+        
+        if not is_admin:
+            embed = discord.Embed(
+                title="❌ Access Denied",
+                description="This command is restricted to administrators only.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
         await interaction.response.defer(ephemeral=True)
 
         # Initialize log aggregator if needed
@@ -237,12 +308,34 @@ class LogAPICog(commands.Cog):
 
     @app_commands.command(
         name="performance",
-        description="View performance metrics for commands and operations",
+        description="View performance metrics for commands and operations (admin only)",
     )
+    @app_commands.default_permissions(administrator=True)
     async def performance_command(self, interaction: discord.Interaction):
         """
         Command to view performance metrics.
         """
+        # Check admin permissions
+        admin_role_id = config.get("bot.admin_role_id")
+        admin_user_id = config.get("bot.admin_user_id")
+        
+        is_admin = False
+        if admin_user_id and interaction.user.id == int(admin_user_id):
+            is_admin = True
+        elif admin_role_id and interaction.guild:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                is_admin = True
+        
+        if not is_admin:
+            embed = discord.Embed(
+                title="❌ Access Denied",
+                description="This command is restricted to administrators only.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
         await interaction.response.defer(ephemeral=True)
 
         # Initialize log aggregator if needed
@@ -278,8 +371,9 @@ class LogAPICog(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(
-        name="user_activity", description="View activity logs for a specific user"
+        name="user_activity", description="View activity logs for a specific user (admin only)"
     )
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         user="The user to view activity for", hours="Hours to look back (default: 24)"
     )
@@ -292,6 +386,27 @@ class LogAPICog(commands.Cog):
         """
         Command to view activity logs for a specific user.
         """
+        # Check admin permissions
+        admin_role_id = config.get("bot.admin_role_id")
+        admin_user_id = config.get("bot.admin_user_id")
+        
+        is_admin = False
+        if admin_user_id and interaction.user.id == int(admin_user_id):
+            is_admin = True
+        elif admin_role_id and interaction.guild:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                is_admin = True
+        
+        if not is_admin:
+            embed = discord.Embed(
+                title="❌ Access Denied",
+                description="This command is restricted to administrators only.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
         await interaction.response.defer(ephemeral=True)
 
         # Initialize log aggregator if needed

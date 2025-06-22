@@ -1,6 +1,6 @@
 # Bot Configuration
 bot:
-  version: "3.0.0"
+  version: "4.5.0"
   debug_mode: true
   application_id: ${APPLICATION_ID}
   guild_id: ${GUILD_ID}
@@ -24,14 +24,35 @@ auto_post:
   max_interval_hours: 24
   default_interval_hours: 6
 
+# 🧠 Intelligence Services Configuration
+intelligence:
+  # News Intelligence Service
+  priority_sources:
+    - "alekhbariahsy"
+    - "syrianobserver" 
+    - "orient_news"
+    - "sana_en"
+  
+  # Notification Settings (single news role - always ping)
+  notifications:
+    always_ping_news_role: true  # ping news role for all posts
+    breaking_news_threshold: 0.8  # urgency score threshold for breaking news styling
+    
+  # AI Content Analysis
+  content_analysis:
+    quality_threshold: 0.6  # minimum quality score to post
+    similarity_threshold: 0.8  # maximum similarity to recent posts
+    cache_size: 50  # number of recent posts to compare against
+
 # Resource Monitoring
 monitoring:
   metrics:
     port: 8000
     collection_interval: 60
   resource_alerts:
-    cpu_threshold: 80.0  # percentage
-    ram_threshold: 70.0  # percentage
+    enabled: false  # Set to false to disable resource alerts completely
+    cpu_threshold: 95.0  # percentage
+    ram_threshold: 90.0  # percentage
     check_interval: 30  # seconds
 
 # Rich Presence

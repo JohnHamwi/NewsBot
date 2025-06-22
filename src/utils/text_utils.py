@@ -1,13 +1,20 @@
-"""
-Text utilities for the NewsBot.
+# =============================================================================
+# NewsBot Text Utilities Module
+# =============================================================================
+# Contains functions for text processing, cleaning, and manipulation including
+# emoji removal, text truncation, and Unicode normalization for news content.
+# Last updated: 2025-01-16
 
-Contains functions for text processing, cleaning, and manipulation.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import re
 import unicodedata
 
 
+# =============================================================================
+# Emoji Removal Functions
+# =============================================================================
 def remove_emojis(text: str) -> str:
     """
     Remove emojis and other special characters from text.
@@ -51,6 +58,9 @@ def remove_emojis(text: str) -> str:
     return text
 
 
+# =============================================================================
+# Text Truncation Functions
+# =============================================================================
 def truncate_text(text: str, max_length: int = 1000, add_ellipsis: bool = True) -> str:
     """
     Truncate text to a maximum length.

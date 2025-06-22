@@ -1,0 +1,58 @@
+# 🔒 PROPRIETARY SOFTWARE - NewsBot Docker Configuration
+# 
+# This is proprietary software for private use only.
+# Unauthorized copying, distribution, or use is strictly prohibited.
+# 
+# Copyright (c) 2025 NewsBot Project. All rights reserved.
+# Syrian Discord News Aggregation Bot - CONFIDENTIAL
+
+version: '3.8'
+
+services:
+  newsbot:
+    build: .
+    container_name: newsbot-private
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    depends_on:
+      - redis
+    networks:
+      - newsbot-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: newsbot-redis-private
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - newsbot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  newsbot-network:
+    driver: bridge 

@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-Syrian NewsBot - Main Entry Point
+🔒 PROPRIETARY SOFTWARE - NEWSBOT PROJECT
+
+This is proprietary software developed for private use only.
+Unauthorized copying, distribution, or use is strictly prohibited.
+
+Copyright (c) 2025 NewsBot Project. All rights reserved.
+
+Syrian Discord News Aggregation Bot - CONFIDENTIAL
+For authorized use on designated Discord servers only.
 
 Modern Discord bot for aggregating Syrian news from Telegram channels
 and posting them to Discord with AI-powered translation and formatting.
@@ -14,8 +22,8 @@ Requirements:
     - Valid Discord bot token
     - Telegram API credentials (optional)
 
-Author: حَـــــنَّـــــا
-Version: 3.0.0
+Author: Trippixn (Discord)
+Version: 4.5.0
 """
 
 from __future__ import annotations
@@ -23,10 +31,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+import os
 from pathlib import Path
 
-# Ensure we can import from src directory
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+# Add src directory to Python path
+src_path = Path(__file__).parent / "src"
+sys.path.insert(0, str(src_path))
 
 try:
     from bot.main import main

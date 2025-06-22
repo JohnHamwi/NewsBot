@@ -472,7 +472,7 @@ async def test_fetch_command_main_success(mock_interaction):
 
     # Patch dependencies
     with (
-        patch("src.cogs.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
+        patch("src.utils.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
         patch("src.cogs.fetch_cog.FetchView", MagicMock()),
     ):
 
@@ -641,7 +641,7 @@ async def test_fetch_command_detected_ad(mock_interaction):
 
     # Patch AI call to return ad
     with (
-        patch("src.cogs.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
+        patch("src.utils.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
         patch("src.cogs.fetch_cog.FetchView", MagicMock()),
     ):
 
@@ -699,7 +699,7 @@ async def test_fetch_command_not_syria(mock_interaction):
 
     # Patch AI call to return not-syria content
     with (
-        patch("src.cogs.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
+        patch("src.utils.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
         patch("src.cogs.fetch_cog.FetchView", MagicMock()),
     ):
 
@@ -778,7 +778,7 @@ async def test_fetch_and_post_auto_video_content():
             ),
         ),
         patch("os.remove"),
-        patch("src.cogs.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
+        patch("src.utils.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
         patch("src.cogs.fetch_cog.FetchView") as mock_fetch_view,
     ):
 
@@ -867,7 +867,7 @@ async def test_fetch_command_sending_error():
 
     # Patch dependencies
     with (
-        patch("src.cogs.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
+        patch("src.utils.ai_utils.call_chatgpt_for_news", return_value=mock_ai_result),
         patch("src.cogs.fetch_cog.FetchView", mock_view),
     ):
 

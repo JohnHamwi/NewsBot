@@ -1,21 +1,28 @@
-"""
-Telegram Client Module
+# =============================================================================
+# NewsBot Telegram Client Module
+# =============================================================================
+# This module handles the Telegram bot integration including connection management,
+# message handling, error handling, and event forwarding to Discord with
+# comprehensive rate limiting and retry logic.
+# Last updated: 2025-01-16
 
-This module handles the Telegram bot integration, including:
-- Connection management
-- Message handling
-- Error handling
-- Event forwarding to Discord
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Union
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, RPCError, SessionPasswordNeededError
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.base_logger import base_logger as logger
 from src.utils.config import Config
 from src.utils.content_cleaner import clean_news_content
@@ -27,6 +34,9 @@ from src.utils.syrian_time import format_syrian_time, now_syrian
 from src.utils.translator import generate_arabic_title, translate_arabic_to_english
 
 
+# =============================================================================
+# Telegram Manager Main Class
+# =============================================================================
 class TelegramManager:
     """
     Manages Telegram client connection and message handling.
@@ -53,6 +63,9 @@ class TelegramManager:
         self.message_cache: Dict[int, datetime] = {}
         self.max_cache_size = 1000
 
+    # =========================================================================
+    # Connection Management Methods
+    # =========================================================================
     @rate_limited("telegram")
     async def connect(self) -> None:
         """
@@ -95,6 +108,9 @@ class TelegramManager:
             )
             raise
 
+    # =========================================================================
+    # Rate Limiting and Method Patching
+    # =========================================================================
     def _patch_telegram_methods(self):
         """
         Patch Telegram client methods to add rate limiting.
@@ -148,6 +164,9 @@ class TelegramManager:
 
         logger.debug("Applied rate limiting to Telegram client methods")
 
+    # =========================================================================
+    # Event Handler Setup
+    # =========================================================================
     def _setup_event_handlers(self) -> None:
         """Set up Telegram event handlers."""
 
@@ -320,15 +339,54 @@ class TelegramManager:
         """Safely disconnect from Telegram."""
         if self.client:
             try:
-                await self.client.disconnect()
+                # Cancel any pending keepalive tasks to prevent database lock issues
+                if hasattr(self.client, '_sender') and hasattr(self.client._sender, '_keepalive_handle'):
+                    try:
+                        self.client._sender._keepalive_handle.cancel()
+                    except:
+                        pass
+                
+                # Try to disconnect gracefully with timeout
+                await asyncio.wait_for(self.client.disconnect(), timeout=5.0)
                 self.connected = False
                 logger.info("Disconnected from Telegram")
+            except asyncio.TimeoutError:
+                logger.warning("Telegram disconnect timeout - forcing closure")
+                self.connected = False
+                # Force close the client without waiting for session save
+                if hasattr(self.client, '_connection'):
+                    try:
+                        await self.client._connection.disconnect()
+                    except:
+                        pass
             except Exception as e:
-                logger.error(f"Error disconnecting from Telegram: {str(e)}")
+                error_msg = str(e)
+                if "database is locked" in error_msg or "disk I/O error" in error_msg:
+                    logger.debug(f"Telegram session save warning during disconnect: {error_msg}")
+                    # Clear the session file to prevent future issues
+                    try:
+                        await self.clean_session_files()
+                    except:
+                        pass
+                else:
+                    logger.error(f"Error disconnecting from Telegram: {error_msg}")
+                self.connected = False
+            finally:
+                # Ensure client reference is cleared
+                try:
+                    if self.client and hasattr(self.client, '_connection'):
+                        self.client._connection = None
+                except:
+                    pass
+                self.client = None
 
-    async def is_connected(self) -> bool:
-        """Check if connected to Telegram."""
+    def is_connected_sync(self) -> bool:
+        """Check if connected to Telegram (synchronous version)."""
         return self.connected and self.client and self.client.is_connected()
+    
+    async def is_connected(self) -> bool:
+        """Check if connected to Telegram (async version)."""
+        return self.is_connected_sync()
 
     async def reconnect(self) -> None:
         """Attempt to reconnect to Telegram."""
@@ -342,6 +400,33 @@ class TelegramManager:
             await self.connect()
         finally:
             self.retrying = False
+            
+    async def clean_session_files(self) -> None:
+        """Clean up corrupted session files."""
+        import os
+        import glob
+        
+        try:
+            # Remove all session files to force fresh authentication
+            session_files = glob.glob("*.session*")
+            for file in session_files:
+                try:
+                    os.remove(file)
+                    logger.info(f"Removed corrupted session file: {file}")
+                except Exception as e:
+                    logger.warning(f"Could not remove session file {file}: {e}")
+                    
+            # Also clear any session data in data directory
+            data_sessions = glob.glob("data/sessions/*.session*")
+            for file in data_sessions:
+                try:
+                    os.remove(file)
+                    logger.info(f"Removed corrupted session file: {file}")
+                except Exception as e:
+                    logger.warning(f"Could not remove session file {file}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error cleaning session files: {e}")
 
     async def get_tracked_channels(self) -> list:
         """Get list of tracked Telegram channels."""
@@ -388,8 +473,36 @@ class TelegramManager:
                 entity, limit=limit, offset_date=offset_date
             )
         except Exception as e:
-            logger.error(f"Failed to get messages from {entity}: {e}")
-            raise
+            error_msg = str(e)
+            
+            # Handle specific protocol errors more gracefully
+            if "Could not find a matching Constructor ID" in error_msg:
+                logger.warning(f"Telegram protocol error for {entity} - corrupted data stream, skipping")
+                # Force session reconnection for next attempt
+                if hasattr(self, '_protocol_errors'):
+                    self._protocol_errors += 1
+                else:
+                    self._protocol_errors = 1
+                    
+                # If we get too many protocol errors, force reconnection
+                if self._protocol_errors >= 3:
+                    logger.warning("Multiple protocol errors detected - will reconnect on next attempt")
+                    self.connected = False
+                    self._protocol_errors = 0
+                    
+                return []  # Return empty list instead of crashing
+                
+            elif "Nobody is using this username" in error_msg:
+                logger.warning(f"Channel {entity} not found or username invalid")
+                return []  # Return empty list for invalid channels
+                
+            elif "FloodWaitError" in error_msg or "flood" in error_msg.lower():
+                logger.warning(f"Rate limited on {entity} - will retry later")
+                return []  # Return empty list when rate limited
+                
+            else:
+                logger.error(f"Failed to get messages from {entity}: {e}")
+                raise
 
     async def download_media(self, message, file=None, progress_callback=None):
         """

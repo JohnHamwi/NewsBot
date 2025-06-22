@@ -1,18 +1,28 @@
-"""
-FetchView UI Components
+# =============================================================================
+# NewsBot FetchView UI Components Module
+# =============================================================================
+# This module contains the Discord UI components for the fetch functionality,
+# using service classes for media, AI, and posting operations with comprehensive
+# intelligence integration and user interaction handling.
+# Last updated: 2025-01-16
 
-This module contains the Discord UI components for the fetch functionality.
-Uses service classes for media, AI, and posting operations.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import os
 import traceback
 from typing import Any, List, Optional
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 from discord import ui
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.components.embeds.base_embed import BaseEmbed
 from src.services.ai_service import AIService
 from src.services.media_service import MediaService
@@ -23,16 +33,27 @@ from src.utils.config import Config
 from src.utils.content_cleaner import clean_news_content
 from src.utils.structured_logger import structured_logger
 
-# Configuration constants
+# =============================================================================
+# Configuration Constants
+# =============================================================================
 GUILD_ID = Config.GUILD_ID or 0
 ADMIN_USER_ID = Config.ADMIN_USER_ID or 0
 
 
+# =============================================================================
+# FetchView Main Class
+# =============================================================================
 class FetchView(ui.View):
     """
     View for fetching and posting content from Telegram channels.
-    Handles user interaction with the Telegram message display,
-    including translation and posting to Discord channels.
+
+    Features:
+    - Interactive Telegram message display
+    - AI-powered translation and analysis
+    - Media downloading and processing
+    - Content posting to Discord channels
+    - Intelligence integration with urgency levels
+    - Automatic and manual operation modes
     """
 
     def __init__(
@@ -46,7 +67,13 @@ class FetchView(ui.View):
         arabic_text_clean=None,
         ai_english=None,
         ai_title=None,
+        ai_location=None,
         auto_mode=False,
+        # 🧠 Intelligence parameters
+        urgency_level="normal",
+        should_ping_news=False,
+        content_category="social",
+        quality_score=0.7,
     ):
         """
         Initialize the FetchView with message data.
@@ -61,7 +88,12 @@ class FetchView(ui.View):
             arabic_text_clean: Optional cleaned Arabic text
             ai_english: Optional AI-generated English translation
             ai_title: Optional AI-generated title
+            ai_location: Optional AI-detected location
             auto_mode: Whether the view is operating in automatic mode
+            urgency_level: Urgency level from news intelligence (breaking, important, normal, low)
+            should_ping_news: Whether to ping the news role for breaking news
+            content_category: Content category from AI analysis (politics, military, etc.)
+            quality_score: Content quality score from AI analysis (0.0-1.0)
         """
         super().__init__(timeout=None)
 
@@ -94,6 +126,13 @@ class FetchView(ui.View):
         self.arabic_text_clean = arabic_text_clean
         self.ai_english = ai_english
         self.ai_title = ai_title
+        self.ai_location = ai_location
+
+        # 🧠 Intelligence data
+        self.urgency_level = urgency_level
+        self.should_ping_news = should_ping_news
+        self.content_category = content_category
+        self.quality_score = quality_score
 
         # Initialize services
         self.media_service = MediaService(bot)
@@ -109,6 +148,9 @@ class FetchView(ui.View):
             "[FETCH] FetchView loaded and initialized. Auto mode: %s", auto_mode
         )
 
+    # =========================================================================
+    # Content Posting Methods
+    # =========================================================================
     async def do_post_to_news(
         self, interaction: Optional[discord.Interaction] = None
     ) -> bool:
@@ -164,13 +206,16 @@ class FetchView(ui.View):
             if not self.ai_english or not self.ai_title:
                 if self.arabic_text_clean:
                     self.logger.info("[FETCH] Processing text with AI services")
-                    ai_english, ai_title = await self.ai_service.process_text_with_ai(
+                    ai_english, ai_title, ai_location = await self.ai_service.process_text_with_ai(
                         self.arabic_text_clean
                     )
                     if ai_english:
                         self.ai_english = ai_english
                     if ai_title:
                         self.ai_title = ai_title
+                    if ai_location:
+                        self.ai_location = ai_location
+                        self.logger.info(f"[FETCH] AI detected location: {ai_location}")
 
             # Download media if present - REQUIRED for posting
             if self.media:
@@ -183,20 +228,20 @@ class FetchView(ui.View):
                 if media_files:
                     media_files = self.media_service.validate_media_files(media_files)
 
-                # If no media files were downloaded successfully, fail the post
-                if not media_files:
+                    # If no media files were downloaded successfully, fail the post
+                    if not media_files:
+                        self.logger.error(
+                            "[FETCH] Media download failed or no valid media files - aborting post"
+                        )
+                        return False
+                else:
+                    # No media present - fail the post since we only want posts with media
                     self.logger.error(
-                        "[FETCH] Media download failed or no valid media files - aborting post"
+                        "[FETCH] No media present - aborting post (media required)"
                     )
                     return False
-            else:
-                # No media present - fail the post since we only want posts with media
-                self.logger.error(
-                    "[FETCH] No media present - aborting post (media required)"
-                )
-                return False
 
-            # Post to news channel using posting service
+            # Post to news channel using posting service with intelligence parameters
             success = await self.posting_service.post_to_news_channel(
                 arabic_text=self.arabic_text_clean or "",
                 english_translation=self.ai_english,
@@ -204,6 +249,12 @@ class FetchView(ui.View):
                 channelname=self.channelname,
                 message_id=self.message_id,
                 media_files=media_files,
+                ai_location=getattr(self, 'ai_location', None),
+                # 🧠 Pass intelligence parameters
+                should_ping_news=self.should_ping_news,
+                urgency_level=self.urgency_level,
+                content_category=self.content_category,
+                quality_score=self.quality_score,
             )
 
             # Cleanup media files
@@ -351,8 +402,9 @@ class FetchView(ui.View):
             if media_files:
                 # Send the media files to Discord
                 discord_files = []
-                for file_path, filename in media_files:
+                for file_path in media_files:
                     if os.path.exists(file_path):
+                        filename = os.path.basename(file_path)
                         discord_files.append(discord.File(file_path, filename=filename))
 
                 if discord_files:
@@ -444,7 +496,7 @@ class FetchView(ui.View):
                 self.logger.info("[FETCH] Processing message with AI services")
 
                 # Use AI service to process the text
-                ai_english, ai_title = await self.ai_service.process_text_with_ai(
+                ai_english, ai_title, ai_location = await self.ai_service.process_text_with_ai(
                     self.arabic_text_clean
                 )
 
@@ -463,6 +515,13 @@ class FetchView(ui.View):
                     self.logger.info(f"[FETCH] AI title generated: {ai_title}")
                 else:
                     self.logger.warning("[FETCH] AI title generation failed")
+
+                if ai_location:
+                    self.ai_location = ai_location
+                    self.logger.info(f"[FETCH] AI detected location: {ai_location}")
+                else:
+                    self.ai_location = "Unknown"
+                    self.logger.warning("[FETCH] AI location detection failed, using 'Unknown'")
 
                 self.logger.info("[FETCH] AI processing completed")
             else:

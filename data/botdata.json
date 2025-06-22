@@ -1,0 +1,118 @@
+{
+  "latest_news": [],
+  "telegram_channels": [
+    "moraselalthawrah",
+    "jh_team",
+    "shaamnetwork",
+    "alktroone",
+    "alhourya_news",
+    "alekhbariahsy",
+    "samsyria01"
+  ],
+  "deactivated_channels": [
+    "symoigov",
+    "test_new_channel",
+    "test_add_channel_demo",
+    "test_channel"
+  ],
+  "blacklisted_posts": [
+    168013,
+    168050,
+    168066,
+    168065,
+    168163,
+    169334,
+    11445,
+    11452,
+    77934,
+    169442,
+    1091,
+    1092
+  ],
+  "auto_post_config": {
+    "interval": 3600,
+    "last_post_time": "2025-06-11T09:32:58.962340-04:00"
+  },
+  "channel_metadata": {
+    "moraselalthawrah": {
+      "status": "activated",
+      "date_added": "2025-06-10T16:08:19.691136",
+      "date_deactivated": null
+    },
+    "jh_team": {
+      "status": "activated",
+      "date_added": "2025-06-10T22:00:16.211827",
+      "date_deactivated": null
+    },
+    "shaamnetwork": {
+      "status": "activated",
+      "date_added": "2025-06-10T22:00:49.279866",
+      "date_deactivated": null
+    },
+    "alktroone": {
+      "status": "activated",
+      "date_added": "2025-06-10T22:01:32.494153",
+      "date_deactivated": null
+    },
+    "symoigov": {
+      "status": "deactivated",
+      "date_added": "2025-06-10T22:02:12.750373",
+      "date_deactivated": "2025-06-10T22:03:02.813444"
+    },
+    "alhourya_news": {
+      "status": "activated",
+      "date_added": "2025-06-10T22:03:30.383424",
+      "date_deactivated": null
+    },
+    "alekhbariahsy": {
+      "status": "activated",
+      "date_added": "2025-06-10T22:04:16.738556",
+      "date_deactivated": null
+    },
+    "test_channel": {
+      "status": "deactivated",
+      "date_added": "2025-06-22T04:01:36.047120",
+      "date_deactivated": "2025-06-22T20:21:46.018542"
+    },
+    "test_new_channel": {
+      "status": "deactivated",
+      "date_added": "2025-06-22T19:56:20.130223",
+      "date_deactivated": "2025-06-22T19:56:20.131397"
+    },
+    "test_add_channel_demo": {
+      "status": "deactivated",
+      "date_added": "2025-06-22T19:57:02.656413",
+      "date_deactivated": "2025-06-22T19:57:02.660977"
+    },
+    "samsyria01": {
+      "status": "activated",
+      "date_added": "2025-06-22T20:29:23.544967",
+      "date_deactivated": null
+    }
+  },
+  "auto_post_interval": 10800,
+  "last_post_time": "2025-06-22T16:10:52.408904-04:00",
+  "automation_config": {
+    "enabled": true,
+    "interval_minutes": 180,
+    "startup_delay_minutes": 2,
+    "max_posts_per_session": 1,
+    "primary_channels": [
+      "alekhbariahsy",
+      "moraselalthawrah",
+      "shaamnetwork"
+    ],
+    "require_media": true,
+    "require_text": true,
+    "min_content_length": 50,
+    "use_ai_filtering": true,
+    "silent_mode": false,
+    "notify_on_success": false,
+    "notify_on_errors": true
+  },
+  "test_key": "test_value",
+  "channel_rotation": {
+    "last_index": 0,
+    "last_updated": "2025-06-22T20:05:45.310985"
+  }
+}

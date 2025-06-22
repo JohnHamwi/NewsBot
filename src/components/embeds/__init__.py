@@ -1,9 +1,12 @@
-"""
-Embeds Package
+# =============================================================================
+# NewsBot Embeds Package
+# =============================================================================
+# Standardized embed classes and builders for consistent Discord message formatting
+# Last updated: 2025-01-16
 
-Standardized embed classes and builders for consistent Discord message formatting.
-"""
-
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from .base_embed import (
     BaseEmbed,
     CommandEmbed,
@@ -19,6 +22,9 @@ from .base_embed import (
     create_success_embed,
 )
 
+# =============================================================================
+# Package Exports
+# =============================================================================
 __all__ = [
     "BaseEmbed",
     "SuccessEmbed",

@@ -1,28 +1,38 @@
-"""
-Posting Service
+# =============================================================================
+# NewsBot Posting Service Module
+# =============================================================================
+# This service handles all Discord posting functionality including
+# thread creation, message formatting, media attachment, and intelligent
+# news role pinging based on AI analysis and urgency detection.
+# Last updated: 2025-01-16
 
-This service handles all Discord posting functionality including
-thread creation, message formatting, and media attachment.
-Extracted from fetch_view.py for better separation of concerns.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import datetime
 import os
 import re
 from typing import Any, List, Optional
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 import pytz
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils import error_handler
 from src.utils.base_logger import base_logger as logger
 from src.utils.config import Config
 
-# Configuration constants
+# =============================================================================
+# Configuration Constants
+# =============================================================================
 try:
     from src.utils.config import Config
-
     NEWS_ROLE_ID = getattr(Config, "NEWS_ROLE_ID", None) or os.getenv("NEWS_ROLE_ID")
 except Exception:
     NEWS_ROLE_ID = os.getenv("NEWS_ROLE_ID")
@@ -41,14 +51,30 @@ FORUM_TAG_MAPPING = {
 }
 
 
+# =============================================================================
+# Posting Service Class
+# =============================================================================
 class PostingService:
-    """Service for handling Discord posting operations."""
+    """
+    Enhanced Discord posting service with intelligent news processing.
+    
+    Features:
+    - Intelligent thread creation with urgency-based titles
+    - Smart news role pinging for all posts with appropriate styling
+    - Forum tag assignment based on AI content categorization
+    - Comprehensive media handling and attachment processing
+    - Quality score integration and metadata display
+    - Robust error handling with retry mechanisms
+    """
 
     def __init__(self, bot):
         """Initialize the posting service with bot instance."""
         self.bot = bot
         self.logger = logger
 
+    # =========================================================================
+    # Main Posting Method
+    # =========================================================================
     async def post_to_news_channel(
         self,
         arabic_text: str,
@@ -57,21 +83,32 @@ class PostingService:
         channelname: str,
         message_id: int,
         media_files: Optional[List[str]] = None,
+        ai_location: Optional[str] = None,
         timeout: int = 30,
         max_retries: int = 2,
+        # Intelligence parameters for enhanced posting
+        should_ping_news: bool = False,
+        urgency_level: str = "normal",
+        content_category: str = "social",
+        quality_score: float = 0.7,
     ) -> bool:
         """
-        Post content to the news channel with timeout and retry logic.
+        Post content to the news channel with comprehensive intelligence integration.
 
         Args:
-            arabic_text: The original Arabic text
+            arabic_text: The original Arabic text content
             english_translation: AI-generated English translation
-            ai_title: AI-generated title
+            ai_title: AI-generated title for the thread
             channelname: Source Telegram channel name
-            message_id: Telegram message ID
+            message_id: Telegram message ID for tracking
             media_files: List of media file paths to attach
+            ai_location: AI-detected location of the news event
             timeout: Posting timeout in seconds
             max_retries: Maximum number of retry attempts
+            should_ping_news: Whether to ping the news role (always True for all posts)
+            urgency_level: Urgency level from news intelligence analysis
+            content_category: Content category from AI analysis
+            quality_score: Content quality score from AI analysis
 
         Returns:
             bool: True if posting was successful, False otherwise
@@ -93,6 +130,11 @@ class PostingService:
                         channelname,
                         message_id,
                         media_files,
+                        ai_location,
+                        should_ping_news,
+                        urgency_level,
+                        content_category,
+                        quality_score,
                     ),
                     timeout=timeout,
                 )
@@ -136,6 +178,11 @@ class PostingService:
         channelname: str,
         message_id: int,
         media_files: Optional[List[str]] = None,
+        ai_location: Optional[str] = None,
+        should_ping_news: bool = False,
+        urgency_level: str = "normal",
+        content_category: str = "social",
+        quality_score: float = 0.7,
     ) -> bool:
         """Internal news posting logic."""
         try:
@@ -148,11 +195,24 @@ class PostingService:
 
             # Generate thread title and message content
             thread_title = self._generate_thread_title(
-                arabic_text, ai_title, channelname
+                arabic_text, ai_title, channelname, urgency_level
             )
             message_content = self._generate_message_content(
-                arabic_text, english_translation, channelname, message_id
+                arabic_text, english_translation, channelname, message_id, ai_location, urgency_level, quality_score
             )
+            
+            # 🔔 Prepare news role ping for all posts
+            ping_content = ""
+            if should_ping_news and NEWS_ROLE_ID:
+                if urgency_level == "breaking":
+                    ping_content = f"<@&{NEWS_ROLE_ID}> 🚨 **Breaking News Alert!**\n\n"
+                    self.logger.info(f"🔔 [BREAKING-NEWS] Preparing to ping news role {NEWS_ROLE_ID} for breaking news")
+                elif urgency_level == "important":
+                    ping_content = f"<@&{NEWS_ROLE_ID}> 📢 **Important News Update!**\n\n"
+                    self.logger.info(f"🔔 [IMPORTANT-NEWS] Preparing to ping news role {NEWS_ROLE_ID} for important news")
+                else:
+                    ping_content = f"📰 <@&{NEWS_ROLE_ID}> **Update**\n\n"
+                    self.logger.info(f"🔔 [NEWS-PING] Preparing to ping news role {NEWS_ROLE_ID} for regular news")
 
             # Prepare media attachments
             discord_files = []
@@ -161,17 +221,25 @@ class PostingService:
 
             # Create the thread and post - different approach for forum vs regular channels
             if isinstance(news_channel, discord.ForumChannel):
-                # Get the appropriate forum tag based on content category
-                category = self._categorize_content(arabic_text, english_translation)
+                # Get the appropriate forum tag based on content category (use AI category if available)
+                category = content_category if content_category != "social" else self._categorize_content(arabic_text, english_translation)
                 applied_tags = self._get_forum_tags(news_channel, category)
 
                 # For forum channels, create thread with actual content directly
+                final_content = ping_content + message_content
                 thread, message = await news_channel.create_thread(
                     name=thread_title,
-                    content=message_content,
+                    content=final_content,
                     files=discord_files if discord_files else None,
                     applied_tags=applied_tags,
                 )
+                
+                if should_ping_news and ping_content:
+                    if urgency_level == "breaking":
+                        self.logger.info(f"🔔 [BREAKING-NEWS] Successfully posted with news role ping in forum thread: {thread_title}")
+                    else:
+                        self.logger.info(f"🔔 [NEWS-PING] Successfully posted with news role ping in forum thread: {thread_title}")
+                
                 self.logger.debug(
                     f"[POSTING] Created forum thread with content: {thread_title}, tags: {[tag.name for tag in applied_tags]}"
                 )
@@ -180,10 +248,18 @@ class PostingService:
                 thread = await self._create_news_thread(news_channel, thread_title)
                 if not thread:
                     return False
-                # Send the message with media
+                
+                # Send the message with media (include ping if needed)
+                final_content = ping_content + message_content
                 await self._send_message_to_thread(
-                    thread, message_content, discord_files
+                    thread, final_content, discord_files
                 )
+                
+                if should_ping_news and ping_content:
+                    if urgency_level == "breaking":
+                        self.logger.info(f"🔔 [BREAKING-NEWS] Successfully posted with news role ping in thread: {thread_title}")
+                    else:
+                        self.logger.info(f"🔔 [NEWS-PING] Successfully posted with news role ping in thread: {thread_title}")
 
             # Send confirmation embed to logs channel
             await self._send_confirmation_embed(
@@ -200,7 +276,7 @@ class PostingService:
             raise
 
     def _generate_thread_title(
-        self, arabic_text: str, ai_title: Optional[str], channelname: str
+        self, arabic_text: str, ai_title: Optional[str], channelname: str, urgency_level: str = "normal"
     ) -> str:
         """Generate a thread title for the news post."""
         # Get current date
@@ -212,9 +288,17 @@ class PostingService:
         else:
             # Extract Arabic title as fallback
             title_text = self._extract_arabic_title(arabic_text, channelname)
+        
+        # Add urgency indicator for breaking news
+        if urgency_level == "breaking":
+            urgency_emoji = "🚨"
+        elif urgency_level == "important":
+            urgency_emoji = "📢"
+        else:
+            urgency_emoji = "📅"
 
-        # Build the thread title with calendar emoji
-        return f"📅 {current_date} | {title_text}"
+        # Build the thread title with appropriate emoji
+        return f"{urgency_emoji} {current_date} | {title_text}"
 
     def _extract_arabic_title(self, arabic_text: str, channelname: str) -> str:
         """Extract a short Arabic title from the text."""
@@ -257,6 +341,9 @@ class PostingService:
         english_translation: Optional[str],
         channelname: str,
         message_id: int,
+        ai_location: Optional[str] = None,
+        urgency_level: str = "normal",
+        quality_score: float = 0.7,
     ) -> str:
         """Generate the message content for the news post."""
         # Clean up the Arabic text for display
@@ -272,7 +359,7 @@ class PostingService:
 
         # Add English translation if available
         if english_translation:
-            from src.cogs.ai_utils import clean_translation
+            from src.utils.ai_utils import clean_translation
 
             cleaned_translation = clean_translation(english_translation)
             content_parts.append("**Translation (EN):**")
@@ -280,7 +367,12 @@ class PostingService:
             content_parts.append("")  # Empty line
 
         # Add vertical info format (location, category, time)
-        location = self._detect_location(arabic_text, english_translation)
+        # Use AI-detected location if available, otherwise fall back to old detection method
+        if ai_location and ai_location != "Unknown":
+            location = ai_location
+        else:
+            location = self._detect_location(arabic_text, english_translation)
+        
         category = self._categorize_content(arabic_text, english_translation)
         damascus_tz = pytz.timezone("Asia/Damascus")
         current_time = datetime.datetime.now(damascus_tz).strftime(
@@ -290,6 +382,17 @@ class PostingService:
         content_parts.append(f"📍 **Location:** {location}")
         content_parts.append(f"🏷️ **Category:** {category}")
         content_parts.append(f"🕒 **Posted:** {current_time}")
+        
+        # Add intelligence indicators
+        if urgency_level != "normal":
+            urgency_display = urgency_level.title()
+            if urgency_level == "breaking":
+                content_parts.append(f"🚨 **Urgency:** {urgency_display}")
+            elif urgency_level == "important":
+                content_parts.append(f"📢 **Urgency:** {urgency_display}")
+        
+        # Quality score removed - users don't need to see this information
+        
         content_parts.append("")  # Empty line
 
         # Add improved beta warning with admin mention
@@ -300,9 +403,8 @@ class PostingService:
         )
         content_parts.append("")  # Empty line
 
-        # Add news role ping at the bottom
-        if NEWS_ROLE_ID:
-            content_parts.append(f"<@&{NEWS_ROLE_ID}>")
+        # Note: News role ping is added at the top of the post, not here
+        # to avoid duplicate pings
 
         return "\n".join(content_parts)
 
@@ -310,7 +412,7 @@ class PostingService:
         self, arabic_text: str, english_translation: Optional[str] = None
     ) -> str:
         """
-        Detect location from Arabic text and English translation.
+        Detect location from Arabic text and English translation using AI and regex.
 
         Args:
             arabic_text: The original Arabic text
@@ -320,27 +422,40 @@ class PostingService:
             str: Detected location or "Syria" as fallback
         """
         try:
-            # Import Syrian location detection utility
-            from src.utils.syrian_locations import detect_syrian_location
+            # Import Syrian location detection utilities
+            from src.utils.syrian_locations import detect_location_smart, detect_syrian_location
 
-            # Try to detect location from Arabic text first
+            # Try AI-powered detection first with the Arabic text
+            if arabic_text:
+                ai_location = detect_location_smart(arabic_text, self.bot)
+                if ai_location and ai_location != "Unknown":
+                    self.logger.debug(f"[POSTING] AI detected location: {ai_location}")
+                    return ai_location
+
+            # Try AI-powered detection with English translation
+            if english_translation:
+                ai_location = detect_location_smart(english_translation, self.bot)
+                if ai_location and ai_location != "Unknown":
+                    self.logger.debug(f"[POSTING] AI detected location from translation: {ai_location}")
+                    return ai_location
+
+            # Fallback to regex-based detection
             if arabic_text:
                 location = detect_syrian_location(arabic_text)
                 if location and location != "Syria":
-                    return location
+                    return f"{location}, Syria"
 
-            # Try to detect from English translation if available
             if english_translation:
                 location = detect_syrian_location(english_translation)
                 if location and location != "Syria":
-                    return location
+                    return f"{location}, Syria"
 
-            # Fallback to Syria if no specific city detected
-            return "Syria"
+            # Final fallback - only return "Syria" if we can't detect anything
+            return "Unknown"
 
         except Exception as e:
             self.logger.debug(f"[POSTING] Error detecting location: {str(e)}")
-            return "Syria"
+            return "Unknown"
 
     def _clean_arabic_for_display(self, text: str) -> str:
         """Clean Arabic text for display in Discord."""

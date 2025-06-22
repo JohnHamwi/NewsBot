@@ -1,20 +1,33 @@
-"""
-Telegram Utilities
+# =============================================================================
+# NewsBot Telegram Utilities Module
+# =============================================================================
+# This module provides utility functions and extensions for Telegram client 
+# operations. It extends the TelegramClient with additional functionality 
+# needed by the NewsBot for channel monitoring and message fetching.
+# Last updated: 2025-01-16
 
-This module provides utility functions and extensions for Telegram client operations.
-It extends the TelegramClient with additional functionality needed by the NewsBot.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import functools
 import logging
 from typing import Any, List, Union
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 from telethon import TelegramClient
 
-logger = logging.getLogger(__name__)
+# =============================================================================
+# Local Application Imports
+# =============================================================================
+from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Telegram Client Extension Functions
+# =============================================================================
 async def extend_telegram_client(client: TelegramClient):
     """
     Extend the TelegramClient with additional methods needed by the NewsBot.

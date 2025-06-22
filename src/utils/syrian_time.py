@@ -1,26 +1,51 @@
-"""
-Syrian Time Localization Module
+# =============================================================================
+# NewsBot Syrian Time Localization Module
+# =============================================================================
+# This module provides functionality to handle Syrian local time (Damascus timezone)
+# for news events and timestamps, including relative time formatting and
+# timezone conversion utilities.
+# Last updated: 2025-01-16
 
-This module provides functionality to handle Syrian local time (Damascus timezone)
-for news events and timestamps.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import pytz
 
+# =============================================================================
+# Configuration Constants
+# =============================================================================
 # Syrian timezone (Damascus)
 SYRIAN_TIMEZONE = pytz.timezone("Asia/Damascus")
 
 
+# =============================================================================
+# Syrian Time Handler Main Class
+# =============================================================================
 class SyrianTimeHandler:
-    """Handles Syrian local time conversions and formatting."""
+    """
+    Handles Syrian local time conversions and formatting.
+    
+    Features:
+    - Current Syrian time retrieval
+    - Timezone conversion utilities
+    - Multiple formatting styles
+    - Relative time calculations
+    - Time mention parsing in text
+    """
 
     def __init__(self):
         """Initialize the Syrian time handler."""
         self.syrian_tz = SYRIAN_TIMEZONE
 
+    # =========================================================================
+    # Time Retrieval Methods
+    # =========================================================================
     def now_syrian(self) -> datetime:
         """
         Get current time in Syrian timezone.
@@ -46,6 +71,9 @@ class SyrianTimeHandler:
 
         return dt.astimezone(self.syrian_tz)
 
+    # =========================================================================
+    # Time Formatting Methods
+    # =========================================================================
     def format_syrian_time(
         self,
         dt: Optional[datetime] = None,
@@ -129,6 +157,9 @@ class SyrianTimeHandler:
             # For older dates, show the actual date
             return self.format_syrian_time(dt, format_style="short")
 
+    # =========================================================================
+    # Timezone Information Methods
+    # =========================================================================
     def get_timezone_info(self) -> dict:
         """
         Get information about Syrian timezone.
@@ -151,6 +182,9 @@ class SyrianTimeHandler:
             "timezone_abbreviation": now.strftime("%Z"),
         }
 
+    # =========================================================================
+    # Text Parsing Methods
+    # =========================================================================
     def parse_time_mentions(self, text: str) -> list:
         """
         Parse time mentions in text and convert to Syrian time.
@@ -188,6 +222,9 @@ class SyrianTimeHandler:
         return detected_times
 
 
+# =============================================================================
+# Module-Level Instance and Functions
+# =============================================================================
 # Global instance for easy access
 syrian_time_handler = SyrianTimeHandler()
 
@@ -210,7 +247,7 @@ def to_syrian_time(dt: datetime) -> datetime:
         dt: Datetime to convert
 
     Returns:
-        Datetime in Syrian timezone
+        Datetime converted to Syrian timezone
     """
     return syrian_time_handler.to_syrian_time(dt)
 
@@ -226,7 +263,7 @@ def format_syrian_time(
     Args:
         dt: Datetime to format (defaults to now)
         include_timezone: Whether to include timezone info
-        format_style: Format style
+        format_style: Format style to use
 
     Returns:
         Formatted time string

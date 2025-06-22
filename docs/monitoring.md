@@ -93,4 +93,4 @@ async def my_command(interaction: discord.Interaction):
 ---
 
 **Author**: حَـــــنَّـــــا  
-**Version**: 3.0.0
+**Version**: 4.5.0

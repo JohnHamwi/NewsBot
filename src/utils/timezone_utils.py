@@ -1,20 +1,35 @@
-"""
-Timezone utilities for consistent Eastern timezone handling across the application.
-Automatically handles EST/EDT transitions based on daylight saving time.
-"""
+# =============================================================================
+# NewsBot Timezone Utilities Module
+# =============================================================================
+# Timezone utilities for consistent Eastern timezone handling across the 
+# application. Automatically handles EST/EDT transitions based on daylight 
+# saving time with proper timezone conversion functions.
+# Last updated: 2025-01-16
 
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+# =============================================================================
+# Configuration Constants
+# =============================================================================
 # Eastern timezone (automatically handles EST/EDT transitions)
 EASTERN = ZoneInfo("America/New_York")
 
 
+# =============================================================================
+# Current Time Functions
+# =============================================================================
 def now_eastern() -> datetime:
     """Get current datetime in Eastern timezone (automatically EST/EDT)."""
     return datetime.now(EASTERN)
 
 
+# =============================================================================
+# Timezone Conversion Functions
+# =============================================================================
 def utc_to_eastern(utc_dt: datetime) -> datetime:
     """Convert UTC datetime to Eastern timezone."""
     if utc_dt.tzinfo is None:
@@ -31,7 +46,9 @@ def eastern_to_utc(eastern_dt: datetime) -> datetime:
     return eastern_dt.astimezone(ZoneInfo("UTC"))
 
 
-# Backward compatibility aliases (deprecated - use new names)
+# =============================================================================
+# Backward Compatibility Functions (Deprecated)
+# =============================================================================
 def now_est() -> datetime:
     """Deprecated: Use now_eastern() instead."""
     return now_eastern()

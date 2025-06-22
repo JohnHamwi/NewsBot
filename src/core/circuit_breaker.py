@@ -1,19 +1,29 @@
-"""
-Circuit Breaker Pattern for NewsBot
+# =============================================================================
+# NewsBot Circuit Breaker Module
+# =============================================================================
+# This module provides circuit breaker functionality to protect against 
+# cascading failures when integrating with external services like Telegram 
+# and APIs. Implements the circuit breaker pattern for resilient service calls.
+# Last updated: 2025-01-16
 
-This module provides circuit breaker functionality to protect against cascading failures
-when integrating with external services like Telegram and APIs.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import datetime
 import enum
 import time
 from typing import Any, Callable, Optional
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Circuit State Enumeration
+# =============================================================================
 class CircuitState(enum.Enum):
     """Circuit breaker states."""
 
@@ -22,6 +32,9 @@ class CircuitState(enum.Enum):
     HALF_OPEN = "HALF_OPEN"  # Testing if service is healthy
 
 
+# =============================================================================
+# Circuit Breaker Main Class
+# =============================================================================
 class CircuitBreaker:
     """
     Implements the circuit breaker pattern for external service calls.
@@ -29,6 +42,13 @@ class CircuitBreaker:
     This pattern helps prevent cascading failures by failing fast when a service
     is experiencing problems. After a threshold of failures, the circuit opens
     and prevents further calls until a timeout period has passed.
+    
+    Features:
+    - Configurable failure thresholds and timeouts
+    - Automatic state transitions (CLOSED -> OPEN -> HALF_OPEN)
+    - Statistics tracking for monitoring
+    - Support for both sync and async function calls
+    - Graceful degradation and recovery
     """
 
     def __init__(
@@ -68,6 +88,9 @@ class CircuitBreaker:
 
         logger.debug(f"Circuit breaker for {self.name} initialized")
 
+    # =========================================================================
+    # State Management Methods
+    # =========================================================================
     def allow_request(self) -> bool:
         """
         Check if a request should be allowed based on circuit state.
@@ -114,6 +137,9 @@ class CircuitBreaker:
         self.failures = 0
         logger.info(f"Circuit breaker for {self.name} transitioned to CLOSED state")
 
+    # =========================================================================
+    # Call Recording Methods
+    # =========================================================================
     def record_success(self) -> None:
         """Record a successful service call."""
         self.successful_calls += 1
@@ -141,6 +167,9 @@ class CircuitBreaker:
             # Any failure in half-open state returns us to open state
             self._transition_to_open()
 
+    # =========================================================================
+    # Function Execution Methods
+    # =========================================================================
     def execute(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
         """
         Execute a function with circuit breaker protection.
@@ -195,6 +224,9 @@ class CircuitBreaker:
             self.record_failure(e)
             raise
 
+    # =========================================================================
+    # Statistics and Management Methods
+    # =========================================================================
     def reset(self) -> None:
         """Reset the circuit breaker to closed state and clear statistics."""
         self.state = CircuitState.CLOSED

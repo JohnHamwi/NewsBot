@@ -1,19 +1,25 @@
-"""
-Logger Module
+# =============================================================================
+# NewsBot Logger Module
+# =============================================================================
+# This module provides a custom logging setup for the bot with colored console
+# output, file logging with rotation, command usage tracking, error tracking,
+# and comprehensive performance metrics collection.
+# Last updated: 2025-01-16
 
-This module provides a custom logging setup for the bot with:
-- Colored console output
-- File logging with rotation
-- Command usage tracking
-- Error tracking
-- Performance metrics
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 from typing import Any, Dict, Optional
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.base_logger import base_logger
 
 
+# =============================================================================
+# Bot Logger Main Class
+# =============================================================================
 class BotLogger:
     """
     Custom logger class for the Discord bot.
@@ -42,6 +48,9 @@ class BotLogger:
         self.command_usage: Dict[str, int] = {}
         self.logger = base_logger
 
+    # =========================================================================
+    # Basic Logging Methods
+    # =========================================================================
     def debug(
         self, message: str, context: str = "", extras: Dict[str, Any] = None
     ) -> None:
@@ -126,6 +135,9 @@ class BotLogger:
 
         self.error_count += 1
 
+    # =========================================================================
+    # Command Tracking Methods
+    # =========================================================================
     def command(
         self, command_name: str, duration: float, extras: Dict[str, Any] = None
     ) -> None:
@@ -155,6 +167,9 @@ class BotLogger:
             f"Usage Count: {current_count}"
         )
 
+    # =========================================================================
+    # Metrics Management Methods
+    # =========================================================================
     def get_metrics(self) -> Dict:
         """
         Get current logging metrics.
@@ -181,6 +196,9 @@ class BotLogger:
         self.command_usage.clear()
 
 
+# =============================================================================
+# Module-Level Functions
+# =============================================================================
 def get_logger(name: str = "NewsBot"):
     """
     Get a logger instance.

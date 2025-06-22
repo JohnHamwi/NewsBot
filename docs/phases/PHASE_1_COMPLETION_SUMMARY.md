@@ -37,7 +37,7 @@
   - Circuit breaker status
   - Configurable views (All, System, Bot, Cache, Performance, Errors, Services)
 
-##### **ℹ️ InfoCommands (`src/cogs/info.py`)**
+##### **🤖 BotCommands (`src/cogs/bot_commands.py`)**
 - **Purpose**: Bot information and documentation
 - **Commands**: `/info` (public command)
 - **Features**:

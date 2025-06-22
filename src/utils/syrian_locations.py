@@ -1,13 +1,20 @@
-"""
-Syrian Location Detection Module
+# =============================================================================
+# NewsBot Syrian Location Detection Module
+# =============================================================================
+# This module provides functionality to detect and tag Syrian cities, regions, 
+# and locations mentioned in news content, including comprehensive location
+# mapping with Arabic names and regional categorization.
+# Last updated: 2025-01-16
 
-This module provides functionality to detect and tag Syrian cities, regions, and locations
-mentioned in news content.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import re
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Optional
 
+# =============================================================================
+# Configuration Constants
+# =============================================================================
 # Comprehensive list of Syrian locations
 SYRIAN_LOCATIONS = {
     # Major Cities
@@ -158,13 +165,28 @@ SYRIAN_REGIONS = {
 }
 
 
+# =============================================================================
+# Syrian Location Detector Main Class
+# =============================================================================
 class SyrianLocationDetector:
-    """Detects Syrian locations in text and provides regional context."""
+    """
+    Detects Syrian locations in text and provides regional context.
+    
+    Features:
+    - Comprehensive location pattern matching
+    - Arabic and English name recognition
+    - Regional categorization and grouping
+    - Location metadata with emojis
+    - Efficient compiled regex patterns
+    """
 
     def __init__(self):
         """Initialize the location detector with compiled patterns."""
         self.location_patterns = self._compile_patterns()
 
+    # =========================================================================
+    # Pattern Compilation Methods
+    # =========================================================================
     def _compile_patterns(self) -> Dict[str, re.Pattern]:
         """Compile regex patterns for efficient location detection."""
         patterns = {}
@@ -173,10 +195,20 @@ class SyrianLocationDetector:
             # Create pattern for English name
             english_pattern = rf"\b{re.escape(location)}\b"
 
-            # Create patterns for Arabic names
+            # Create patterns for Arabic names with common prefixes/prepositions
             arabic_patterns = []
             for arabic_name in data.get("arabic", []):
+                # Add the base name
                 arabic_patterns.append(re.escape(arabic_name))
+                
+                # Add common Arabic prepositions and prefixes
+                # ب (in/at), في (in), من (from), إلى (to), عند (at), لدى (at/with)
+                # و (and), ال (the), ك (like/as)
+                prefixes = ["ب", "في", "من", "إلى", "عند", "لدى", "و", "ال", "ك"]
+                for prefix in prefixes:
+                    arabic_patterns.append(re.escape(prefix + arabic_name))
+                    # Also handle cases where there might be spaces
+                    arabic_patterns.append(re.escape(prefix) + r"\s*" + re.escape(arabic_name))
 
             # Combine all patterns
             all_patterns = [english_pattern] + arabic_patterns
@@ -186,6 +218,9 @@ class SyrianLocationDetector:
 
         return patterns
 
+    # =========================================================================
+    # Location Detection Methods
+    # =========================================================================
     def detect_locations(self, text: str) -> List[Dict[str, str]]:
         """
         Detect Syrian locations mentioned in the text.
@@ -202,18 +237,19 @@ class SyrianLocationDetector:
         for location, pattern in self.location_patterns.items():
             if pattern.search(text) and location not in seen_locations:
                 location_data = SYRIAN_LOCATIONS[location]
-                detected.append(
-                    {
-                        "name": location,
-                        "emoji": location_data["emoji"],
-                        "region": location_data["region"],
-                        "arabic": location_data.get("arabic", []),
-                    }
-                )
+                detected.append({
+                    "name": location,
+                    "emoji": location_data["emoji"],
+                    "region": location_data["region"],
+                    "arabic": location_data.get("arabic", [])
+                })
                 seen_locations.add(location)
 
         return detected
 
+    # =========================================================================
+    # Regional Analysis Methods
+    # =========================================================================
     def get_regional_summary(
         self, locations: List[Dict[str, str]]
     ) -> Dict[str, List[str]]:
@@ -224,21 +260,24 @@ class SyrianLocationDetector:
             locations: List of detected locations
 
         Returns:
-            Dictionary mapping regions to lists of locations
+            Dictionary mapping regions to location lists
         """
         regional_summary = {}
-
+        
         for location in locations:
             region = location["region"]
             if region not in regional_summary:
                 regional_summary[region] = []
             regional_summary[region].append(location["name"])
-
+            
         return regional_summary
 
+    # =========================================================================
+    # Formatting Methods
+    # =========================================================================
     def format_location_tags(self, locations: List[Dict[str, str]]) -> str:
         """
-        Format detected locations as tags for Discord embed.
+        Format detected locations as Discord-friendly tags.
 
         Args:
             locations: List of detected locations
@@ -249,27 +288,36 @@ class SyrianLocationDetector:
         if not locations:
             return ""
 
-        # Group by region
+        # Group by region for better organization
         regional_summary = self.get_regional_summary(locations)
-
-        tags = []
-        for region, region_locations in regional_summary.items():
-            if len(region_locations) == 1:
+        
+        formatted_parts = []
+        for region, location_names in regional_summary.items():
+            if len(location_names) == 1:
                 location_data = next(
-                    loc for loc in locations if loc["name"] == region_locations[0]
+                    loc for loc in locations 
+                    if loc["name"] == location_names[0]
                 )
-                tags.append(f"{location_data['emoji']} {region_locations[0]}")
+                formatted_parts.append(
+                    f"{location_data['emoji']} **{location_names[0]}**"
+                )
             else:
-                # Multiple locations in same region
-                emoji = locations[0]["emoji"]  # Use first emoji for region
-                location_names = ", ".join(region_locations)
-                tags.append(f"{emoji} {region} ({location_names})")
+                location_emojis = [
+                    next(loc for loc in locations if loc["name"] == name)["emoji"]
+                    for name in location_names
+                ]
+                formatted_parts.append(
+                    f"{location_emojis[0]} **{region}**: {', '.join(location_names)}"
+                )
+        
+        return " | ".join(formatted_parts)
 
-        return " | ".join(tags)
 
-
-# Global instance for easy access
-syrian_location_detector = SyrianLocationDetector()
+# =============================================================================
+# Module-Level Functions
+# =============================================================================
+# Global detector instance
+location_detector = SyrianLocationDetector()
 
 
 def detect_syrian_locations(text: str) -> List[Dict[str, str]]:
@@ -277,48 +325,130 @@ def detect_syrian_locations(text: str) -> List[Dict[str, str]]:
     Convenience function to detect Syrian locations in text.
 
     Args:
-        text: The text to analyze
+        text: Text to analyze
 
     Returns:
         List of detected locations with metadata
     """
-    return syrian_location_detector.detect_locations(text)
+    return location_detector.detect_locations(text)
 
 
 def format_syrian_location_tags(text: str) -> str:
     """
-    Convenience function to get formatted location tags for text.
+    Convenience function to format Syrian location tags from text.
 
     Args:
-        text: The text to analyze
+        text: Text to analyze
 
     Returns:
         Formatted location tags string
     """
     locations = detect_syrian_locations(text)
-    return syrian_location_detector.format_location_tags(locations)
+    return location_detector.format_location_tags(locations)
 
 
 def detect_syrian_location(text: str) -> str:
     """
-    Convenience function to detect the primary Syrian location in text.
+    Detect the primary Syrian location mentioned in text.
 
     Args:
-        text: The text to analyze
+        text: Text to analyze
 
     Returns:
-        Primary detected location name or "Syria" as fallback
+        Primary location name or empty string if none found
     """
     locations = detect_syrian_locations(text)
+    return locations[0]["name"] if locations else ""
 
-    if not locations:
+
+# =============================================================================
+# AI-Powered Location Detection
+# =============================================================================
+async def detect_location_with_ai(text: str, bot=None) -> str:
+    """
+    Use AI to intelligently detect locations in text, with regex fallback.
+    
+    Args:
+        text: The text to analyze for locations
+        bot: Bot instance for AI service access (optional)
+    
+    Returns:
+        Detected location string (e.g., "Damascus, Syria" or "Unknown")
+    """
+    try:
+        # First try AI detection if bot is available
+        if bot and hasattr(bot, 'fetch_commands'):
+            # Use the AI service for intelligent location detection
+            from src.services.ai_service import AIService
+            
+            ai_service = AIService(bot)
+            ai_result = ai_service.get_ai_result_comprehensive(text)
+            
+            if ai_result and ai_result.get('location') and ai_result['location'] != 'Unknown':
+                ai_location = ai_result['location'].strip()
+                
+                # Validate and format the AI result
+                if ai_location and ai_location.lower() not in ['unknown', 'unclear', 'not specified', 'n/a', 'none']:
+                    # If it's a Syrian city without "Syria" suffix, add it
+                    syrian_cities = ['Damascus', 'Aleppo', 'Homs', 'Hama', 'Latakia', 'Tartus', 
+                                   'Daraa', 'Idlib', 'Raqqa', 'Deir ez-Zor', 'Hasakah', 'Qamishli']
+                    
+                    for city in syrian_cities:
+                        if city.lower() in ai_location.lower() and 'syria' not in ai_location.lower():
+                            ai_location = f"{city}, Syria"
+                            break
+                    
+                    return ai_location
+        
+        # Fallback to regex-based detection
+        regex_location = detect_syrian_location(text)
+        if regex_location:
+            # Format Syrian cities properly
+            return f"{regex_location}, Syria" if regex_location != "Syria" else "Syria"
+        
+        return "Unknown"
+        
+    except Exception as e:
+        # If AI fails, fall back to regex detection
+        try:
+            regex_location = detect_syrian_location(text)
+            return f"{regex_location}, Syria" if regex_location and regex_location != "Syria" else "Syria"
+        except:
+            return "Unknown"
+
+
+def detect_location_smart(text: str, bot=None) -> str:
+    """
+    Smart location detection that combines AI and regex methods.
+    
+    Args:
+        text: Text to analyze
+        bot: Bot instance (optional, for AI access)
+    
+    Returns:
+        Detected location or "Unknown"
+    """
+    import asyncio
+    
+    try:
+        # Try to run the async AI detection
+        if bot:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Create a task for async execution
+                task = asyncio.create_task(detect_location_with_ai(text, bot))
+                # This won't work in sync context, so fall back to regex
+                pass
+            else:
+                return asyncio.run(detect_location_with_ai(text, bot))
+    except:
+        pass
+    
+    # Fallback to regex-based detection
+    regex_location = detect_syrian_location(text)
+    if regex_location and regex_location != "Syria":
+        return f"{regex_location}, Syria"
+    elif regex_location == "Syria":
         return "Syria"
-
-    # Return the first detected location (most specific)
-    # Priority: Cities > Governorates > Regions
-    city_locations = [loc for loc in locations if "Governorate" not in loc["name"]]
-    if city_locations:
-        return city_locations[0]["name"]
-
-    # If only governorates found, return the first one
-    return locations[0]["name"]
+    else:
+        return "Unknown"

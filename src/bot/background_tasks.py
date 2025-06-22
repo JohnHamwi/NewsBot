@@ -1,33 +1,51 @@
-"""
-Background Tasks Module
+# =============================================================================
+# NewsBot Background Tasks Module
+# =============================================================================
+# This module contains all background tasks for the NewsBot including
+# monitoring, auto-posting, rich presence updates, resource monitoring,
+# and comprehensive notification systems.
+# Last updated: 2025-01-16
 
-This module contains all background tasks for the NewsBot including
-monitoring, auto-posting, rich presence updates, and notifications.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import datetime
 import os
 import platform
 from typing import TYPE_CHECKING
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 import psutil
 from discord.ext import commands
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.core.config_manager import config
 from src.utils import error_handler
 from src.utils.base_logger import base_logger as logger
 from src.utils.task_manager import task_manager
 from src.utils.timezone_utils import now_eastern
 
+# =============================================================================
+# Type Checking Imports
+# =============================================================================
 if TYPE_CHECKING:
     from .newsbot import NewsBot
 
-# Configuration constants
-__version__ = config.get("bot.version") or "2.0.0"
+# =============================================================================
+# Configuration Constants
+# =============================================================================
+__version__ = config.get("bot.version") or "4.5.0"
 
 
+# =============================================================================
+# Startup and Shutdown Notification Functions
+# =============================================================================
 async def send_startup_notification(bot: "NewsBot") -> None:
     """Send startup notification to log channel."""
     try:
@@ -76,6 +94,14 @@ async def send_startup_notification(bot: "NewsBot") -> None:
             embed.add_field(
                 name="📱 Telegram Status", value="```✅ Connected```", inline=False
             )
+            
+            # Add startup protection info
+            if bot.disable_auto_post_on_startup:
+                embed.add_field(
+                    name="🛡️ Startup Protection",
+                    value="```Auto-posting disabled on startup```",
+                    inline=False
+                )
 
         embed.add_field(name="💻 System Info", value=f"```{sys_info}```", inline=False)
         embed.add_field(
@@ -139,6 +165,9 @@ async def send_shutdown_notification(bot: "NewsBot") -> None:
         logger.error(f"❌ Failed to send shutdown notification: {str(e)}")
 
 
+# =============================================================================
+# Task Management Functions
+# =============================================================================
 async def start_monitoring_tasks(bot: "NewsBot") -> None:
     """Start monitoring and background tasks."""
     try:
@@ -173,14 +202,26 @@ async def start_monitoring_tasks(bot: "NewsBot") -> None:
         raise
 
 
+# =============================================================================
+# Resource Monitoring Functions
+# =============================================================================
 async def resource_monitor(bot: "NewsBot") -> None:
     """Monitor CPU and RAM usage and alert if thresholds are exceeded."""
+    from src.core.config_manager import config
+    
+    # Load configuration
+    alerts_enabled = config.get("monitoring.resource_alerts.enabled", True)
+    cpu_threshold = config.get("monitoring.resource_alerts.cpu_threshold", 80.0)
+    ram_threshold = config.get("monitoring.resource_alerts.ram_threshold", 70.0)
+    check_interval = config.get("monitoring.resource_alerts.check_interval", 60)
     admin_user_id = int(os.getenv("ADMIN_USER_ID", "0"))
-    cpu_threshold = 80.0
-    ram_threshold = 70.0
+    
     process = psutil.Process()
 
-    logger.debug("🛡️ Starting resource monitor")
+    logger.debug(f"🛡️ Starting resource monitor - Alerts enabled: {alerts_enabled}")
+    if not alerts_enabled:
+        logger.info("🔇 Resource alerts are disabled in configuration")
+        return  # Exit early if alerts are disabled
 
     try:
         while True:
@@ -191,11 +232,11 @@ async def resource_monitor(bot: "NewsBot") -> None:
                 if cpu > cpu_threshold or ram > ram_threshold:
                     await send_resource_alert(bot, cpu, ram, process.pid, admin_user_id)
 
-                await asyncio.sleep(60)  # Check every minute
+                await asyncio.sleep(check_interval)
 
             except Exception as e:
                 logger.error(f"❌ Error in resource monitor: {str(e)}")
-                await asyncio.sleep(60)  # Continue monitoring even if there's an error
+                await asyncio.sleep(check_interval)
 
     except asyncio.CancelledError:
         logger.debug("🛡️ Resource monitor stopped")
@@ -367,8 +408,19 @@ async def rich_presence_task(bot: "NewsBot"):
                     continue
                 
                 if bot.rich_presence_mode == "automatic":
+                    # Check if we're in startup grace period
+                    should_wait, seconds_to_wait = bot.should_wait_for_startup_delay()
+                    if should_wait:
+                        delay_minutes = int(seconds_to_wait // 60)
+                        delay_seconds = int(seconds_to_wait % 60)
+                        if delay_minutes > 0:
+                            activity_name = f"🛡️ Grace period: {delay_minutes}m {delay_seconds}s"
+                        else:
+                            activity_name = f"🛡️ Grace period: {delay_seconds}s"
+                        
+                        logger.debug(f"📱 Rich presence: Startup grace period - {seconds_to_wait}s remaining")
                     # Calculate time until next post
-                    if bot.auto_post_interval > 0 and bot.last_post_time:
+                    elif bot.auto_post_interval > 0 and bot.last_post_time:
                         next_post = bot.last_post_time + datetime.timedelta(
                             seconds=bot.auto_post_interval
                         )
@@ -442,6 +494,19 @@ async def auto_post_task(bot: "NewsBot"):
     try:
         while True:
             try:
+                # Check if we should wait for startup grace period (always check this first)
+                should_wait, seconds_to_wait = bot.should_wait_for_startup_delay()
+                if should_wait:
+                    minutes_remaining = seconds_to_wait // 60
+                    logger.info(
+                        f"🛡️ Startup grace period active: {minutes_remaining}m {seconds_to_wait % 60}s remaining"
+                    )
+                    logger.debug(
+                        f"⏳ Auto-posting disabled until {minutes_remaining} minutes after startup"
+                    )
+                    await asyncio.sleep(60)  # Check every minute
+                    continue
+
                 # Check if auto-posting is enabled
                 if bot.auto_post_interval <= 0:
                     logger.debug("⏸️ Auto-posting disabled, checking again in 5 minutes")
@@ -470,7 +535,7 @@ async def auto_post_task(bot: "NewsBot"):
                         await asyncio.sleep(60)  # Check every minute
                         continue
                 else:
-                    logger.debug("📅 No previous post time recorded")
+                    logger.debug("📅 No previous post time recorded - startup delay will apply")
 
                 # Reset force flag if it was set
                 if bot.force_auto_post:
@@ -493,38 +558,33 @@ async def auto_post_task(bot: "NewsBot"):
                 # Try posting from active channels
                 post_successful = False
                 try:
-                    # Get active channels from cache
-                    active_channels = await bot.json_cache.list_telegram_channels(
-                        "activated"
-                    )
+                    # Get the next channel in rotation sequence
+                    channel = await bot.json_cache.get_next_channel_for_rotation()
 
-                    if not active_channels:
+                    if not channel:
                         logger.warning(
                             "⚠️ No active channels configured for auto-posting"
                         )
                         logger.info(
-                            "💡 Use /news add_channel <channel_name> to add channels for auto-posting"
+                            "💡 Use /admin channels activate <channel_name> to add channels for auto-posting"
                         )
                         await asyncio.sleep(300)  # Wait 5 minutes before retrying
                         continue
 
-                    logger.info(f"📡 Active channels: {active_channels}")
+                    logger.info(f"🔄 Using channel rotation - selected channel: {channel}")
 
-                    # Try posting from each channel until successful
-                    for channel in active_channels:
-                        logger.info(f"🔄 Attempting to fetch from channel: {channel}")
-
-                        try:
-                            result = await bot.fetch_and_post_auto(channel)
-                            if result:
-                                logger.info(f"✅ Successfully posted from {channel}")
-                                post_successful = True
-                                break
-                            else:
-                                logger.debug(f"❌ No post made from {channel}")
-                        except Exception as e:
-                            logger.error(f"❌ Failed to fetch from {channel}: {str(e)}")
-                            continue
+                    # Try posting from the selected channel
+                    try:
+                        result = await bot.fetch_and_post_auto(channel)
+                        if result:
+                            logger.info(f"✅ Successfully posted from {channel}")
+                            post_successful = True
+                        else:
+                            logger.info(f"ℹ️ No suitable content found in {channel}")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to fetch from {channel}: {str(e)}")
+                        # If this channel fails, we'll try the next one in the next cycle
+                        # This prevents getting stuck on a broken channel
 
                     if post_successful:
                         bot.last_post_time = now_eastern()
@@ -537,7 +597,7 @@ async def auto_post_task(bot: "NewsBot"):
                         await asyncio.sleep(bot.auto_post_interval)
                         continue
                     else:
-                        logger.warning("⚠️ No successful posts from any active channel")
+                        logger.info(f"ℹ️ No post made from {channel}, will try next channel in rotation on next cycle")
 
                 except Exception as e:
                     logger.error(f"❌ Auto-post failed: {str(e)}")

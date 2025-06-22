@@ -1,13 +1,29 @@
-"""
-NewsBot cogs package initialization.
-"""
+# =============================================================================
+# NewsBot Cogs Package
+# =============================================================================
+# Discord bot cogs with enhanced command structure and unified super-commands
+# Last updated: 2025-01-16
 
-from .fetch_cog import FetchCog
+# =============================================================================
+# Local Application Imports
+# =============================================================================
+from .admin import AdminCommands
+from .bot_commands import BotCommands
+from .fetch_cog import FetchCommands
 from .fetch_view import FetchView
-from .news import NewsCog
+from .news_commands import NewsCommands
+from .status import StatusCommands
+from .utility import UtilityCommands
 
-__all__ = ["FetchCog", "FetchView", "NewsCog"]
-
-# This file marks the directory as a Python package for NewsBot cogs.
-
-# Cog package for NewsBot
+# =============================================================================
+# Package Exports
+# =============================================================================
+__all__ = [
+    "AdminCommands",
+    "BotCommands",
+    "FetchCommands", 
+    "FetchView",
+    "NewsCommands",
+    "StatusCommands",
+    "UtilityCommands"
+]

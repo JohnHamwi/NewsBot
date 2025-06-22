@@ -1,20 +1,33 @@
-"""
-Metrics Module
+# =============================================================================
+# NewsBot Metrics Module
+# =============================================================================
+# This module provides Prometheus metrics collection and monitoring functionality
+# optimized for low-memory environments with essential metrics tracking
+# and comprehensive system resource monitoring.
+# Last updated: 2025-01-16
 
-This module provides Prometheus metrics collection and monitoring functionality.
-Optimized for low-memory environments.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import os
 from datetime import datetime
 from typing import Any, Dict
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import psutil
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Metrics Manager Main Class
+# =============================================================================
 class MetricsManager:
     """
     Manages Prometheus metrics collection and exposure.
@@ -69,6 +82,9 @@ class MetricsManager:
         )
         self.thread_count = Gauge("newsbot_thread_count", "Number of threads")
 
+    # =========================================================================
+    # Server Management Methods
+    # =========================================================================
     def start(self) -> None:
         """Start the metrics server."""
         if self._server_started:
@@ -103,6 +119,9 @@ class MetricsManager:
         )
         self._server_started = False
 
+    # =========================================================================
+    # Collection Management Methods
+    # =========================================================================
     def start_collection(self) -> None:
         """Start metrics collection."""
         if self._collection_started:
@@ -130,6 +149,9 @@ class MetricsManager:
         self._collection_started = False
         logger.debug("📊 Metrics collection stopped")
 
+    # =========================================================================
+    # Metric Update Methods
+    # =========================================================================
     def update_metric(self, metric_name: str, value: float) -> None:
         """
         Update a specific metric by name.
@@ -161,6 +183,9 @@ class MetricsManager:
         except Exception as e:
             logger.error(f"Failed to update metric {metric_name}: {str(e)}")
 
+    # =========================================================================
+    # Metric Recording Methods
+    # =========================================================================
     def record_command(self, command_name: str, duration: float) -> None:
         """Record command execution metrics."""
         self.command_latency.labels(command_name=command_name).observe(duration)
@@ -173,6 +198,9 @@ class MetricsManager:
         """Record message count only."""
         self.message_counter.labels(source=source).inc()
 
+    # =========================================================================
+    # System Metrics Methods
+    # =========================================================================
     def update_system_metrics(self) -> None:
         """Update essential system metrics only."""
         try:

@@ -1,23 +1,34 @@
-"""
-Performance Tracking Decorator for Syrian NewsBot
+# =============================================================================
+# NewsBot Performance Tracking Decorator Module
+# =============================================================================
+# Decorator for automatically tracking command execution performance including
+# timing, success rates, and user activity metrics with comprehensive
+# logging and error handling capabilities.
+# Last updated: 2025-01-16
 
-Decorator for automatically tracking command execution performance.
-
-Author: حَـــــنَّـــــا
-Version: 3.0.0
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 from __future__ import annotations
 
 import time
 from functools import wraps
 from typing import Any, Callable, Optional
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Performance Tracking Decorators
+# =============================================================================
 def track_performance(command_name: Optional[str] = None):
     """
     Decorator to track command performance metrics.
@@ -94,6 +105,9 @@ def track_performance(command_name: Optional[str] = None):
     return decorator
 
 
+# =============================================================================
+# Auto-Post Performance Tracking
+# =============================================================================
 def track_auto_post_performance(func: Callable) -> Callable:
     """
     Decorator specifically for tracking auto-posting performance.

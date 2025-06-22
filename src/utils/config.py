@@ -1,13 +1,20 @@
-"""
-Configuration Management Module
+# =============================================================================
+# NewsBot Configuration Management Module
+# =============================================================================
+# This module handles the bot's configuration settings, loading them from 
+# environment variables and providing validation to ensure all required 
+# settings are present and properly formatted.
+# Last updated: 2025-01-16
 
-This module handles the bot's configuration settings, loading them from environment
-variables and providing validation to ensure all required settings are present.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import os
 from typing import Any, Dict, List, Optional
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 from dotenv import load_dotenv
 
 # Load environment variables from config/.env

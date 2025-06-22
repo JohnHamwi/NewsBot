@@ -1,11 +1,14 @@
-"""
-Simple Configuration Manager for NewsBot
+# =============================================================================
+# NewsBot Simple Configuration Manager Module
+# =============================================================================
+# This module provides a streamlined configuration system optimized for solo 
+# development, combining YAML-based configuration with environment variables
+# and adding developer-friendly features like automatic reload and profiles.
+# Last updated: 2025-01-16
 
-This module provides a streamlined configuration system optimized for solo development.
-It combines YAML-based configuration with environment variables and adds developer-friendly
-features like automatic reload, configuration overrides, and profile support.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import copy
 import json
 import logging
@@ -13,13 +16,21 @@ import os
 import time
 from typing import Any, Dict, Optional
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import yaml
 from dotenv import load_dotenv
 
-# Setup logger
-logger = logging.getLogger("NewsBot")
+# =============================================================================
+# Local Application Imports
+# =============================================================================
+from src.utils.base_logger import base_logger as logger
 
 
+# =============================================================================
+# Simple Configuration Manager Main Class
+# =============================================================================
 class SimpleConfig:
     """
     Simplified configuration manager optimized for solo development.
@@ -47,6 +58,9 @@ class SimpleConfig:
         self._active_profile = None
         self._runtime_overrides = {}
 
+    # =========================================================================
+    # Configuration Loading Methods
+    # =========================================================================
     def load(self, profile=None, config_file=None):
         """
         Load configuration from file with optional profile support.
@@ -132,6 +146,9 @@ class SimpleConfig:
             self._config = {}
             return False
 
+    # =========================================================================
+    # Configuration Processing Methods
+    # =========================================================================
     def _substitute_env_vars(self, config_dict):
         """
         Recursively substitute environment variables in configuration.
@@ -179,6 +196,9 @@ class SimpleConfig:
                 # Override or add value
                 base[key] = value
 
+    # =========================================================================
+    # Configuration Monitoring Methods
+    # =========================================================================
     def check_for_changes(self):
         """
         Check if the configuration file has changed and reload if necessary.

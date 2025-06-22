@@ -1,9 +1,14 @@
-"""
-Role-Based Access Control Module
+# =============================================================================
+# NewsBot Role-Based Access Control Module
+# =============================================================================
+# This module provides RBAC functionality for command and resource access 
+# control, including role management, permission management, access control 
+# checks, role hierarchy, and permission inheritance.
+# Last updated: 2025-01-16
 
-This module provides RBAC functionality for command and resource access control.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import logging
 import os
 import traceback
@@ -11,13 +16,22 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import discord
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
 # Use the same base logger as the rest of the bot for consistent formatting
 from src.utils.base_logger import base_logger as rbac_logger
 from src.utils.config import Config
 
 
+# =============================================================================
+# Permission Class
+# =============================================================================
 class Permission:
     """Represents a single permission."""
 
@@ -26,6 +40,9 @@ class Permission:
         self.description = description
 
 
+# =============================================================================
+# Role Class
+# =============================================================================
 class Role:
     """
     Represents a role with associated permissions.
@@ -54,16 +71,19 @@ class Role:
         return permission in self.permissions
 
 
+# =============================================================================
+# RBAC Manager Main Class
+# =============================================================================
 class RBACManager:
     """
     Manages role-based access control for the bot.
 
     Features:
-    - Role management
-    - Permission management
-    - Access control checks
-    - Role hierarchy
-    - Permission inheritance
+    - Role management with Discord integration
+    - Permission management and assignment
+    - Access control checks for commands and resources
+    - Role hierarchy and permission inheritance
+    - Comprehensive permission system
     """
 
     def __init__(self):
@@ -79,6 +99,9 @@ class RBACManager:
         # Initialize default permissions
         self._setup_default_permissions()
 
+    # =========================================================================
+    # Initialization Methods
+    # =========================================================================
     async def initialize(self):
         """Initialize the RBAC system asynchronously."""
         try:
@@ -106,6 +129,9 @@ class RBACManager:
         for name, description in default_permissions.items():
             self.add_permission(name, description)
 
+    # =========================================================================
+    # Permission Management Methods
+    # =========================================================================
     def add_permission(self, name: str, description: str) -> None:
         """
         Add a new permission.
@@ -118,6 +144,9 @@ class RBACManager:
             self.permissions[name] = Permission(name, description)
             rbac_logger.info(f"Added permission: {name}")
 
+    # =========================================================================
+    # Role Management Methods
+    # =========================================================================
     def add_role(self, name: str, discord_role_id: int) -> None:
         """
         Add a new role.
@@ -168,6 +197,9 @@ class RBACManager:
             return True
         return False
 
+    # =========================================================================
+    # Access Control Methods
+    # =========================================================================
     def has_permission(self, member: discord.Member, permission: str) -> bool:
         """
         Check if a member has a specific permission through their roles.

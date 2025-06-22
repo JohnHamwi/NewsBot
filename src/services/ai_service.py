@@ -1,24 +1,37 @@
-"""
-AI Service
+# =============================================================================
+# NewsBot AI Service Module
+# =============================================================================
+# AI-related functionality including translation, title generation, and location
+# detection using OpenAI GPT models for comprehensive text processing
+# Last updated: 2025-01-16
 
-This service handles all AI-related functionality including translation
-and title generation for the NewsBot. Extracted from fetch_view.py.
-"""
-
+# =============================================================================
+# Standard Library Imports
+# =============================================================================
 import asyncio
 import os
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
 import openai
 
+# =============================================================================
+# Local Application Imports
+# =============================================================================
+from src.utils.ai_utils import call_chatgpt_for_news
 from src.utils import error_handler
 from src.utils.base_logger import base_logger as logger
 from src.utils.text_utils import remove_emojis
 
+# =============================================================================
+# AI Service Class
+# =============================================================================
 
 class AIService:
-    """Service for handling AI translation and title generation."""
+    """Service for handling AI translation, title generation, and location detection."""
 
     def __init__(self, bot):
         """Initialize the AI service with bot instance."""
@@ -30,16 +43,16 @@ class AIService:
 
     async def process_text_with_ai(
         self, arabic_text: str, timeout: int = 60
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
-        Process Arabic text with AI to generate English translation and title.
+        Process Arabic text with AI to generate English translation, title, and location.
 
         Args:
             arabic_text: The Arabic text to process
             timeout: AI processing timeout in seconds
 
         Returns:
-            Tuple of (english_translation, ai_title) or (None, None) if failed
+            Tuple of (english_translation, ai_title, location) or (None, None, None) if failed
         """
         try:
             return await asyncio.wait_for(
@@ -47,7 +60,7 @@ class AIService:
             )
         except asyncio.TimeoutError:
             self.logger.error(f"[AI] AI processing timed out after {timeout} seconds")
-            return None, None
+            return None, None, None
         except Exception as e:
             self.logger.error(f"[AI] AI processing failed: {str(e)}")
             await error_handler.send_error_embed(
@@ -56,29 +69,107 @@ class AIService:
                 context=f"Text length: {len(arabic_text)} characters",
                 bot=self.bot,
             )
-            return None, None
+            return None, None, None
 
     async def _process_text_internal(
         self, arabic_text: str
-    ) -> Tuple[Optional[str], Optional[str]]:
-        """Internal AI processing logic."""
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """Internal AI processing logic using enhanced AI utils."""
         try:
             # Clean the Arabic text first
             cleaned_text = self._clean_arabic_text(arabic_text)
 
             if not cleaned_text.strip():
                 self.logger.warning("[AI] No text to process after cleaning")
-                return None, None
+                return None, None, None
 
-            # Generate translation and title
-            english_translation = await self._translate_to_english(cleaned_text)
-            ai_title = await self._generate_title(english_translation or cleaned_text)
+            # Use the enhanced AI utils function for comprehensive processing
+            try:
+                # Convert AsyncOpenAI to regular OpenAI for compatibility
+                sync_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-            return english_translation, ai_title
+                ai_result = call_chatgpt_for_news(cleaned_text, sync_client, self.logger)
+
+                if ai_result and isinstance(ai_result, dict):
+                    english_translation = ai_result.get("translation")
+                    ai_title = ai_result.get("title", "أخبار سورية")
+                    location = ai_result.get("location", "Unknown")
+
+                    # Validate that we got meaningful results
+                    if english_translation and english_translation.strip():
+                        self.logger.info(f"[AI] Enhanced AI processing completed - Location: {location}")
+                        return english_translation, ai_title, location
+                    else:
+                        self.logger.warning("[AI] Enhanced AI processing returned empty translation")
+                        return None, None, None
+                else:
+                    self.logger.warning("[AI] Enhanced AI processing returned invalid result")
+                    return None, None, None
+
+            except Exception as e:
+                self.logger.error(f"[AI] Enhanced AI processing failed, falling back to legacy method: {str(e)}")
+                # Fallback to legacy processing without location
+                english_translation = await self._translate_to_english(cleaned_text)
+                ai_title = await self._generate_title(english_translation or cleaned_text)
+                return english_translation, ai_title, "Unknown"
 
         except Exception as e:
             self.logger.error(f"[AI] Error in AI processing: {str(e)}")
             raise
+
+    def get_ai_result_comprehensive(self, arabic_text: str) -> Dict[str, Any]:
+        """
+        Get comprehensive AI analysis including location, ad detection, and Syria relevance.
+
+        Args:
+            arabic_text: The Arabic text to analyze
+
+        Returns:
+            Dictionary with analysis results
+        """
+        try:
+            cleaned_text = self._clean_arabic_text(arabic_text)
+
+            if not cleaned_text.strip():
+                return {
+                    "title": "News Update",
+                    "translation": "",
+                    "location": "Unknown",
+                    "is_ad": False,
+                    "is_syria_related": False
+                }
+
+            # Use the enhanced AI utils function
+            sync_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            result = call_chatgpt_for_news(cleaned_text, sync_client, self.logger)
+
+            # Ensure all required fields are present
+            if result and isinstance(result, dict):
+                return {
+                    "title": result.get("title", "أخبار سورية"),
+                    "translation": result.get("translation", ""),
+                    "location": result.get("location", "Unknown"),
+                    "is_ad": result.get("is_ad", False),
+                    "is_syria_related": result.get("is_syria_related", False)
+                }
+            else:
+                return {
+                    "title": "أخبار سورية",
+                    "translation": "AI processing failed",
+                    "location": "Unknown",
+                    "is_ad": False,
+                    "is_syria_related": False
+                }
+
+        except Exception as e:
+            self.logger.error(f"[AI] Comprehensive AI analysis failed: {str(e)}")
+            return {
+                "title": "أخبار سورية",
+                "translation": f"AI analysis failed: {str(e)}",
+                "location": "Unknown",
+                "is_ad": False,
+                "is_syria_related": False
+            }
 
     def _clean_arabic_text(self, text: str) -> str:
         """Clean Arabic text for AI processing."""
@@ -220,10 +311,7 @@ class AIService:
         if len(words) > 6:
             cleaned = " ".join(words[:6])
 
-        # Capitalize first letter
-        if cleaned:
-            cleaned = cleaned[0].upper() + cleaned[1:]
-
+        # Don't capitalize for Arabic text - just return as is
         return cleaned.strip()
 
     def extract_arabic_title(self, arabic_text: str, max_words: int = 5) -> str:
