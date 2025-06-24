@@ -370,8 +370,47 @@ class NewsBot(discord.Client):
             except Exception as e:
                 logger.warning(f"Could not load fetch commands: {e}")
 
-            logger.info("✅ Command structure with automation loaded successfully")
-            logger.info("🎯 Available: /news, /info, /utils, /status, /config, /admin + background automation")
+            # Load VPS remote administration commands
+            try:
+                from src.cogs.remote_admin import RemoteAdminCog
+                remote_admin_cog = RemoteAdminCog(self)
+                self.tree.add_command(remote_admin_cog.remote)
+                logger.info("✅ Remote administration commands loaded")
+            except Exception as e:
+                logger.warning(f"Could not load remote admin commands: {e}")
+
+            # Load mobile-optimized admin commands
+            try:
+                from src.cogs.mobile_admin import MobileAdminCog
+                mobile_admin_cog = MobileAdminCog(self)
+                self.tree.add_command(mobile_admin_cog.quick)
+                logger.info("✅ Mobile admin commands loaded")
+            except Exception as e:
+                logger.warning(f"Could not load mobile admin commands: {e}")
+
+            # Load emergency control commands
+            try:
+                from src.cogs.emergency_controls import EmergencyControlsCog
+                emergency_cog = EmergencyControlsCog(self)
+                self.tree.add_command(emergency_cog.emergency)
+                logger.info("✅ Emergency control commands loaded")
+            except Exception as e:
+                logger.warning(f"Could not load emergency control commands: {e}")
+
+            # Load notification system
+            try:
+                from src.cogs.notification_system import NotificationSystem
+                notification_cog = NotificationSystem(self)
+                self.tree.add_command(notification_cog.notify)
+                # Store reference for background notifications
+                self.notification_system = notification_cog
+                logger.info("✅ Notification system loaded")
+            except Exception as e:
+                logger.warning(f"Could not load notification system: {e}")
+                self.notification_system = None
+
+            logger.info("✅ Command structure with automation and VPS management loaded successfully")
+            logger.info("🎯 Available: /news, /info, /utils, /status, /config, /admin, /remote, /q, /emergency, /notify + background automation")
 
         except Exception as e:
             logger.error(f"❌ Error loading commands: {e}")

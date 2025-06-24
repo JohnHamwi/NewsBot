@@ -22,6 +22,7 @@
 - **🔒 Security Hardening** - Process isolation, resource limits, sandboxing
 - **🔧 Self-Healing Infrastructure** - Auto-recovery from common issues
 - **📈 Performance Optimization** - Memory management, connection pooling
+- **📱 Remote VPS Management** - Complete Discord-based mobile administration
 
 ### **🎯 Production Ready**
 - **99.9% Uptime** with auto-recovery mechanisms
@@ -158,11 +159,37 @@ python scripts/monitoring_dashboard.py
 
 ### **Discord Commands**
 ```
+# Admin Commands
 /admin system status     # Overall system health
 /admin system logs       # Recent bot logs  
 /admin system restart    # Remote bot restart
 /bot status             # Quick health check
 /news fetch             # Manual news fetch
+
+# Mobile Remote Management
+/q status               # Quick system status
+/q health               # Fast health check
+/q restart              # Quick bot restart
+/q logs                 # Recent logs
+/q backup               # Create backup
+
+# Full Remote Administration
+/remote status          # Detailed system status
+/remote resources       # CPU/Memory/Disk usage
+/remote logs [lines]    # View logs
+/remote backup          # Manual backup
+/remote health          # Comprehensive health check
+
+# Emergency Controls
+/emergency kill_high_cpu     # Kill high CPU processes
+/emergency force_restart     # Force bot restart
+/emergency clear_memory      # Emergency memory cleanup
+/emergency reboot_vps        # Full VPS reboot (last resort)
+
+# Notifications
+/notify settings        # View notification settings
+/notify test           # Send test notification
+/notify history        # View alert history
 ```
 
 ### **Health Monitoring**
@@ -248,6 +275,7 @@ python run.py --debug
 ## 📚 **Documentation**
 
 - **[VPS Deployment Guide](./VPS_24_7_DEPLOYMENT_GUIDE.md)** - Complete production setup
+- **[Remote VPS Management Guide](./REMOTE_VPS_MANAGEMENT_GUIDE.md)** - Discord-based mobile administration
 - **[Project Cleanup Summary](./PROJECT_CLEANUP_SUMMARY.md)** - Codebase organization
 - **[Test Documentation](./tests/README.md)** - Testing guidelines
 
