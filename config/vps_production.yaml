@@ -1,0 +1,192 @@
+# =============================================================================
+# NewsBot VPS Production Configuration
+# =============================================================================
+# Optimized for 24/7 VPS deployment with resource efficiency
+
+production:
+  # Bot Configuration
+  bot:
+    version: "4.5.0"
+    debug_mode: false
+    application_id: 1378540050006147114
+    guild_id: 1228455909827805308
+    admin_role_id: 1271183251041681501
+    admin_user_id: 259725211664908288
+    news_role_id: 1312489916764131390
+
+  # Channel Configuration
+  channels:
+    news: 1382112473423020062
+    errors: 1378781937279176774
+    logs: 1378553893083938957
+
+  # API Tokens
+  tokens:
+    discord: "YOUR_DISCORD_BOT_TOKEN_HERE"
+
+  # Telegram Configuration
+  telegram:
+    api_id: 23834972
+    api_hash: "f5f83a4c91b0f2f202ed3c730c3f7ef3"
+    bot_token: "7820027446:AAG1AJOKzqWgUEetXIcFjsJAzdsdlnVRKQE"
+
+  # OpenAI Configuration
+  openai:
+    api_key: "YOUR_OPENAI_API_KEY_HERE"
+
+  # VPS-Optimized Automation
+  automation:
+    enabled: true
+    interval_minutes: 180  # 3 hours - optimal for resource usage
+    startup_delay_minutes: 2  # Quick startup
+    primary_channels:
+      - "alekhbariahsy"
+      - "moraselalthawrah" 
+      - "shaamnetwork"
+    require_media: true
+    use_ai_filtering: true
+    batch_processing: true  # Process multiple messages together
+    max_concurrent_fetches: 3  # Limit concurrent operations
+
+  # Production Monitoring
+  monitoring:
+    # VPS Resource Monitoring
+    vps_monitoring:
+      enabled: true
+      check_interval: 300  # 5 minutes
+      alert_thresholds:
+        cpu_warning: 70.0
+        cpu_critical: 85.0
+        memory_warning: 75.0
+        memory_critical: 90.0
+        disk_warning: 80.0
+        disk_critical: 95.0
+      discord_webhook: ""  # Set your webhook URL
+      
+    # Metrics Collection (lightweight)
+    metrics:
+      port: 8000
+      collection_interval: 600  # 10 minutes (reduced for VPS)
+      history_retention_hours: 48  # Keep 2 days of data
+      
+    # Resource Optimization
+    resource_optimization:
+      enabled: true
+      memory_cleanup_interval: 1800  # 30 minutes
+      cache_cleanup_interval: 3600   # 1 hour
+      log_rotation_size_mb: 50
+      max_log_files: 10
+      
+    # Auto-Recovery
+    auto_recovery:
+      enabled: true
+      check_interval: 300  # 5 minutes
+      max_restart_attempts: 3
+      restart_cooldown: 900  # 15 minutes
+
+  # Optimized Logging
+  logging:
+    level: "INFO"  # Reduce log verbosity
+    file: "logs/newsbot-prod.log"
+    max_size_mb: 25  # Smaller log files
+    backup_count: 10
+    format: "compact"  # Use compact log format
+    # Reduce logging frequency for routine operations
+    filters:
+      - "heartbeat"
+      - "cache_hit"
+      - "routine_check"
+
+  # Performance Settings
+  performance:
+    # Connection pooling
+    connection_pool:
+      max_connections: 10
+      timeout_seconds: 30
+      retry_attempts: 3
+      
+    # API Rate Limiting
+    rate_limiting:
+      discord_requests_per_minute: 50
+      openai_requests_per_minute: 20
+      telegram_requests_per_minute: 30
+      
+    # Memory Management
+    memory_management:
+      max_cache_size_mb: 100
+      garbage_collection_interval: 1800  # 30 minutes
+      object_pool_size: 50
+      
+    # Async Optimization
+    async_settings:
+      max_concurrent_tasks: 10
+      task_timeout_seconds: 300
+      use_uvloop: true  # Use faster event loop if available
+
+  # Backup Configuration
+  backup:
+    enabled: true
+    interval_hours: 6  # Every 6 hours
+    retention_days: 30
+    compression: true
+    include_logs: false  # Don't backup logs to save space
+    webhook_notifications: true
+
+  # Security Hardening
+  security:
+    # File permissions
+    strict_permissions: true
+    log_sensitive_data: false
+    
+    # Process isolation
+    enable_sandbox: true
+    restrict_network_access: false  # Bot needs network access
+    
+    # Error handling
+    sanitize_error_messages: true
+    max_error_details: "minimal"
+
+  # Cache Configuration (optimized for VPS)
+  cache:
+    type: "json"  # Use JSON cache for simplicity
+    file_path: "data/botdata.json"
+    max_entries: 1000
+    cleanup_interval: 3600  # 1 hour
+    compression: true
+
+  # Circuit Breaker (more aggressive for stability)
+  circuit_breaker:
+    failure_threshold: 3  # Lower threshold
+    reset_timeout: 600    # 10 minutes
+    half_open_timeout: 120  # 2 minutes
+    
+  # Rich Presence (optimized)
+  rich_presence:
+    update_interval: 300  # 5 minutes (less frequent)
+    posted_duration: 1800  # 30 minutes
+    enable_detailed_status: false  # Reduce API calls
+
+  # Intelligence Services (VPS optimized)
+  intelligence:
+    priority_sources:
+      - "alekhbariahsy"
+      - "syrianobserver" 
+      - "orient_news"
+      - "sana_en"
+    
+    notifications:
+      always_ping_news_role: true
+      breaking_news_threshold: 0.8
+      
+    content_analysis:
+      quality_threshold: 0.7  # Higher threshold for VPS
+      similarity_threshold: 0.8
+      cache_size: 30  # Smaller cache
+      ai_timeout_seconds: 45  # Faster timeout
+      
+    # VPS-specific optimizations
+    vps_optimizations:
+      batch_ai_requests: true
+      cache_ai_responses: true
+      use_lightweight_models: true
+      max_concurrent_ai_requests: 2 

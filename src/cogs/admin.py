@@ -13,7 +13,7 @@ import asyncio
 import logging
 import os
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 
 # =============================================================================
@@ -27,7 +27,7 @@ from discord.ext import commands
 # Local Application Imports
 # =============================================================================
 from src.components.embeds.base_embed import InfoEmbed, ErrorEmbed, SuccessEmbed, WarningEmbed
-from src.core.config_manager import config
+from src.core.unified_config import unified_config as config
 from src.utils.base_logger import base_logger as logger
 from src.utils.structured_logger import structured_logger
 from src.components.decorators.admin_required import admin_required
@@ -206,14 +206,8 @@ class AdminCommands(commands.Cog):
 
             # Add media info
             if hasattr(message, 'media') and message.media:
-                media_type = "Unknown"
-                if hasattr(message.media, 'photo') and message.media.photo:
-                    media_type = "📸 Photo"
-                elif hasattr(message.media, 'video') and message.media.video:
-                    media_type = "🎥 Video"
-                elif hasattr(message.media, 'document') and message.media.document:
-                    media_type = "📄 Document"
-
+                media_type = self._detect_media_type(message.media)
+                
                 embed.add_field(
                     name="🖼️ Media",
                     value=media_type,
@@ -249,6 +243,96 @@ class AdminCommands(commands.Cog):
         except Exception as e:
             logger.error(f"[MANUAL-FETCH] Error creating preview: {e}")
             raise
+
+    def _detect_media_type(self, media) -> str:
+        """Detect media type with comprehensive checking."""
+        try:
+            # Check for photo
+            if hasattr(media, 'photo') and media.photo:
+                return "📸 Photo"
+            
+            # Check for video
+            if hasattr(media, 'video') and media.video:
+                return "🎥 Video"
+            
+            # Check for document (which includes many file types)
+            if hasattr(media, 'document') and media.document:
+                document = media.document
+                
+                # Check document attributes for more specific type
+                if hasattr(document, 'mime_type') and document.mime_type:
+                    mime_type = document.mime_type.lower()
+                    
+                    # Video formats
+                    if mime_type.startswith('video/'):
+                        return "🎥 Video"
+                    # Image formats
+                    elif mime_type.startswith('image/'):
+                        return "📸 Image"
+                    # Audio formats
+                    elif mime_type.startswith('audio/'):
+                        return "🎵 Audio"
+                    # Text/document formats
+                    elif mime_type in ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
+                        return "📄 Document"
+                    # Archive formats
+                    elif mime_type in ['application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed']:
+                        return "🗜️ Archive"
+                    else:
+                        return "📎 File"
+                
+                # Check file name/extension if mime_type not available
+                if hasattr(document, 'file_name') and document.file_name:
+                    file_name = document.file_name.lower()
+                    
+                    # Video extensions
+                    if any(file_name.endswith(ext) for ext in ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv']):
+                        return "🎥 Video"
+                    # Image extensions
+                    elif any(file_name.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']):
+                        return "📸 Image"
+                    # Audio extensions
+                    elif any(file_name.endswith(ext) for ext in ['.mp3', '.wav', '.ogg', '.flac', '.aac']):
+                        return "🎵 Audio"
+                    # Document extensions
+                    elif any(file_name.endswith(ext) for ext in ['.pdf', '.doc', '.docx', '.txt', '.rtf']):
+                        return "📄 Document"
+                    # Archive extensions
+                    elif any(file_name.endswith(ext) for ext in ['.zip', '.rar', '.7z', '.tar', '.gz']):
+                        return "🗜️ Archive"
+                
+                return "📎 File"
+            
+            # Check for web page preview
+            if hasattr(media, 'webpage') and media.webpage:
+                return "🌐 Web Page"
+            
+            # Check for contact
+            if hasattr(media, 'contact') and media.contact:
+                return "👤 Contact"
+            
+            # Check for location/venue
+            if hasattr(media, 'geo') and media.geo:
+                return "📍 Location"
+            
+            # Check for poll
+            if hasattr(media, 'poll') and media.poll:
+                return "📊 Poll"
+            
+            # Check for game
+            if hasattr(media, 'game') and media.game:
+                return "🎮 Game"
+            
+            # Check for invoice
+            if hasattr(media, 'invoice') and media.invoice:
+                return "💰 Invoice"
+            
+            # If we have media but can't identify it, just say "Media" instead of "Unknown"
+            return "📎 Media"
+            
+        except Exception as e:
+            logger.debug(f"Error detecting media type: {e}")
+            return "📎 Media"
 
     # =========================================================================
     # Autocomplete Functions
@@ -583,6 +667,7 @@ class AdminCommands(commands.Cog):
                 if hasattr(self.bot, 'json_cache'):
                     active_channels = await self.bot.json_cache.list_telegram_channels("activated")
                     last_index = await self.bot.json_cache.get_last_channel_index()
+                    last_channel_name = await self.bot.json_cache.get_last_channel_name()
 
                     embed = InfoEmbed(
                         "🔄 Channel Rotation Status",
@@ -595,11 +680,16 @@ class AdminCommands(commands.Cog):
                         next_index = (last_index + 1) % len(active_channels) if active_channels else 0
                         next_channel = active_channels[next_index] if active_channels else "None"
 
+                        # Show both index-based and name-based tracking
+                        position_info = f"**Last Used (by index):** {current_channel} (index {last_index})\n"
+                        if last_channel_name:
+                            position_info += f"**Last Used (by name):** {last_channel_name}\n"
+                        position_info += f"**Next Channel:** {next_channel} (index {next_index})\n"
+                        position_info += f"**Total Channels:** {len(active_channels)}"
+
                         embed.add_field(
                             name="📍 Current Position",
-                            value=f"**Last Used:** {current_channel} (index {last_index})\n"
-                                  f"**Next Channel:** {next_channel} (index {next_index})\n"
-                                  f"**Total Channels:** {len(active_channels)}",
+                            value=position_info,
                             inline=False
                         )
 
@@ -727,7 +817,7 @@ class AdminCommands(commands.Cog):
                     if success:
                         embed = SuccessEmbed(
                             "⏰ Interval Updated",
-                            f"Auto-post interval set to {value} minutes and saved to botdata.json."
+                            f"Auto-post interval set to {value} minutes and saved to unified config."
                         )
                     else:
                         embed = ErrorEmbed(
@@ -741,7 +831,7 @@ class AdminCommands(commands.Cog):
                 if success:
                     embed = SuccessEmbed(
                         "🔄 Config Reloaded",
-                        "Automation configuration reloaded from botdata.json successfully."
+                        "Automation configuration reloaded from unified config successfully."
                     )
                 else:
                     embed = ErrorEmbed(
@@ -755,7 +845,7 @@ class AdminCommands(commands.Cog):
 
                 embed = InfoEmbed(
                     "⚙️ Advanced Automation Settings",
-                    "Current automation configuration from botdata.json"
+                    "Current automation configuration from unified config"
                 )
 
                 embed.add_field(
@@ -766,10 +856,19 @@ class AdminCommands(commands.Cog):
                     inline=False
                 )
 
+                # Get active channels for rotation
+                if hasattr(self.bot, 'json_cache'):
+                    active_channels = await self.bot.json_cache.list_telegram_channels("activated")
+                    channel_display = f"**Active Channels:** {', '.join(active_channels) if active_channels else 'None'}\n"
+                    channel_display += f"**Total Active:** {len(active_channels)}\n"
+                else:
+                    channel_display = "**Active Channels:** Unable to load\n"
+                
+                channel_display += f"**Max Posts/Session:** {config.get('max_posts_per_session', 'Unknown')}"
+
                 embed.add_field(
-                    name="📺 Channels",
-                    value=f"**Primary:** {', '.join(config.get('primary_channels', []))}\n"
-                          f"**Max Posts/Session:** {config.get('max_posts_per_session', 'Unknown')}",
+                    name="📺 Channel Rotation",
+                    value=channel_display,
                     inline=False
                 )
 
@@ -784,7 +883,7 @@ class AdminCommands(commands.Cog):
 
                 embed.add_field(
                     name="💡 Edit Configuration",
-                    value="Edit `data/botdata.json` → `automation_config` section\nThen use `/admin autopost reload` to apply changes",
+                    value="Edit `config/unified_config.yaml` → `automation` section\nThen use `/admin autopost reload` to apply changes",
                     inline=False
                 )
 
@@ -848,14 +947,15 @@ class AdminCommands(commands.Cog):
                         inline=True
                     )
 
-                # Channels
-                channels = status_info.get('primary_channels', [])
-                if channels:
-                    embed.add_field(
-                        name="📺 Monitoring",
-                        value=f"{len(channels)} channels: {', '.join(channels[:3])}{'...' if len(channels) > 3 else ''}",
-                        inline=True
-                    )
+                # Channels - show active channels instead of primary
+                if hasattr(self.bot, 'json_cache'):
+                    active_channels = await self.bot.json_cache.list_telegram_channels("activated")
+                    if active_channels:
+                        embed.add_field(
+                            name="📺 Active Channels",
+                            value=f"{len(active_channels)} channels: {', '.join(active_channels[:3])}{'...' if len(active_channels) > 3 else ''}",
+                            inline=True
+                        )
 
             await interaction.followup.send(embed=embed)
 
@@ -928,6 +1028,7 @@ class AdminCommands(commands.Cog):
     @app_commands.choices(
         operation=[
             app_commands.Choice(name="🔄 Restart Bot", value="restart"),
+            app_commands.Choice(name="🛑 Shutdown Bot", value="shutdown"),
             app_commands.Choice(name="🗑️ Clear Cache", value="clear_cache"),
             app_commands.Choice(name="🛡️ Health Check", value="health"),
             app_commands.Choice(name="📊 System Info", value="info"),
@@ -959,6 +1060,44 @@ class AdminCommands(commands.Cog):
 
                 # Implement restart logic here
                 logger.info("Bot restart requested by admin")
+
+            elif operation_value == "shutdown":
+                # Send confirmation embed first
+                embed = WarningEmbed(
+                    "🛑 Shutdown Initiated",
+                    "Bot shutdown has been requested by admin. The bot will now shut down gracefully."
+                )
+                embed.add_field(
+                    name="📊 Shutdown Process",
+                    value=(
+                        "✅ Stopping background tasks\n"
+                        "✅ Saving cache and data\n"
+                        "✅ Disconnecting services\n"
+                        "✅ Graceful shutdown"
+                    ),
+                    inline=False
+                )
+                embed.add_field(
+                    name="🔄 To Restart",
+                    value="Use your VPS management tools or SSH to restart the bot service.",
+                    inline=False
+                )
+                
+                await interaction.followup.send(embed=embed)
+                logger.warning(f"🛑 Bot shutdown requested by admin {interaction.user.id}")
+                
+                # Send shutdown notification to log channel if available
+                try:
+                    from src.bot.background_tasks import send_shutdown_notification
+                    await send_shutdown_notification(self.bot)
+                except Exception as e:
+                    logger.error(f"Failed to send shutdown notification: {e}")
+                
+                # Initiate graceful shutdown after a brief delay
+                await asyncio.sleep(2)  # Give time for the response to be sent
+                logger.info("🛑 Initiating graceful bot shutdown...")
+                await self.bot.close()
+                return  # Don't continue after shutdown
 
             elif operation_value == "clear_cache":
                 # Clear cache
@@ -1445,12 +1584,488 @@ class AdminCommands(commands.Cog):
             )
             await interaction.followup.send(embed=error_embed)
 
+    # =============================================================================
+    # Feature Management Commands
+    # =============================================================================
+    @commands.group(name='feature', invoke_without_command=True)
+    @commands.has_permissions(administrator=True)
+    async def feature_group(self, ctx):
+        """Feature management commands."""
+        from src.core.feature_manager import feature_manager
+        
+        embed = InfoEmbed(
+            "🎛️ Feature Management", 
+            "Use subcommands to manage bot features"
+        )
+        
+        embed.add_field(
+            name="📋 Available Commands",
+            value=(
+                "`!feature list` - List all features\n"
+                "`!feature status <name>` - Check feature status\n"
+                "`!feature enable <name>` - Enable a feature\n"
+                "`!feature disable <name>` - Disable a feature\n"
+                "`!feature report` - Generate feature report"
+            ),
+            inline=False
+        )
+        
+        # Quick stats
+        enabled_count = len(feature_manager.get_enabled_features())
+        disabled_count = len(feature_manager.get_disabled_features())
+        experimental_count = len(feature_manager.get_experimental_features())
+        
+        embed.add_field(
+            name="📊 Quick Stats",
+            value=f"✅ Enabled: {enabled_count}\n❌ Disabled: {disabled_count}\n🧪 Experimental: {experimental_count}",
+            inline=True
+        )
+        
+        await ctx.send(embed=embed)
+    
+    @feature_group.command(name='list')
+    @commands.has_permissions(administrator=True)
+    async def feature_list(self, ctx):
+        """List all available features."""
+        from src.core.feature_manager import feature_manager
+        
+        embed = InfoEmbed("🎛️ Feature List", "All available bot features")
+        
+        enabled_features = feature_manager.get_enabled_features()
+        disabled_features = feature_manager.get_disabled_features()
+        experimental_features = feature_manager.get_experimental_features()
+        
+        if enabled_features:
+            embed.add_field(
+                name="✅ Enabled Features",
+                value="\n".join([f"• {name}" for name in sorted(enabled_features)]),
+                inline=False
+            )
+        
+        if disabled_features:
+            embed.add_field(
+                name="❌ Disabled Features", 
+                value="\n".join([f"• {name}" for name in sorted(disabled_features)]),
+                inline=False
+            )
+        
+        if experimental_features:
+            embed.add_field(
+                name="🧪 Experimental Features",
+                value="\n".join([f"• {name}" for name in sorted(experimental_features)]),
+                inline=False
+            )
+        
+        await ctx.send(embed=embed)
+    
+    @feature_group.command(name='status')
+    @commands.has_permissions(administrator=True)
+    async def feature_status(self, ctx, feature_name: str):
+        """Check the status of a specific feature."""
+        from src.core.feature_manager import feature_manager
+        
+        feature = feature_manager.features.get(feature_name)
+        if not feature:
+            embed = ErrorEmbed("Feature Not Found", f"No feature named '{feature_name}' exists.")
+            await ctx.send(embed=embed)
+            return
+        
+        status = feature_manager.get_feature_status(feature_name)
+        is_enabled = feature_manager.is_enabled(feature_name)
+        
+        status_emoji = "✅" if is_enabled else "❌" if status == feature_manager.FeatureStatus.DISABLED else "🧪"
+        
+        embed = InfoEmbed(f"{status_emoji} Feature Status: {feature_name}", feature.description)
+        
+        embed.add_field(name="Status", value=status.value.title(), inline=True)
+        embed.add_field(name="Enabled", value="Yes" if is_enabled else "No", inline=True)
+        embed.add_field(name="Version Added", value=feature.version_added, inline=True)
+        
+        if feature.dependencies:
+            deps_status = []
+            for dep in feature.dependencies:
+                dep_enabled = feature_manager.is_enabled(dep)
+                deps_status.append(f"{'✅' if dep_enabled else '❌'} {dep}")
+            
+            embed.add_field(
+                name="Dependencies",
+                value="\n".join(deps_status),
+                inline=False
+            )
+        
+        if feature.config_requirements:
+            from src.core.unified_config import unified_config as config
+            config_status = []
+            for req in feature.config_requirements:
+                has_config = bool(config.get(req))
+                config_status.append(f"{'✅' if has_config else '❌'} {req}")
+            
+            embed.add_field(
+                name="Config Requirements",
+                value="\n".join(config_status),
+                inline=False
+            )
+        
+        await ctx.send(embed=embed)
+    
+    @feature_group.command(name='enable')
+    @commands.has_permissions(administrator=True)
+    async def feature_enable(self, ctx, feature_name: str):
+        """Enable a feature."""
+        from src.core.feature_manager import feature_manager
+        
+        if feature_manager.enable_feature(feature_name):
+            embed = SuccessEmbed("Feature Enabled", f"Successfully enabled feature '{feature_name}'")
+        else:
+            embed = ErrorEmbed("Enable Failed", f"Failed to enable feature '{feature_name}'. Check dependencies and config requirements.")
+        
+        await ctx.send(embed=embed)
+    
+    @feature_group.command(name='disable')
+    @commands.has_permissions(administrator=True)
+    async def feature_disable(self, ctx, feature_name: str):
+        """Disable a feature."""
+        from src.core.feature_manager import feature_manager
+        
+        if feature_manager.disable_feature(feature_name):
+            embed = SuccessEmbed("Feature Disabled", f"Successfully disabled feature '{feature_name}'")
+        else:
+            embed = ErrorEmbed("Disable Failed", f"Failed to disable feature '{feature_name}'. Check for dependent features.")
+        
+        await ctx.send(embed=embed)
+    
+    @feature_group.command(name='report')
+    @commands.has_permissions(administrator=True)
+    async def feature_report(self, ctx):
+        """Generate a comprehensive feature report."""
+        from src.core.feature_manager import feature_manager
+        
+        report = feature_manager.generate_feature_report()
+        
+        # Split long reports across multiple messages
+        if len(report) > 1900:
+            chunks = [report[i:i+1900] for i in range(0, len(report), 1900)]
+            for i, chunk in enumerate(chunks):
+                embed = InfoEmbed(
+                    f"📋 Feature Report (Part {i+1}/{len(chunks)})",
+                    f"```\n{chunk}\n```"
+                )
+                await ctx.send(embed=embed)
+        else:
+            embed = InfoEmbed("📋 Feature Report", f"```\n{report}\n```")
+            await ctx.send(embed=embed)
+
+    # =============================================================================
+    # Health Monitoring Commands
+    # =============================================================================
+    @commands.group(name='health', invoke_without_command=True)
+    @commands.has_permissions(administrator=True)
+    async def health_group(self, ctx):
+        """System health monitoring commands."""
+        embed = InfoEmbed(
+            "🏥 Health Monitoring", 
+            "System health and performance monitoring"
+        )
+        
+        embed.add_field(
+            name="📋 Available Commands",
+            value=(
+                "`!health check` - Run full health check\n"
+                "`!health status` - Quick health status\n"
+                "`!health metrics` - Performance metrics\n"
+                "`!health history` - Health check history"
+            ),
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+    
+    @health_group.command(name='check')
+    @commands.has_permissions(administrator=True)
+    async def health_check(self, ctx):
+        """Run a comprehensive health check."""
+        from src.monitoring.health_monitor import health_monitor
+        
+        if not health_monitor:
+            embed = ErrorEmbed("Health Monitor Unavailable", "Health monitor is not initialized.")
+            await ctx.send(embed=embed)
+            return
+        
+        # Send initial message
+        checking_embed = InfoEmbed("🔄 Running Health Check", "Please wait while I check all systems...")
+        message = await ctx.send(embed=checking_embed)
+        
+        try:
+            # Run health check
+            health = await health_monitor.run_full_health_check()
+            
+            # Create health embed
+            health_embed = await health_monitor.create_health_embed(health)
+            
+            # Update message with results
+            await message.edit(embed=health_embed)
+            
+        except Exception as e:
+            error_embed = ErrorEmbed("Health Check Failed", f"Health check encountered an error: {str(e)}")
+            await message.edit(embed=error_embed)
+    
+    @health_group.command(name='status')
+    @commands.has_permissions(administrator=True)
+    async def health_status(self, ctx):
+        """Get quick health status."""
+        from src.monitoring.health_monitor import health_monitor
+        
+        if not health_monitor or not health_monitor.last_health_check:
+            embed = WarningEmbed("No Health Data", "No recent health check data available. Run `!health check` first.")
+            await ctx.send(embed=embed)
+            return
+        
+        health = health_monitor.last_health_check
+        
+        # Quick status embed
+        status_emoji = "✅" if health.overall_status.value == "healthy" else "⚠️" if health.overall_status.value == "warning" else "❌"
+        
+        embed = InfoEmbed(
+            f"{status_emoji} System Status: {health.overall_status.value.title()}",
+            f"Last checked: {health.last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        # Quick stats
+        healthy_count = len([c for c in health.checks if c.status.value == "healthy"])
+        total_checks = len(health.checks)
+        
+        embed.add_field(name="Health Checks", value=f"{healthy_count}/{total_checks} Passing", inline=True)
+        embed.add_field(name="Uptime", value=str(timedelta(seconds=int(health.uptime_seconds))), inline=True)
+        
+        # Top issues
+        issues = [c for c in health.checks if c.status.value in ["critical", "warning"]]
+        if issues:
+            issue_text = "\n".join([f"{'❌' if c.status.value == 'critical' else '⚠️'} {c.name}: {c.message}" for c in issues[:5]])
+            embed.add_field(name="Issues", value=issue_text, inline=False)
+        
+        await ctx.send(embed=embed)
+    
+    @health_group.command(name='metrics')
+    @commands.has_permissions(administrator=True)
+    async def health_metrics(self, ctx):
+        """Show performance metrics."""
+        from src.monitoring.health_monitor import health_monitor
+        
+        if not health_monitor:
+            embed = ErrorEmbed("Health Monitor Unavailable", "Health monitor is not initialized.")
+            await ctx.send(embed=embed)
+            return
+        
+        metrics = health_monitor.performance_metrics
+        
+        embed = InfoEmbed("📊 Performance Metrics", "Current system performance statistics")
+        
+        # API calls
+        api_calls = metrics['api_calls']
+        embed.add_field(
+            name="🔌 API Calls",
+            value=f"OpenAI: {api_calls['openai']}\nDiscord: {api_calls['discord']}\nTelegram: {api_calls['telegram']}",
+            inline=True
+        )
+        
+        # Errors
+        errors = metrics['errors']
+        total_errors = sum(errors.values())
+        embed.add_field(
+            name="❌ Errors",
+            value=f"Total: {total_errors}\nOpenAI: {errors['openai']}\nDiscord: {errors['discord']}\nTelegram: {errors['telegram']}\nGeneral: {errors['general']}",
+            inline=True
+        )
+        
+        # Success rates
+        total_posts = metrics['posts_successful'] + metrics['posts_failed']
+        post_success_rate = (metrics['posts_successful'] / total_posts * 100) if total_posts > 0 else 100
+        
+        total_translations = metrics['translations_successful'] + metrics['translations_failed']
+        translation_success_rate = (metrics['translations_successful'] / total_translations * 100) if total_translations > 0 else 100
+        
+        embed.add_field(
+            name="📈 Success Rates",
+            value=f"Posts: {post_success_rate:.1f}% ({metrics['posts_successful']}/{total_posts})\nTranslations: {translation_success_rate:.1f}% ({metrics['translations_successful']}/{total_translations})",
+            inline=True
+        )
+        
+        await ctx.send(embed=embed)
+
+    # =============================================================================
+    # Debug Commands
+    # =============================================================================
+    @commands.group(name='debug', invoke_without_command=True)
+    @commands.has_permissions(administrator=True)
+    async def debug_group(self, ctx):
+        """Advanced debugging commands."""
+        embed = InfoEmbed(
+            "🐛 Debug Tools", 
+            "Advanced debugging and troubleshooting tools"
+        )
+        
+        embed.add_field(
+            name="📋 Available Commands",
+            value=(
+                "`!debug config` - Validate configuration\n"
+                "`!debug features` - Check feature dependencies\n"
+                "`!debug api` - Test API connections\n"
+                "`!debug channels` - Verify channel access\n"
+                "`!debug permissions` - Check bot permissions"
+            ),
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+    
+    @debug_group.command(name='config')
+    @commands.has_permissions(administrator=True)
+    async def debug_config(self, ctx):
+        """Validate bot configuration."""
+        from src.core.config_validator import config_validator
+        from src.core.unified_config import unified_config as config
+        
+        # Run validation
+        is_valid = config_validator.validate_all(config._config)
+        report = config_validator.get_validation_report()
+        
+        status_emoji = "✅" if is_valid else "❌"
+        title = f"{status_emoji} Configuration Validation"
+        
+        embed = InfoEmbed(title, f"```\n{report}\n```")
+        await ctx.send(embed=embed)
+    
+    @debug_group.command(name='features')
+    @commands.has_permissions(administrator=True)
+    async def debug_features(self, ctx):
+        """Check feature dependencies."""
+        from src.core.feature_manager import feature_manager
+        
+        issues = feature_manager.validate_feature_dependencies()
+        
+        if not issues:
+            embed = SuccessEmbed("Feature Dependencies", "All feature dependencies are satisfied ✅")
+        else:
+            issue_text = "\n".join([f"• {issue}" for issue in issues])
+            embed = WarningEmbed("Feature Dependency Issues", issue_text)
+        
+        await ctx.send(embed=embed)
+    
+    @debug_group.command(name='api')
+    @commands.has_permissions(administrator=True)
+    async def debug_api(self, ctx):
+        """Test API connections."""
+        from src.core.unified_config import unified_config as config
+        import openai
+        
+        embed = InfoEmbed("🔌 API Connection Tests", "Testing external API connectivity")
+        
+        # Test OpenAI API
+        try:
+            api_key = config.get("openai.api_key")
+            if not api_key:
+                embed.add_field(name="❌ OpenAI API", value="API key not configured", inline=False)
+            else:
+                # Quick test (minimal cost)
+                client = openai.OpenAI(api_key=api_key)
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": "test"}],
+                    max_tokens=1
+                )
+                embed.add_field(name="✅ OpenAI API", value="Connection successful", inline=False)
+        except Exception as e:
+            embed.add_field(name="❌ OpenAI API", value=f"Error: {str(e)}", inline=False)
+        
+        # Test Discord API (already connected if this command works)
+        embed.add_field(name="✅ Discord API", value="Connection successful (bot is online)", inline=False)
+        
+        await ctx.send(embed=embed)
+    
+    @debug_group.command(name='channels')
+    @commands.has_permissions(administrator=True)
+    async def debug_channels(self, ctx):
+        """Verify channel access."""
+        from src.core.unified_config import unified_config as config
+        
+        embed = InfoEmbed("📺 Channel Access Verification", "Checking configured channel accessibility")
+        
+        guild = ctx.guild
+        channel_configs = {
+                            "news": config.get("discord.channels.news") or config.get("channels.news"),
+                "logs": config.get("discord.channels.logs") or config.get("channels.logs"),
+                "errors": config.get("discord.channels.errors") or config.get("channels.errors")
+        }
+        
+        for channel_name, channel_id in channel_configs.items():
+            if not channel_id:
+                embed.add_field(name=f"❌ {channel_name.title()} Channel", value="Not configured", inline=False)
+                continue
+            
+            channel = guild.get_channel(channel_id)
+            if not channel:
+                embed.add_field(name=f"❌ {channel_name.title()} Channel", value=f"Channel {channel_id} not found", inline=False)
+            else:
+                # Check permissions
+                permissions = channel.permissions_for(guild.me)
+                can_send = permissions.send_messages
+                can_embed = permissions.embed_links
+                
+                status = "✅" if can_send and can_embed else "⚠️"
+                perm_status = "Full access" if can_send and can_embed else f"Limited access (send: {can_send}, embed: {can_embed})"
+                
+                embed.add_field(
+                    name=f"{status} {channel_name.title()} Channel",
+                    value=f"{channel.mention} - {perm_status}",
+                    inline=False
+                )
+        
+        await ctx.send(embed=embed)
+    
+    @debug_group.command(name='permissions')
+    @commands.has_permissions(administrator=True)
+    async def debug_permissions(self, ctx):
+        """Check bot permissions."""
+        guild = ctx.guild
+        bot_member = guild.me
+        
+        embed = InfoEmbed("🔐 Bot Permissions Check", f"Permissions for {bot_member.mention}")
+        
+        # Check critical permissions
+        critical_perms = {
+            "send_messages": "Send Messages",
+            "embed_links": "Embed Links", 
+            "attach_files": "Attach Files",
+            "read_message_history": "Read Message History",
+            "manage_messages": "Manage Messages",
+            "create_public_threads": "Create Public Threads",
+            "send_messages_in_threads": "Send Messages in Threads"
+        }
+        
+        missing_perms = []
+        for perm_name, display_name in critical_perms.items():
+            has_perm = getattr(bot_member.guild_permissions, perm_name)
+            status = "✅" if has_perm else "❌"
+            embed.add_field(name=f"{status} {display_name}", value="Granted" if has_perm else "Missing", inline=True)
+            
+            if not has_perm:
+                missing_perms.append(display_name)
+        
+        if missing_perms:
+            embed.add_field(
+                name="⚠️ Missing Permissions",
+                value=f"The bot is missing: {', '.join(missing_perms)}",
+                inline=False
+            )
+        
+        await ctx.send(embed=embed)
+
 
 # =============================================================================
 # Manual Fetch Preview View
 # =============================================================================
 class ManualFetchPreview(discord.ui.View):
-    """View for manual fetch preview with post/download/blacklist buttons (same as ContentFilterView)."""
+    """View for manual fetch preview with post/download buttons."""
 
     def __init__(self, bot, message, channel: str, user_id: int):
         super().__init__(timeout=3600)  # 1 hour timeout
@@ -1459,16 +2074,21 @@ class ManualFetchPreview(discord.ui.View):
         self.channel = channel
         self.user_id = user_id
 
-        # Store message data for compatibility with ContentFilterView pattern
-        self.telegram_message = message
-        self.message_id = message.id
-
     @discord.ui.button(label="📤 Post Anyway", style=discord.ButtonStyle.success)
     async def post_anyway(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Post the message to the news channel."""
+        """Post the message manually without AI filtering."""
         try:
+            # Get config helper function
+            def get_config():
+                if hasattr(self.bot, 'unified_config') and self.bot.unified_config:
+                    return self.bot.unified_config.config_data
+                # Fallback to unified config import
+                from src.core.unified_config import unified_config
+                return unified_config.config_data
+            
             # Check if user is admin
-            admin_user_id = config.get("bot.admin_user_id")
+            config_data = get_config()
+            admin_user_id = config_data.get("bot", {}).get("admin_user_id")
             if not admin_user_id or interaction.user.id != int(admin_user_id):
                 await interaction.response.send_message("❌ Only admins can use this button.", ephemeral=True)
                 return
@@ -1625,13 +2245,21 @@ class ManualFetchPreview(discord.ui.View):
             logger.error(f"Error posting manual fetch: {e}")
             await interaction.followup.send(f"❌ Error posting message: {str(e)}", ephemeral=True)
 
-    @discord.ui.button(label="📥 Download Media", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="📥 Download Media", style=discord.ButtonStyle.secondary)
     async def download_media(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Download media from the message for manual review (same as ContentFilterView)."""
+        """Download media from the message for manual review."""
         try:
             # Check if user is admin
-            from src.core.config_manager import config
-            admin_user_id = config.get("bot.admin_user_id")
+            def get_config():
+                """Get config manager instance."""
+                if hasattr(self.bot, 'unified_config') and self.bot.unified_config:
+                    return self.bot.unified_config.config_data
+                # Fallback to unified config import
+                from src.core.unified_config import unified_config
+                return unified_config.config_data
+            
+            config_data = get_config()
+            admin_user_id = config_data.get("bot", {}).get("admin_user_id")
             if not admin_user_id or interaction.user.id != int(admin_user_id):
                 await interaction.response.send_message("❌ Only admins can download media.", ephemeral=True)
                 return
@@ -1639,82 +2267,99 @@ class ManualFetchPreview(discord.ui.View):
             await interaction.response.defer()
 
             # Check if we have message data with media
-            if not self.telegram_message or not hasattr(self.telegram_message, 'media') or not self.telegram_message.media:
+            if not self.message or not hasattr(self.message, 'media') or not self.message.media:
                 await interaction.followup.send("❌ No media found in this message.", ephemeral=True)
                 return
 
             # Import media service
-            from src.services.media_service import MediaService
-            import os
+            try:
+                from src.services.media_service import MediaService
+                import os
 
-            media_service = MediaService(self.bot)
+                media_service = MediaService(self.bot)
 
-            # Download media
-            media_files, temp_path = await media_service.download_media_with_timeout(
-                self.telegram_message, self.telegram_message.media
-            )
+                # Download media
+                media_files, temp_path = await media_service.download_media_with_timeout(
+                    self.message, self.message.media
+                )
 
-            if media_files:
-                # Send the media files to Discord
-                discord_files = []
-                for file_path in media_files:
-                    if os.path.exists(file_path):
-                        filename = os.path.basename(file_path)
-                        discord_files.append(discord.File(file_path, filename=filename))
-
-                if discord_files:
+                if media_files:
+                    # Create download notification
                     embed = discord.Embed(
-                        title="📥 Manual Fetch Media Downloaded",
-                        description=f"Media from manual fetch in **{self.channel}** for review.",
-                        color=0x3498db
+                        title="📥 Media Downloaded",
+                        description=f"Media from **{self.channel}** has been downloaded for manual review.",
+                        color=0x00FF00
                     )
-                    embed.add_field(name="Message ID", value=str(self.message_id), inline=True)
+                    embed.add_field(name="Message ID", value=str(self.message.id), inline=True)
                     embed.add_field(name="Downloaded by", value=f"<@{interaction.user.id}>", inline=True)
-                    embed.add_field(name="Files", value=f"{len(discord_files)} file(s)", inline=True)
+                    embed.add_field(name="Files", value=f"{len(media_files)} file(s)", inline=True)
 
-                    await interaction.followup.send(embed=embed, files=discord_files)
+                    # Try to attach the first file if it's small enough
+                    try:
+                        if media_files and len(media_files) > 0:
+                            file_path = media_files[0]
+                            if os.path.exists(file_path) and os.path.getsize(file_path) < 8 * 1024 * 1024:  # 8MB limit
+                                discord_file = discord.File(file_path)
+                                await interaction.followup.send(embed=embed, file=discord_file)
+                            else:
+                                embed.add_field(name="Note", value="File too large to attach to Discord", inline=False)
+                                await interaction.followup.send(embed=embed)
+                        else:
+                            await interaction.followup.send(embed=embed)
+                    except Exception as e:
+                        logger.warning(f"Could not attach file to Discord: {e}")
+                        await interaction.followup.send(embed=embed)
+
+                    logger.info(f"📥 [DOWNLOAD] Media downloaded by {interaction.user.id} from {self.channel}: {len(media_files)} files")
                 else:
-                    await interaction.followup.send("❌ No valid media files to send.", ephemeral=True)
+                    await interaction.followup.send("❌ Failed to download media files.", ephemeral=True)
 
-                # Cleanup
-                media_service.cleanup_media_files(media_files, temp_path)
-            else:
-                await interaction.followup.send("❌ Failed to download media from message.", ephemeral=True)
+            except Exception as e:
+                logger.error(f"Error downloading media: {e}")
+                await interaction.followup.send(f"❌ Error downloading media: {str(e)}", ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Error downloading media: {e}")
+            logger.error(f"Error in download media button: {e}")
             await interaction.followup.send(f"❌ Error downloading media: {str(e)}", ephemeral=True)
 
-    @discord.ui.button(label="🚫 Blacklist Channel", style=discord.ButtonStyle.danger)
-    async def blacklist_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Blacklist the channel that produced this content (same as ContentFilterView)."""
+    @discord.ui.button(label="🚫 Blacklist Post", style=discord.ButtonStyle.danger)
+    async def blacklist_post(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Blacklist the message to prevent future processing."""
         try:
             # Check if user is admin
-            from src.core.config_manager import config
-            admin_user_id = config.get("bot.admin_user_id")
+            def get_config():
+                """Get config manager instance."""
+                if hasattr(self.bot, 'unified_config') and self.bot.unified_config:
+                    return self.bot.unified_config.config_data
+                # Fallback to unified config import
+                from src.core.unified_config import unified_config
+                return unified_config.config_data
+            
+            config_data = get_config()
+            admin_user_id = config_data.get("bot", {}).get("admin_user_id")
             if not admin_user_id or interaction.user.id != int(admin_user_id):
-                await interaction.response.send_message("❌ Only admins can blacklist channels.", ephemeral=True)
+                await interaction.response.send_message("❌ Only admins can blacklist posts.", ephemeral=True)
                 return
 
             await interaction.response.defer()
 
-            # Add channel to blacklist
+            # Add message ID to blacklist
             if hasattr(self.bot, 'json_cache') and self.bot.json_cache:
-                blacklisted_channels = await self.bot.json_cache.get("blacklisted_channels") or []
-                if self.channel not in blacklisted_channels:
-                    blacklisted_channels.append(self.channel)
-                    await self.bot.json_cache.set("blacklisted_channels", blacklisted_channels)
+                blacklisted_posts = await self.bot.json_cache.get("blacklisted_posts") or []
+                if self.message.id not in blacklisted_posts:
+                    blacklisted_posts.append(self.message.id)
+                    await self.bot.json_cache.set("blacklisted_posts", blacklisted_posts)
                     await self.bot.json_cache.save()
 
-                    # Update embed to show blacklisted
+                    # Create blacklist confirmation
                     embed = discord.Embed(
-                        title="🚫 Channel Blacklisted",
-                        description=f"Channel **{self.channel}** has been blacklisted via manual fetch.",
+                        title="🚫 Post Blacklisted",
+                        description=f"Message **{self.message.id}** from **{self.channel}** has been blacklisted.",
                         color=0xFF0000
                     )
-                    embed.add_field(name="Message ID", value=str(self.message_id), inline=True)
+                    embed.add_field(name="Message ID", value=str(self.message.id), inline=True)
+                    embed.add_field(name="Channel", value=self.channel, inline=True)
                     embed.add_field(name="Blacklisted by", value=f"<@{interaction.user.id}>", inline=True)
-                    embed.add_field(name="Reason", value="Manual blacklist action", inline=True)
 
                     # Disable all buttons
                     for item in self.children:
@@ -1723,15 +2368,15 @@ class ManualFetchPreview(discord.ui.View):
                     await interaction.followup.edit_message(interaction.message.id, view=self)
                     await interaction.followup.send(embed=embed)
 
-                    logger.warning(f"🚫 [BLACKLIST] Channel '{self.channel}' blacklisted by {interaction.user.id} via manual fetch")
+                    logger.info(f"🚫 [BLACKLIST] Manual fetch post {self.message.id} from {self.channel} blacklisted by {interaction.user.id}")
                 else:
-                    await interaction.followup.send(f"⚠️ Channel **{self.channel}** is already blacklisted.", ephemeral=True)
+                    await interaction.followup.send(f"⚠️ Message **{self.message.id}** is already blacklisted.", ephemeral=True)
             else:
                 await interaction.followup.send("❌ Cache not available for blacklisting.", ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Error blacklisting channel: {e}")
-            await interaction.followup.send(f"❌ Error blacklisting channel: {str(e)}", ephemeral=True)
+            logger.error(f"Error in blacklist button: {e}")
+            await interaction.followup.send(f"❌ Error blacklisting post: {str(e)}", ephemeral=True)
 
     async def on_timeout(self):
         """Called when the view times out."""

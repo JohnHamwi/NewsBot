@@ -1,22 +1,10 @@
-"""
-🔒 PROPRIETARY SOFTWARE - NEWSBOT CORE MODULE
-
-This is proprietary software developed for private use only.
-Unauthorized copying, distribution, or use is strictly prohibited.
-
-Copyright (c) 2025 NewsBot Project. All rights reserved.
-Syrian Discord News Aggregation Bot - CONFIDENTIAL
-"""
-
 # =============================================================================
-# NewsBot Core Module - PROPRIETARY
+# NewsBot Core Module
 # =============================================================================
 # A sophisticated Discord bot that aggregates news from Telegram channels,
 # translates Arabic content to English, and posts formatted news to Discord servers.
 #
-# CONFIDENTIAL - For authorized Syrian Discord server use only
-#
-# Features (PROPRIETARY):
+# Features:
 # - Real-time Telegram channel monitoring with intelligent analysis
 # - AI-powered Arabic to English translation and content processing
 # - Intelligent content filtering, cleaning, and quality assessment
@@ -25,6 +13,7 @@ Syrian Discord News Aggregation Bot - CONFIDENTIAL
 # - Comprehensive admin controls and monitoring systems
 # - Modern Discord.py 2.5+ slash commands and interactions
 # - Advanced error handling, recovery, and performance metrics
+#
 # Last updated: 2025-01-16
 
 # =============================================================================
@@ -42,6 +31,7 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 import traceback
+import time
 
 # =============================================================================
 # Third-Party Library Imports
@@ -60,13 +50,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # =============================================================================
 from src.cache.json_cache import JSONCache
 from src.components.decorators.performance_tracking import track_auto_post_performance
-from src.core.config_manager import config
+from src.core.unified_config import unified_config as config
 from src.monitoring.health_check import HealthCheckService
 from src.monitoring.performance_metrics import PerformanceMetrics
 from src.security.rbac import RBACManager
 from src.utils.base_logger import base_logger as logger
 from src.utils.error_handler import error_handler
-from src.utils.structured_logger import structured_logger
+from src.utils.logger import get_logger
+from src.utils.structured_logger import structured_logger, StructuredLogger
 from src.utils.task_manager import set_bot_instance, task_manager
 from src.utils.timezone_utils import now_eastern
 
@@ -143,6 +134,18 @@ class NewsBot(discord.Client):
         self.health_check: Optional[HealthCheckService] = None
         self.performance_metrics: Optional[PerformanceMetrics] = None
 
+        # Initialize logger with debug mode if enabled
+        debug_mode = config.get("bot", {}).get("debug_mode", False)
+        self.logger = get_logger("NewsBot", enable_debug_mode=debug_mode)
+        
+        if debug_mode:
+            self.logger.info("🐛 DEBUG MODE ENABLED - Enhanced logging active for testing phase")
+            # Set logger to debug level
+            import logging
+            self.logger.logger.setLevel(logging.DEBUG)
+            for handler in self.logger.logger.handlers:
+                handler.setLevel(logging.DEBUG)
+
         logger.info("🤖 NewsBot initialized with modern Discord.py 2.5+ architecture")
 
     # =========================================================================
@@ -209,8 +212,14 @@ class NewsBot(discord.Client):
             # Initialize monitoring systems
             await self._initialize_monitoring_systems()
 
+            # Initialize VPS optimizations for better performance
+            await self._initialize_vps_optimizations()
+
             # Initialize Telegram client if configured
             await self._initialize_telegram_client()
+            
+            # Initialize backup scheduler
+            await self._initialize_backup_scheduler()
 
         except Exception as e:
             logger.error(f"❌ Core system initialization failed: {e}")
@@ -259,6 +268,32 @@ class NewsBot(discord.Client):
             logger.warning(f"⚠️ Telegram client initialization failed: {e}")
             self.telegram_auth_failed = True
             # Continue without Telegram - bot can still function
+
+    async def _initialize_backup_scheduler(self) -> None:
+        """
+        Initialize automated backup scheduler for data protection.
+        
+        This system provides automated backups of bot data, configuration,
+        and logs on a configurable schedule with retention policies.
+        """
+        try:
+            from src.monitoring.backup_scheduler import integrate_backup_scheduler
+            
+            self.backup_scheduler = await integrate_backup_scheduler(self)
+            logger.info("✅ Automated backup scheduler initialized")
+            
+            # Log backup configuration
+            if hasattr(self.backup_scheduler, 'config'):
+                config = self.backup_scheduler.config
+                logger.info(f"🗄️ Backup schedule: every {config.backup_interval_hours}h, retention: {config.retention_days} days")
+            
+        except ImportError:
+            logger.warning("⚠️ Backup scheduler not available (missing dependencies)")
+            self.backup_scheduler = None
+        except Exception as e:
+            logger.warning(f"⚠️ Backup scheduler initialization failed: {e}")
+            self.backup_scheduler = None
+            # Continue without backup scheduler - not critical for basic operation
 
     async def _load_commands(self) -> None:
         """
@@ -430,124 +465,246 @@ class NewsBot(discord.Client):
 
     async def _load_auto_post_config(self) -> None:
         """
-        Load auto-posting configuration from cache/botdata.json.
+        Load auto-posting configuration from unified config.
 
-        This allows dynamic configuration changes without editing code.
-        Settings are stored in botdata.json under 'automation_config'.
+        This uses the unified configuration system for consistent settings.
         """
         try:
-            if not self.json_cache:
-                logger.warning("⚠️ JSON cache not available for auto-post config")
-                return
-
-            # Load automation settings from botdata.json
-            automation_config = await self.json_cache.get("automation_config")
+            # Load automation settings from unified config
+            automation_config = config.get_section("automation")
 
             if not automation_config:
-                # Create default automation config
-                default_config = {
+                logger.warning("⚠️ No automation config found in unified config")
+                # Use default values
+                automation_config = {
                     "enabled": True,
-                    "interval_minutes": 60,  # Default 1 hour
-                    "startup_delay_minutes": 2,
+                    "interval_minutes": 180,
+                    "startup_delay_minutes": 5,
                     "max_posts_per_session": 1,
-                    "primary_channels": ["alekhbariahsy"],
-                    "require_media": True,  # Always require media (no text-only posts)
+                    "require_media": True,
                     "require_text": True,
                     "min_content_length": 50,
-                    "use_ai_filtering": True,
-                    "use_safety_filtering": True,  # Enable graphic content filtering
-                    "filter_graphic_content": True,  # Block graphic/violent content
-                    "discord_safety_logging": True,  # Send safety decisions to Discord log channel
-                    "silent_mode": False,
-                    "notify_on_success": False,
-                    "notify_on_errors": True
+                    "use_ai_filtering": True
                 }
-
-                await self.json_cache.set("automation_config", default_config)
-                await self.json_cache.save()
-                automation_config = default_config
-                logger.info("📋 Created default automation configuration")
 
             # Apply automation settings
             self.automation_config = automation_config
 
             # Set auto-post interval from config
-            interval_minutes = automation_config.get("interval_minutes", 60)
+            interval_minutes = automation_config.get("interval_minutes", 180)
             self.set_auto_post_interval(interval_minutes)
 
             # Store startup delay
-            self.startup_grace_period_minutes = automation_config.get("startup_delay_minutes", 2)
+            self.startup_grace_period_minutes = automation_config.get("startup_delay_minutes", 5)
 
             logger.info(f"⚙️ Automation config loaded:")
             logger.info(f"   • Enabled: {automation_config.get('enabled', True)}")
             logger.info(f"   • Interval: {interval_minutes} minutes")
             logger.info(f"   • Startup delay: {self.startup_grace_period_minutes} minutes")
-            logger.info(f"   • Primary channels: {automation_config.get('primary_channels', [])}")
+            
+            # Get active channels for rotation instead of primary channels
+            if self.json_cache:
+                active_channels = await self.json_cache.list_telegram_channels("activated")
+                logger.info(f"   • Active channels for rotation: {active_channels}")
+                logger.info(f"   • Total active channels: {len(active_channels)}")
+            else:
+                logger.warning("   • Could not load active channels - cache not available")
+            
             logger.info(f"   • Require media: {automation_config.get('require_media', True)}")
             logger.info(f"   • AI filtering: {automation_config.get('use_ai_filtering', True)}")
 
-            # Load legacy auto-post config for backward compatibility
-            interval = await self.json_cache.get("auto_post_interval")
-            if interval:
-                self.auto_post_interval = interval
-                logger.debug(f"📅 Legacy auto-post interval: {interval} seconds")
-
-            last_post_time_str = await self.json_cache.get("last_post_time")
-            if last_post_time_str:
-                self.last_post_time = datetime.datetime.fromisoformat(last_post_time_str)
-                logger.debug(f"📅 Last post time: {self.last_post_time}")
+            # CRITICAL: Load last post time from cache (this ensures the bot remembers when it last posted)
+            if self.json_cache:
+                last_post_time_str = await self.json_cache.get("last_post_time")
+                if last_post_time_str:
+                    try:
+                        self.last_post_time = datetime.datetime.fromisoformat(last_post_time_str)
+                        logger.info(f"📅 Last post time loaded from cache: {self.last_post_time}")
+                        
+                        # Calculate time since last post
+                        time_since_last = (now_eastern() - self.last_post_time).total_seconds()
+                        interval_seconds = interval_minutes * 60
+                        
+                        if time_since_last < interval_seconds:
+                            # Still within interval, show when next post will be
+                            remaining_seconds = interval_seconds - time_since_last
+                            remaining_minutes = remaining_seconds / 60
+                            logger.info(f"⏰ Next post scheduled in {remaining_minutes:.1f} minutes")
+                        else:
+                            # Interval has passed, will post after grace period
+                            logger.info(f"📝 Ready to post (last post was {time_since_last/60:.1f} minutes ago)")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ Failed to parse last post time: {e}")
+                        self.last_post_time = None
+                else:
+                    logger.info("📅 No previous post time found - first run or cache cleared")
+                    self.last_post_time = None
+            else:
+                logger.warning("⚠️ Cannot load last post time - JSON cache not available")
+                self.last_post_time = None
 
         except Exception as e:
             logger.error(f"❌ Failed to load auto-post config: {e}")
             # Set safe defaults
-            self.automation_config = {"enabled": True, "interval_minutes": 60}
-            self.set_auto_post_interval(60)  # Default 1 hour
+            self.automation_config = {"enabled": True, "interval_minutes": 180}
+            self.set_auto_post_interval(180)  # Default 3 hours
 
     async def on_ready(self) -> None:
-        """
-        Event handler called when the bot is fully ready and connected.
-
-        This is called after successful login and initial setup completion.
-        """
+        """Handle bot startup and initialization."""
         try:
-            logger.info(f"🤖 {self.user} has connected to Discord!")
-
-            # Set up log channel
-            from src.utils.config import Config
-            if Config.LOG_CHANNEL_ID:
-                self.log_channel = self.get_channel(Config.LOG_CHANNEL_ID)
-                if not self.log_channel:
-                    logger.warning(f"⚠️ Could not find log channel with ID {Config.LOG_CHANNEL_ID}")
+            self.logger.info("=" * 50)
+            self.logger.info("🤖 NEWSBOT STARTUP SEQUENCE")
+            self.logger.info("=" * 50)
+            
+            # Initialize enhanced systems
+            await self._initialize_enhanced_systems()
+            
+            # Validate configuration
+            self._validate_startup_configuration()
+            
+            # Log bot information
+            self.logger.info(f"Bot User: {self.user.name}#{self.user.discriminator}")
+            self.logger.info(f"Bot ID: {self.user.id}")
+            
+            # Check guild access
+            guild_id = config.get("discord.guild_id")
+            guild = self.get_guild(guild_id)
+            if guild:
+                self.logger.info(f"Connected to Guild: {guild.name} ({guild.id})")
+                self.logger.info(f"Guild Members: {guild.member_count}")
             else:
-                logger.warning("⚠️ LOG_CHANNEL_ID not configured - startup notifications disabled")
-                self.log_channel = None
-
-            # Set up errors channel
-            if Config.ERRORS_CHANNEL_ID:
-                self.errors_channel = self.get_channel(Config.ERRORS_CHANNEL_ID)
-                if not self.errors_channel:
-                    logger.warning(f"⚠️ Could not find errors channel with ID {Config.ERRORS_CHANNEL_ID}")
-            else:
-                logger.warning("⚠️ ERRORS_CHANNEL_ID not configured - error alerts disabled")
-                self.errors_channel = None
-
-            # Log guild information
-            for guild in self.guilds:
-                logger.info(f"🏰 Connected to guild: {guild.name}")
-
-            # Send startup notification if log channel is available
-            if self.log_channel:
+                self.logger.error(f"Cannot access guild with ID: {guild_id}")
+            
+            # Load and display automation config
+            if self.json_cache:
                 try:
-                    from src.bot.background_tasks import send_startup_notification
-                    await send_startup_notification(self)
+                    automation_config = await self.json_cache.get("automation_config")
+                    if automation_config:
+                        active_channels = automation_config.get("active_channels", [])
+                        auto_post_interval = automation_config.get("intervals", {}).get("auto_post_minutes", 180)
+                        
+                        self.logger.info(f"Active channels for rotation: {len(active_channels)}")
+                        for channel in active_channels:
+                            self.logger.info(f"  • {channel}")
+                        self.logger.info(f"Auto-post interval: {auto_post_interval} minutes")
+                    else:
+                        self.logger.info("No automation config found in cache")
                 except Exception as e:
-                    logger.error(f"❌ Failed to send startup notification: {e}")
-
-            logger.info("✅ Bot is fully ready and operational")
-
+                    self.logger.warning(f"Failed to load automation config from cache: {e}")
+            else:
+                self.logger.warning("JSON cache not available")
+            
+            # Check feature status
+            self._log_feature_status()
+            
+            # Run initial health check
+            await self._run_initial_health_check()
+            
+            # Initialize rich presence
+            await self._initialize_rich_presence()
+            
+            self.logger.info("=" * 50)
+            self.logger.info("✅ NEWSBOT STARTUP COMPLETE")
+            self.logger.info("=" * 50)
+            
         except Exception as e:
-            logger.error(f"❌ Error in on_ready: {e}")
+            self.logger.error(f"❌ Startup failed: {e}")
+            import traceback
+            traceback.print_exc()
 
+    async def _initialize_enhanced_systems(self):
+        """Initialize enhanced debugging and monitoring systems."""
+        from src.utils.debug_logger import debug_logger
+        from src.monitoring.health_monitor import initialize_health_monitor
+        from src.core.feature_manager import feature_manager
+        
+        # Initialize debug logger
+        debug_logger.info("Initializing enhanced debugging system")
+        
+        # Initialize health monitor
+        health_monitor = initialize_health_monitor(self)
+        debug_logger.info("Initialized health monitoring system")
+        
+        # Log feature manager status
+        enabled_features = feature_manager.get_enabled_features()
+        disabled_features = feature_manager.get_disabled_features()
+        debug_logger.info(f"Feature manager loaded: {len(enabled_features)} enabled, {len(disabled_features)} disabled")
+        
+    def _validate_startup_configuration(self):
+        """Validate configuration during startup."""
+        from src.core.config_validator import config_validator
+        from src.utils.debug_logger import debug_logger
+        
+        debug_logger.info("Running startup configuration validation")
+        
+        is_valid = config_validator.validate_all(config.config_data)
+        if not is_valid:
+            self.logger.warning("⚠️ Configuration validation found issues:")
+            for error in config_validator.errors:
+                self.logger.warning(f"  • {error}")
+            for warning in config_validator.warnings:
+                self.logger.warning(f"  • {warning}")
+        else:
+            self.logger.info("✅ Configuration validation passed")
+    
+    def _log_feature_status(self):
+        """Log the status of key features."""
+        from src.core.feature_manager import feature_manager
+        
+        self.logger.info("🎛️ Feature Status:")
+        
+        # Key features to check
+        key_features = [
+            "auto_posting", "ai_translation", "ai_categorization", 
+            "location_detection", "news_role_pinging", "forum_tags"
+        ]
+        
+        for feature_name in key_features:
+            status = "✅" if feature_manager.is_enabled(feature_name) else "❌"
+            self.logger.info(f"  {status} {feature_name}")
+        
+        # Check dependencies
+        issues = feature_manager.validate_feature_dependencies()
+        if issues:
+            self.logger.warning("⚠️ Feature dependency issues found:")
+            for issue in issues:
+                self.logger.warning(f"  • {issue}")
+    
+    async def _run_initial_health_check(self):
+        """Run an initial health check during startup."""
+        from src.monitoring.health_monitor import health_monitor
+        from src.utils.debug_logger import debug_logger
+        
+        if health_monitor:
+            try:
+                self.logger.info("🏥 Running initial health check...")
+                health = await health_monitor.run_full_health_check()
+                
+                healthy_count = len([c for c in health.checks if c.status.value == "healthy"])
+                total_checks = len(health.checks)
+                
+                self.logger.info(f"Health check complete: {healthy_count}/{total_checks} systems healthy")
+                
+                # Log any critical issues
+                critical_issues = [c for c in health.checks if c.status.value == "critical"]
+                if critical_issues:
+                    self.logger.error("❌ Critical health issues found:")
+                    for issue in critical_issues:
+                        self.logger.error(f"  • {issue.name}: {issue.message}")
+                
+            except Exception as e:
+                debug_logger.error("Initial health check failed", error=e)
+        
+    async def _initialize_rich_presence(self):
+        """Initialize rich presence system."""
+        try:
+            from src.core.rich_presence import set_startup_presence
+            await set_startup_presence(self)
+            self.logger.info("✅ Rich presence initialized")
+        except Exception as e:
+            self.logger.error(f"Rich presence initialization failed: {e}")
+            
     async def on_application_command_error(
         self,
         interaction: discord.Interaction,
@@ -628,14 +785,39 @@ class NewsBot(discord.Client):
 
     def mark_just_posted(self) -> None:
         """
-        Mark that news was just posted for rich presence display.
+        Mark that news was just posted and update the last post time.
+        
+        This method is critical for the auto-posting interval system as it:
+        1. Records the exact time when content was posted (in Eastern timezone)
+        2. Sets the _just_posted flag for rich presence display
+        3. Automatically saves the updated time to persistent cache
+        
+        This ensures that the bot respects the configured posting interval
+        even across restarts and prevents duplicate posts.
+        
+        Called by:
+        - Delayed post completion (_schedule_delayed_post)
+        - Auto-post completion (auto_post_from_channel) 
+        - Manual post completion (via background task)
         """
+        # Record the exact post time in Eastern timezone for consistency
+        self.last_post_time = now_eastern()
+        
+        # Set flag for rich presence to show "just posted" status
         self._just_posted = True
-        logger.debug("📱 Marked as just posted for rich presence")
+        
+        logger.info(f"📅 Post time marked: {self.last_post_time}")
+        
+        # Save to cache immediately to persist across restarts
+        # This is crucial for interval respect after bot restarts
+        asyncio.create_task(self.save_auto_post_config())
 
     def should_wait_for_startup_delay(self) -> tuple[bool, int]:
         """
-        Check if auto-posting should wait due to startup grace period.
+        Check if we should wait for the startup grace period.
+
+        The startup grace period prevents auto-posting immediately after bot startup
+        to avoid posting duplicate content or posting during maintenance windows.
 
         Returns:
             Tuple of (should_wait, seconds_to_wait)
@@ -644,32 +826,48 @@ class NewsBot(discord.Client):
         """
         # If startup protection is manually disabled, allow posting immediately
         if not self.disable_auto_post_on_startup:
-            logger.debug("🚀 Startup protection disabled - auto-posting allowed")
+            # Only log this once every 5 minutes using a class variable with thread safety
+            now = time.time()
+            if not hasattr(NewsBot, '_last_startup_protection_log_time') or \
+               (now - getattr(NewsBot, '_last_startup_protection_log_time', 0)) > 300:
+                logger.debug("🚀 Startup protection disabled - auto-posting allowed")
+                NewsBot._last_startup_protection_log_time = now
             return False, 0
-
-        # If no startup time recorded, wait indefinitely
-        if not self.startup_time:
-            logger.debug("⚠️ No startup time recorded - waiting indefinitely")
-            return True, 0
 
         # Calculate time since startup
-        now = datetime.datetime.now(datetime.timezone.utc)
-        time_since_startup = (now - self.startup_time).total_seconds()
-        grace_period_seconds = self.startup_grace_period_minutes * 60
+        time_since_startup = (
+            datetime.datetime.now(datetime.timezone.utc) - self.startup_time
+        ).total_seconds()
 
-        logger.debug(f"🕐 Grace period check: startup_time={self.startup_time}, now={now}, "
-                    f"time_since_startup={time_since_startup:.1f}s, grace_period={grace_period_seconds}s")
-
-        # If still within grace period, return remaining time
-        if time_since_startup < grace_period_seconds:
-            seconds_remaining = int(grace_period_seconds - time_since_startup)
-            logger.debug(f"🛡️ Still in grace period: {seconds_remaining}s remaining")
-            return True, seconds_remaining
-        else:
-            # Grace period expired, automatically enable auto-posting
-            self.disable_auto_post_on_startup = False
-            logger.info("🚀 Startup grace period expired - auto-posting now enabled")
+        # If grace period has expired, allow posting
+        if time_since_startup >= self.startup_grace_period_minutes * 60:
+            # Only log this transition once using class variable
+            if not hasattr(NewsBot, '_grace_period_expired_logged'):
+                logger.info("🚀 Startup grace period expired - auto-posting now enabled")
+                NewsBot._grace_period_expired_logged = True
             return False, 0
+
+        # Still in grace period
+        seconds_remaining = int(self.startup_grace_period_minutes * 60 - time_since_startup)
+        
+        # Only log grace period status every 30 seconds
+        now = time.time()
+        if not hasattr(NewsBot, '_last_grace_period_log_time') or \
+           (now - getattr(NewsBot, '_last_grace_period_log_time', 0)) > 30:
+            logger.debug(
+                f"🕐 Grace period check: startup_time={self.startup_time}, "
+                f"now={datetime.datetime.now(datetime.timezone.utc)}, "
+                f"time_since_startup={time_since_startup:.1f}s, "
+                f"grace_period={self.startup_grace_period_minutes * 60}s, "
+                f"disable_auto_post_on_startup={self.disable_auto_post_on_startup}"
+            )
+            if seconds_remaining > 60:
+                logger.info(f"🛡️ Still in startup grace period: {seconds_remaining//60}m {seconds_remaining%60}s remaining (will not auto-post)")
+            else:
+                logger.info(f"🛡️ Still in startup grace period: {seconds_remaining}s remaining (will not auto-post)")
+            NewsBot._last_grace_period_log_time = now
+
+        return True, seconds_remaining
 
     async def save_auto_post_config(self) -> None:
         """
@@ -684,6 +882,7 @@ class NewsBot(discord.Client):
                         "last_post_time",
                         self.last_post_time.isoformat()
                     )
+                    logger.debug(f"💾 Last post time saved: {self.last_post_time}")
 
                 await self.json_cache.save()
                 logger.debug("💾 Auto-post configuration saved")
@@ -694,26 +893,38 @@ class NewsBot(discord.Client):
     @track_auto_post_performance
     async def fetch_and_post_auto(self, channel_name: str = None) -> bool:
         """
-        Fetch and post news automatically.
+        Fetch and post news automatically from specified Telegram channel.
 
-        This method is called by the background task system for automated posting.
-        It delegates to the FetchCog's implementation for the actual fetching and posting.
+        This method serves as the main entry point for automated news posting.
+        It delegates the actual fetching and processing to the FetchCommands
+        instance while handling validation and error cases.
 
         Args:
-            channel_name: Name of the Telegram channel to fetch from
+            channel_name (str): Name of the Telegram channel to fetch from.
+                              Must be an active channel configured in the system.
 
         Returns:
-            bool: True if posting was successful, False otherwise
+            bool: True if content was successfully fetched and posted,
+                  False if no suitable content found or operation failed.
+
+        Raises:
+            Exception: Logs errors but doesn't re-raise to avoid breaking
+                      the background task loop.
+
+        Note:
+            This method does NOT update last_post_time itself - that's handled
+            by the specific posting implementations (delayed_post, auto_post_from_channel)
+            to ensure consistent timing regardless of posting path.
         """
         try:
             logger.info(f"🔄 Starting auto-post for channel: {channel_name}")
 
-            # Channel name should always be provided by the rotation system
+            # Validate channel name is provided
             if not channel_name:
                 logger.error("❌ No channel name provided for auto-posting")
                 return False
 
-            # Check if Telegram client is available and connected
+            # Verify Telegram client is available and connected
             if not hasattr(self, 'telegram_client') or not self.telegram_client:
                 logger.warning("⚠️ Telegram client not available for auto-posting")
                 return False
@@ -722,20 +933,16 @@ class NewsBot(discord.Client):
                 logger.warning("⚠️ Telegram client not connected for auto-posting")
                 return False
 
-            # Get the FetchCommands instance to handle the actual fetching and posting
+            # Verify FetchCommands instance is available
             if not self.fetch_commands:
                 logger.error("⚠️ FetchCommands instance not found for auto-posting")
                 return False
 
-            # Delegate to the FetchCommands implementation
+            # Delegate to FetchCommands for actual posting logic
             logger.info(f"📡 Delegating auto-post to FetchCommands for channel: {channel_name}")
             result = await self.fetch_commands.fetch_and_post_auto(channel_name)
 
             if result:
-                # Update last post time and mark as posted
-                self.last_post_time = now_eastern()
-                await self.save_auto_post_config()
-                self.mark_just_posted()
                 logger.info(f"✅ Auto-post completed successfully for {channel_name}")
             else:
                 logger.info(f"ℹ️ No suitable content found in {channel_name}")
@@ -784,6 +991,14 @@ class NewsBot(discord.Client):
                 logger.warning("🛑 Health check shutdown timeout")
             except Exception as e:
                 logger.error(f"❌ Error stopping health check: {e}")
+            
+            # Stop backup scheduler
+            try:
+                if self.backup_scheduler:
+                    self.backup_scheduler.stop_scheduler()
+                    logger.info("🗄️ Backup scheduler stopped")
+            except Exception as e:
+                logger.error(f"❌ Error stopping backup scheduler: {e}")
 
             # Disconnect Telegram client with timeout and error handling
             if self.telegram_client:
@@ -833,7 +1048,6 @@ class NewsBot(discord.Client):
                 - interval_minutes: int - Auto-posting interval in minutes
                 - startup_delay_minutes: int - Startup delay in minutes
                 - max_posts_per_session: int - Max posts per automation cycle
-                - primary_channels: list - List of primary channels to monitor
                 - require_media: bool - Require media in posts
                 - require_text: bool - Require text in posts
                 - min_content_length: int - Minimum content length
@@ -918,12 +1132,9 @@ class NewsBot(discord.Client):
 
     async def reload_automation_config(self) -> bool:
         """
-        Reload automation configuration from botdata.json.
-
-        This allows you to edit botdata.json manually and reload without restart.
-
-        Returns:
-            bool: True if reload was successful
+        Reload automation configuration from unified config.
+        
+        This allows you to edit unified_config.yaml manually and reload without restart.
         """
         try:
             logger.info("🔄 Reloading automation configuration...")
@@ -960,7 +1171,6 @@ class NewsBot(discord.Client):
                 "next_post_time": next_post_time.isoformat() if next_post_time else None,
                 "in_grace_period": in_grace_period,
                 "grace_remaining_seconds": grace_remaining,
-                "primary_channels": config.get("primary_channels", []),
                 "posts_today": 0,  # TODO: Implement post counting
                 "total_posts": 0,  # TODO: Implement total post counting
                 "last_error": None,  # TODO: Track last error
@@ -973,4 +1183,16 @@ class NewsBot(discord.Client):
             logger.error(f"❌ Failed to get automation status: {e}")
             return {"enabled": False, "error": str(e)}
 
-
+    async def _initialize_vps_optimizations(self) -> None:
+        """
+        Initialize VPS-specific optimizations for better performance and resource usage.
+        """
+        try:
+            from src.utils.vps_optimizer import start_vps_optimizations
+            await start_vps_optimizations(self)
+            logger.info("🔧 VPS optimizations initialized")
+        except ImportError:
+            logger.debug("⚠️ VPS optimizer not available")
+        except Exception as e:
+            logger.warning(f"⚠️ VPS optimization failed: {e}")
+            # Continue without VPS optimizations - not critical

@@ -26,15 +26,19 @@ from discord.ext import commands
 # =============================================================================
 from src.components.decorators.admin_required import admin_required
 from src.components.embeds.base_embed import ErrorEmbed, InfoEmbed, SuccessEmbed, WarningEmbed
-from src.core.config_manager import config
+# Configuration will be imported dynamically when needed
 from src.utils.base_logger import base_logger as logger
 from src.utils.structured_logger import structured_logger
 
 # =============================================================================
 # Configuration Constants
 # =============================================================================
-GUILD_ID = config.get("bot.guild_id") or 0
-ADMIN_ROLE_ID = config.get("bot.admin_role_id")
+# GUILD_ID and ADMIN_ROLE_ID will be set dynamically when needed
+
+def get_config():
+    """Get config manager instance when needed."""
+    from src.core.unified_config import unified_config as config
+    return config
 
 
 # =============================================================================
@@ -560,7 +564,7 @@ class StatusCommands(commands.Cog):
             telegram_info = (
                 f"**Status:** {telegram_status}\n"
                 f"**Client:** {'Active' if telegram_connected else 'Inactive'}\n"
-                f"**API Access:** {'Configured' if config.get('telegram.api_id') else 'Missing'}"
+                f"**API Access:** {'Configured' if get_config().get('telegram.api_id') else 'Missing'}"
             )
             embed.add_field(
                 name="📱 Telegram Service",
@@ -570,7 +574,7 @@ class StatusCommands(commands.Cog):
         
         if service in ["all", "openai"]:
             # OpenAI service status
-            openai_configured = bool(config.get("openai.api_key"))
+            openai_configured = bool(get_config().get("openai.api_key"))
             openai_status = "🟢 Available" if openai_configured else "🔴 Not configured"
             
             openai_info = (
@@ -607,7 +611,7 @@ class StatusCommands(commands.Cog):
                 services_health.append("✅ Discord API")
             if hasattr(self.bot, 'telegram_client'):
                 services_health.append("✅ Telegram")
-            if config.get("openai.api_key"):
+            if get_config().get("openai.api_key"):
                 services_health.append("✅ OpenAI")
             if hasattr(self.bot, 'json_cache'):
                 services_health.append("✅ Cache")
@@ -880,7 +884,7 @@ class StatusCommands(commands.Cog):
             return {
                 "discord": self.bot.is_ready(),
                 "telegram": hasattr(self.bot, 'telegram_client'),
-                "openai": bool(config.get("openai.api_key")),
+                "openai": bool(get_config().get("openai.api_key")),
                 "cache": hasattr(self.bot, 'json_cache'),
                 "autopost": hasattr(self.bot, 'auto_post_enabled') and self.bot.auto_post_enabled
             }
@@ -917,8 +921,8 @@ def setup_status_commands(bot):
     async def status_command(interaction: discord.Interaction) -> None:
         """Show bot status and system information."""
         # Check admin permissions
-        admin_role_id = config.get("bot.admin_role_id")
-        admin_user_id = config.get("bot.admin_user_id")
+        admin_role_id = get_config().get("bot.admin_role_id")
+        admin_user_id = get_config().get("bot.admin_user_id")
         
         is_admin = False
         if admin_user_id and interaction.user.id == int(admin_user_id):
@@ -1034,8 +1038,8 @@ def setup_status_commands(bot):
         """Display comprehensive monitoring and performance metrics."""
         try:
             # Check admin permissions
-            admin_role_id = config.get("bot.admin_role_id")
-            admin_user_id = config.get("bot.admin_user_id")
+            admin_role_id = get_config().get("bot.admin_role_id")
+            admin_user_id = get_config().get("bot.admin_user_id")
             
             is_admin = False
             if admin_user_id and interaction.user.id == int(admin_user_id):

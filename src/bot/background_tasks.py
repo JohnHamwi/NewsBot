@@ -14,6 +14,7 @@ import datetime
 import os
 import platform
 from typing import TYPE_CHECKING
+import time as time_module  # Import time module with alias to avoid scope issues
 
 # =============================================================================
 # Third-Party Library Imports
@@ -25,7 +26,7 @@ from discord.ext import commands
 # =============================================================================
 # Local Application Imports
 # =============================================================================
-from src.core.config_manager import config
+from src.core.unified_config import unified_config as config
 from src.utils import error_handler
 from src.utils.base_logger import base_logger as logger
 from src.utils.task_manager import task_manager
@@ -207,14 +208,14 @@ async def start_monitoring_tasks(bot: "NewsBot") -> None:
 # =============================================================================
 async def resource_monitor(bot: "NewsBot") -> None:
     """Monitor CPU and RAM usage and alert if thresholds are exceeded."""
-    from src.core.config_manager import config
+    from src.core.unified_config import unified_config as config
     
     # Load configuration
     alerts_enabled = config.get("monitoring.resource_alerts.enabled", True)
     cpu_threshold = config.get("monitoring.resource_alerts.cpu_threshold", 80.0)
     ram_threshold = config.get("monitoring.resource_alerts.ram_threshold", 70.0)
     check_interval = config.get("monitoring.resource_alerts.check_interval", 60)
-    admin_user_id = int(os.getenv("ADMIN_USER_ID", "0"))
+    admin_user_id = config.get("bot.admin_user_id", 0)
     
     process = psutil.Process()
 
@@ -418,54 +419,60 @@ async def rich_presence_task(bot: "NewsBot"):
                         else:
                             activity_name = f"🛡️ Grace period: {delay_seconds}s"
                         
+                        # Actually apply the grace period activity to the bot's presence
+                        activity = discord.Activity(type=discord.ActivityType.watching, name=activity_name)
+                        await bot.change_presence(status=discord.Status.online, activity=activity)
                         logger.debug(f"📱 Rich presence: Startup grace period - {seconds_to_wait}s remaining")
-                    # Calculate time until next post
-                    elif bot.auto_post_interval > 0 and bot.last_post_time:
-                        next_post = bot.last_post_time + datetime.timedelta(
-                            seconds=bot.auto_post_interval
-                        )
-                        time_until = next_post - now_eastern()
-
-                        logger.debug(
-                            f"🕐 Rich presence: interval={bot.auto_post_interval}s, "
-                            f"last_post={bot.last_post_time}, "
-                            f"time_until={time_until.total_seconds():.0f}s"
-                        )
-
-                        if time_until.total_seconds() > 0:
-                            hours = int(time_until.total_seconds() // 3600)
-                            minutes = int((time_until.total_seconds() % 3600) // 60)
-
-                            if bot._just_posted:
-                                activity_name = "📰 Just posted news!"
-                                bot._just_posted = False
-                                logger.debug("📱 Rich presence: Just posted news!")
-                            elif hours > 0:
-                                activity_name = f"⏰ Next post in {hours}h {minutes}m"
-                                logger.debug(
-                                    f"📱 Rich presence: Next post in {hours}h {minutes}m"
-                                )
-                            else:
-                                activity_name = f"⏰ Next post in {minutes}m"
-                                logger.debug(
-                                    f"📱 Rich presence: Next post in {minutes}m"
-                                )
-                        else:
-                            activity_name = "📰 Ready to post news"
-                            logger.debug("📱 Rich presence: Ready to post news")
+                    # Use the enhanced rich presence system
                     else:
-                        activity_name = "📰 Monitoring news channels"
-                        logger.debug(
-                            f"📱 Rich presence: Monitoring (interval={bot.auto_post_interval}, "
-                            f"last_post={bot.last_post_time})"
-                        )
-
-                    activity = discord.Activity(
-                        type=discord.ActivityType.watching, name=activity_name
-                    )
-                    await bot.change_presence(
-                        status=discord.Status.online, activity=activity
-                    )
+                        from src.core.rich_presence import set_automatic_presence
+                        
+                        # Calculate seconds until next post if automation is enabled
+                        seconds_until_next_post = 0
+                        automation_enabled = bot.automation_config.get('enabled', True) if hasattr(bot, 'automation_config') else True
+                        
+                        # Check if we're still in startup grace period (same as auto-post task)
+                        in_startup_grace, _ = bot.should_wait_for_startup_delay()
+                        
+                        if (automation_enabled and 
+                            bot.auto_post_interval > 0 and 
+                            bot.last_post_time and
+                            not in_startup_grace):
+                            
+                            # Calculate next post time
+                            next_post = bot.last_post_time + datetime.timedelta(seconds=bot.auto_post_interval)
+                            current_time = now_eastern()
+                            time_until = next_post - current_time
+                            
+                            # Only show countdown if next post is in the future
+                            if time_until.total_seconds() > 0:
+                                seconds_until_next_post = int(time_until.total_seconds())
+                                # Only log when the countdown changes by more than 60 seconds using class variable
+                                current_time_seconds = time_module.time()
+                                if not hasattr(bot.__class__, '_last_rich_presence_log_seconds') or \
+                                   abs(seconds_until_next_post - getattr(bot.__class__, '_last_rich_presence_log_seconds', 0)) > 60 or \
+                                   (current_time_seconds - getattr(bot.__class__, '_last_rich_presence_log_time', 0)) > 60:
+                                    logger.debug(f"📱 Rich presence: Next post in {seconds_until_next_post}s")
+                                    bot.__class__._last_rich_presence_log_seconds = seconds_until_next_post
+                                    bot.__class__._last_rich_presence_log_time = current_time_seconds
+                            else:
+                                # Post is overdue, should post soon
+                                seconds_until_next_post = 0
+                                current_time_seconds = time_module.time()
+                                if not hasattr(bot.__class__, '_last_rich_presence_overdue_log') or \
+                                   (current_time_seconds - bot.__class__._last_rich_presence_overdue_log) > 60:
+                                    logger.debug("📱 Rich presence: Post overdue, should post soon")
+                                    bot.__class__._last_rich_presence_overdue_log = current_time_seconds
+                        else:
+                            # Only log this once every 5 minutes using class variable
+                            current_time_seconds = time_module.time()
+                            if not hasattr(bot.__class__, '_last_rich_presence_no_automation_log') or \
+                               (current_time_seconds - bot.__class__._last_rich_presence_no_automation_log) > 300:
+                                logger.debug("📱 Rich presence: No automation or no last post time")
+                                bot.__class__._last_rich_presence_no_automation_log = current_time_seconds
+                        
+                        # Use the enhanced rich presence function
+                        await set_automatic_presence(bot, seconds_until_next_post)
 
                 elif bot.rich_presence_mode == "maintenance":
                     activity = discord.Activity(
@@ -476,7 +483,8 @@ async def rich_presence_task(bot: "NewsBot"):
                     )
                     logger.debug("📱 Rich presence: Maintenance mode")
 
-                await asyncio.sleep(30)  # Update every 30 seconds
+                # VPS OPTIMIZATION: Update presence every 60 seconds instead of 30 to reduce CPU
+                await asyncio.sleep(60)  # Update every minute
 
             except Exception as e:
                 logger.error(f"❌ Error updating rich presence: {str(e)}")
@@ -488,26 +496,76 @@ async def rich_presence_task(bot: "NewsBot"):
 
 
 async def auto_post_task(bot: "NewsBot"):
-    """Background task for automatic news posting."""
+    """
+    Background task for automatic news posting with interval management.
+    
+    This task continuously monitors the posting schedule and automatically
+    posts content from configured Telegram channels at the specified interval.
+    
+    Key Features:
+    - Respects startup grace period to prevent posting during initialization
+    - Enforces posting intervals to prevent spam (default: 3 hours)
+    - Handles manual verification delays for flagged content
+    - Implements channel rotation for fair distribution
+    - Comprehensive error handling and recovery
+    
+    Flow:
+    1. Check startup grace period (prevents posting for 5 minutes after restart)
+    2. Check manual verification delays (pauses auto-posting after flagged content)
+    3. Verify auto-posting is enabled (interval > 0)
+    4. Calculate time since last post vs required interval
+    5. If time elapsed >= interval, select next channel and attempt posting
+    6. If successful, update last_post_time via mark_just_posted()
+    
+    Args:
+        bot (NewsBot): The bot instance containing configuration and state
+        
+    Note:
+        This task runs indefinitely until the bot shuts down. It uses
+        asyncio.sleep() for timing control and error recovery.
+    """
     logger.info("🔄 Starting auto-post task")
 
     try:
         while True:
             try:
-                # Check if we should wait for startup grace period (always check this first)
+                # CRITICAL: Check startup grace period first
+                # This prevents any posting during the initial startup window
                 should_wait, seconds_to_wait = bot.should_wait_for_startup_delay()
                 if should_wait:
                     minutes_remaining = seconds_to_wait // 60
+                    seconds_remaining = seconds_to_wait % 60
                     logger.info(
-                        f"🛡️ Startup grace period active: {minutes_remaining}m {seconds_to_wait % 60}s remaining"
+                        f"🛡️ STARTUP GRACE PERIOD ACTIVE: {minutes_remaining}m {seconds_remaining}s remaining - AUTO-POSTING DISABLED"
                     )
-                    logger.debug(
-                        f"⏳ Auto-posting disabled until {minutes_remaining} minutes after startup"
+                    logger.info(
+                        f"⏳ Bot will not post any content until {minutes_remaining} minutes after startup"
                     )
-                    await asyncio.sleep(60)  # Check every minute
+                    await asyncio.sleep(30)  # Check every 30 seconds during grace period
                     continue
 
-                # Check if auto-posting is enabled
+                # Check for manual verification delay (activated after flagged content)
+                if hasattr(bot, '_manual_verification_delay_until') and 'auto_fetch' in bot._manual_verification_delay_until:
+                    now_utc = datetime.datetime.now(datetime.timezone.utc)
+                    delay_until = bot._manual_verification_delay_until['auto_fetch']
+                    
+                    if now_utc < delay_until:
+                        time_remaining = delay_until - now_utc
+                        minutes_remaining = int(time_remaining.total_seconds() // 60)
+                        logger.info(
+                            f"🛡️ MANUAL VERIFICATION DELAY ACTIVE: {minutes_remaining}m remaining - AUTO-POSTING DISABLED"
+                        )
+                        logger.info(
+                            f"⏳ Waiting for manual verification of flagged content - auto-posting resumes at {delay_until.strftime('%H:%M UTC')}"
+                        )
+                        await asyncio.sleep(60)  # Check every minute during delay
+                        continue
+                    else:
+                        # Delay period has expired, remove the restriction
+                        logger.info("🚀 Manual verification delay expired - auto-posting resumed")
+                        del bot._manual_verification_delay_until['auto_fetch']
+
+                # Check if auto-posting is enabled (interval must be > 0)
                 if bot.auto_post_interval <= 0:
                     logger.debug("⏸️ Auto-posting disabled, checking again in 5 minutes")
                     await asyncio.sleep(300)  # Check every 5 minutes
@@ -517,7 +575,7 @@ async def auto_post_task(bot: "NewsBot"):
                     f"🔍 Auto-post check: interval={bot.auto_post_interval}s, force_flag={bot.force_auto_post}"
                 )
 
-                # Check if it's time to post
+                # Calculate time since last post to determine if interval has elapsed
                 if bot.last_post_time:
                     time_since_last = (
                         now_eastern() - bot.last_post_time
@@ -526,28 +584,34 @@ async def auto_post_task(bot: "NewsBot"):
                         f"⏱️ Time since last post: {time_since_last:.0f}s (need {bot.auto_post_interval}s)"
                     )
 
+                    # Check if we need to wait longer before next post
                     if (
                         time_since_last < bot.auto_post_interval
                         and not bot.force_auto_post
                     ):
                         remaining = bot.auto_post_interval - time_since_last
-                        logger.debug(f"⏳ Not time yet, waiting {remaining:.0f}s more")
+                        remaining_minutes = remaining / 60
+                        logger.debug(f"⏳ Not time yet, waiting {remaining_minutes:.1f} minutes more")
                         await asyncio.sleep(60)  # Check every minute
                         continue
+                    else:
+                        logger.debug("📅 Ready to post - time interval met")
+                elif not bot.last_post_time:
+                    logger.debug("📅 No previous post time recorded - ready to post")
                 else:
-                    logger.debug("📅 No previous post time recorded - startup delay will apply")
+                    logger.debug("📅 Ready to post - all conditions met")
 
-                # Reset force flag if it was set
+                # Reset force flag if it was set (one-time override)
                 if bot.force_auto_post:
                     logger.info(
                         "🚀 Force auto-post flag detected - posting immediately"
                     )
                     bot.force_auto_post = False
 
-                # Trigger auto-post
+                # Begin auto-posting process
                 logger.info("🔄 Triggering automatic news post")
 
-                # Check if the fetch_and_post_auto method is available on the bot
+                # Verify the fetch_and_post_auto method is available
                 if not hasattr(bot, "fetch_and_post_auto"):
                     logger.error("❌ No fetch_and_post_auto method found on bot!")
                     await asyncio.sleep(300)  # Wait 5 minutes before retrying
@@ -555,10 +619,9 @@ async def auto_post_task(bot: "NewsBot"):
 
                 logger.debug("✅ Found fetch_and_post_auto method on bot")
 
-                # Try posting from active channels
-                post_successful = False
+                # Channel selection and posting attempt
                 try:
-                    # Get the next channel in rotation sequence
+                    # Get the next channel using rotation system for fairness
                     channel = await bot.json_cache.get_next_channel_for_rotation()
 
                     if not channel:
@@ -573,47 +636,38 @@ async def auto_post_task(bot: "NewsBot"):
 
                     logger.info(f"🔄 Using channel rotation - selected channel: {channel}")
 
-                    # Try posting from the selected channel
+                    # Attempt to fetch and post from the selected channel
                     try:
                         result = await bot.fetch_and_post_auto(channel)
                         if result:
-                            logger.info(f"✅ Successfully posted from {channel}")
-                            post_successful = True
+                            # IMPORTANT: Update last post time and mark content as posted
+                            # This ensures interval timing is properly maintained
+                            bot.mark_just_posted()  # Sets last_post_time and saves to cache
+                            
+                            # Update rich presence to show posting status
+                            from src.core.rich_presence import mark_content_posted
+                            await mark_content_posted(bot)
+                            
+                            logger.info(f"✅ Successfully posted from {channel} at {bot.last_post_time}")
+                            
+                            # Brief pause before next check to allow interval timing
+                            await asyncio.sleep(60)
                         else:
                             logger.info(f"ℹ️ No suitable content found in {channel}")
+                            # If no content found, wait before trying again
+                            await asyncio.sleep(300)  # Wait 5 minutes before next attempt
                     except Exception as e:
                         logger.error(f"❌ Failed to fetch from {channel}: {str(e)}")
                         # If this channel fails, we'll try the next one in the next cycle
                         # This prevents getting stuck on a broken channel
 
-                    if post_successful:
-                        bot.last_post_time = now_eastern()
-                        bot.mark_just_posted()
-                        logger.info("✅ Auto-post completed successfully")
-                        await bot.save_auto_post_config()
-                        
-                        # Sleep for the full interval after successful post
-                        logger.info(f"😴 Sleeping for {bot.auto_post_interval}s until next auto-post")
-                        await asyncio.sleep(bot.auto_post_interval)
-                        continue
-                    else:
-                        logger.info(f"ℹ️ No post made from {channel}, will try next channel in rotation on next cycle")
-
                 except Exception as e:
                     logger.error(f"❌ Auto-post failed: {str(e)}")
-                    import traceback
-
-                    logger.error(f"📋 Traceback: {traceback.format_exc()}")
-
-                logger.debug("😴 Auto-post cycle complete, sleeping for 1 minute")
-                await asyncio.sleep(60)  # Check every minute
+                    await asyncio.sleep(300)  # Wait 5 minutes on error
 
             except Exception as e:
-                logger.error(f"❌ Error in auto-post task: {str(e)}")
-                import traceback
-
-                logger.error(f"📋 Traceback: {traceback.format_exc()}")
-                await asyncio.sleep(300)  # Wait 5 minutes before retrying
+                logger.error(f"❌ Auto-post loop error: {str(e)}")
+                await asyncio.sleep(300)  # Wait 5 minutes on error
 
     except asyncio.CancelledError:
         logger.info("🔄 Auto-post task stopped")

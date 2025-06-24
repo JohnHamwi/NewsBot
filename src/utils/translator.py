@@ -22,11 +22,7 @@ from openai import OpenAI
 # =============================================================================
 # Local Application Imports
 # =============================================================================
-from src.utils.config import Config
-
-# =============================================================================
-# Local Application Imports (continued)
-# =============================================================================
+from src.core.unified_config import unified_config as config
 from src.utils.base_logger import base_logger as logger
 
 
@@ -47,11 +43,8 @@ class ChatGPTTranslator:
 
     def __init__(self):
         """Initialize the ChatGPT translator."""
-        self.client = (
-            OpenAI(api_key=Config.OPENAI_API_KEY)
-            if hasattr(Config, "OPENAI_API_KEY")
-            else None
-        )
+        api_key = config.get("openai.api_key")
+        self.client = OpenAI(api_key=api_key) if api_key else None
 
         # Fallback vocabulary for when API is unavailable
         self.fallback_vocabulary = {

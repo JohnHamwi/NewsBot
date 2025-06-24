@@ -47,6 +47,11 @@ async-timeout>=5.0.0            # Timeout utilities for async operations
 aiolimiter>=1.1.0               # Advanced async rate limiting
 
 # =============================================================================
+# Backup and Scheduling
+# =============================================================================
+schedule>=1.2.0                 # Task scheduling for automated backups
+
+# =============================================================================
 # Caching and Performance
 # =============================================================================
 aiocache>=0.12.3                # Async caching framework
@@ -63,8 +68,7 @@ memory-profiler>=0.61.0         # Memory usage profiling
 # Logging and Configuration
 # =============================================================================
 colorlog>=6.9.0                 # Colored logging output
-python-dotenv>=1.0.0            # Environment variable management
-environs>=11.0.0                # Environment variable parsing and validation
+# Environment variable packages removed - using pure YAML configuration
 
 # =============================================================================
 # Security and Authentication

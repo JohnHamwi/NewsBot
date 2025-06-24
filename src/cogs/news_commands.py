@@ -22,14 +22,14 @@ from discord.ext import commands
 # Local Application Imports
 # =============================================================================
 from src.components.embeds.base_embed import ErrorEmbed, InfoEmbed, SuccessEmbed
-from src.core.config_manager import config
+# Configuration will be accessed dynamically when needed
 from src.utils.base_logger import base_logger as logger
 from src.utils.structured_logger import structured_logger
 
 # =============================================================================
 # Configuration Constants
 # =============================================================================
-GUILD_ID = config.get("bot.guild_id") or 0
+# GUILD_ID will be set dynamically when needed
 
 
 # =============================================================================

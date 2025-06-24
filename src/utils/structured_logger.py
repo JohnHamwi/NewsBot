@@ -66,7 +66,7 @@ class StructuredLogger:
             name (str): Name of the logger
         """
         self.name = name
-        self.debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+        self.debug_mode = False  # Set via configuration if needed
 
     # =========================================================================
     # Message Formatting Methods

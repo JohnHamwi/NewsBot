@@ -32,10 +32,9 @@ from src.components.embeds.base_embed import (
     SuccessEmbed,
     WarningEmbed,
 )
-from src.core.config_manager import config
+# Configuration will be accessed dynamically when needed
 from src.utils import error_handler
 from src.utils.base_logger import base_logger as logger
-from src.utils.config import Config
 from src.utils.structured_logger import structured_logger
 
 # Import intelligence services
@@ -47,8 +46,7 @@ from .fetch_view import FetchView
 # =============================================================================
 # Configuration Constants
 # =============================================================================
-GUILD_ID = Config.GUILD_ID or 0
-ADMIN_USER_ID = Config.ADMIN_USER_ID or 0
+# GUILD_ID and ADMIN_USER_ID will be set dynamically when needed
 
 
 # =============================================================================
@@ -1066,242 +1064,492 @@ class FetchCommands(commands.Cog):
         Returns:
             bool: True if posting was successful, False otherwise
         """
-        try:
-            logger.info(f"🧠 [INTELLIGENT-FETCH] Starting enhanced auto-post for channel: {channel_name}")
-            
-            # Check if Telegram client is available
-            if not hasattr(self.bot, 'telegram_client') or not self.bot.telegram_client:
-                logger.warning("[INTELLIGENT-FETCH] Telegram client not available")
-                return False
-            
-            if not await self.bot.telegram_client.is_connected():
-                logger.warning("[INTELLIGENT-FETCH] Telegram client not connected")
-                return False
-            
-            # Get blacklisted message IDs
-            blacklisted_ids = await self.bot.json_cache.get("blacklisted_posts") or []
-            logger.debug(f"[INTELLIGENT-FETCH] Loaded {len(blacklisted_ids)} blacklisted message IDs")
-            
-            # Fetch messages from the channel
-            messages = await self.bot.telegram_client.get_messages(channel_name, limit=10)
-            messages_processed = len(messages)
-            logger.debug(f"[INTELLIGENT-FETCH] Fetched {messages_processed} messages from {channel_name}")
-            
-            # Track processed content for duplicate detection
-            processed_content = []
-            
-            for message in messages:
-                # Skip if message ID is blacklisted
-                if message.id in blacklisted_ids:
-                    logger.debug(f"[INTELLIGENT-FETCH] Skipping blacklisted message {message.id}")
-                    continue
+        # SPAM PREVENTION: Global posting lock
+        if not hasattr(self.bot, '_posting_lock'):
+            self.bot._posting_lock = asyncio.Lock()
+        
+        async with self.bot._posting_lock:
+            logger.info(f"🔒 [SPAM-PREVENTION] Acquired posting lock for {channel_name}")
+            try:
+                logger.info(f"🧠 [INTELLIGENT-FETCH] Starting enhanced auto-post for channel: {channel_name}")
                 
-                # Check if message has text (required for posting)
-                if not message.message:
-                    logger.debug(f"[INTELLIGENT-FETCH] Skipping message {message.id} - missing text")
-                    continue
-                
-                # Skip text-only posts (require media)
-                if not message.media:
-                    logger.debug(f"[INTELLIGENT-FETCH] Skipping message {message.id} - text-only post (media required)")
-                    continue
-                
-                # Check for photo or video media
-                has_photo = hasattr(message.media, 'photo') and message.media.photo
-                has_video = (
-                    (hasattr(message.media, 'document') and message.media.document and 
-                     hasattr(message.media.document, 'mime_type') and 
-                     message.media.document.mime_type and 
-                     message.media.document.mime_type.startswith('video/')) or
-                    (hasattr(message.media, 'video') and message.media.video) or
-                    (hasattr(message.media, 'file_reference') and message.media.file_reference)
-                )
-                
-                if not (has_photo or has_video):
-                    logger.debug(f"[INTELLIGENT-FETCH] Skipping message {message.id} - no suitable media")
-                    continue
-                
-                # Clean the message text
-                cleaned_text = message.message
-                if cleaned_text:
-                    # Apply text cleaning
-                    cleaned_text = remove_emojis(cleaned_text)
-                    cleaned_text = remove_links(cleaned_text)
-                    cleaned_text = remove_source_phrases(cleaned_text)
-                    cleaned_text = cleaned_text.strip()
-                
-                # Check if content should be skipped (basic blacklist)
-                if await self.should_skip_post(cleaned_text):
-                    logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - basic content filter")
-                    continue
-                
-                # 🧠 PHASE 1: NEWS INTELLIGENCE ANALYSIS
-                try:
-                    # Analyze urgency and importance
-                    news_analysis = await self.news_intelligence.analyze_urgency(
-                        content=cleaned_text,
-                        channel=channel_name,
-                        media=[message.media] if message.media else []
-                    )
-                    
-                    logger.info(f"📊 [INTELLIGENCE] Message {message.id}: {news_analysis.urgency_level.value} "
-                              f"(score: {news_analysis.urgency_score:.2f}, confidence: {news_analysis.confidence:.2f})")
-                    
-                    # Check if we should post immediately based on urgency
-                    should_post_immediately = await self.news_intelligence.should_post_immediately(news_analysis)
-                    posting_delay = await self.news_intelligence.get_posting_delay(news_analysis)
-                    
-                except Exception as e:
-                    logger.error(f"❌ [INTELLIGENCE] News analysis failed for message {message.id}: {e}")
-                    # Continue with basic processing
-                    news_analysis = None
-                    should_post_immediately = True
-                    posting_delay = 0
-                
-                # 🤖 PHASE 2: AI CONTENT ANALYSIS  
-                try:
-                    # Perform comprehensive AI analysis
-                    ai_processed = await self.ai_analyzer.process_content_intelligently(
-                        raw_content=cleaned_text,
-                        channel=channel_name,
-                        media=[message.media] if message.media else [],
-                        telegram_message=message,  # Pass telegram message for buttons
-                        message_id=message.id      # Pass message ID for reference
-                    )
-                    
-                    logger.info(f"🤖 [AI-ANALYSIS] Message {message.id}: {ai_processed.sentiment.sentiment.value} "
-                              f"| {ai_processed.categories.primary_category.value} "
-                              f"| Quality: {ai_processed.quality.overall_score:.2f} "
-                              f"| Safety: {ai_processed.safety.safety_level.value} "
-                              f"| Should post: {ai_processed.should_post}")
-                    
-                    # Check for safety filtering (most important)
-                    if ai_processed.safety.should_filter:
-                        logger.warning(f"🛡️ [SAFETY-FILTER] Skipping message {message.id} - content filtered for safety: {ai_processed.safety.safety_level.value}")
-                        logger.warning(f"🛡️ [SAFETY-FILTER] Safety issues: {ai_processed.safety.safety_issues}")
-                        # Add to blacklist to prevent future processing
-                        await _atomic_blacklist_add(self.bot, message.id)
+                # Check if Telegram client is available
+                if not hasattr(self.bot, 'telegram_client') or not self.bot.telegram_client:
+                    logger.warning("[INTELLIGENT-FETCH] Telegram client not available")
+                    return False
+
+                if not await self.bot.telegram_client.is_connected():
+                    logger.warning("[INTELLIGENT-FETCH] Telegram client not connected")
+                    return False
+
+                # Get blacklisted message IDs
+                blacklisted_ids = await self.bot.json_cache.get("blacklisted_posts") or []
+                logger.debug(f"[INTELLIGENT-FETCH] Loaded {len(blacklisted_ids)} blacklisted message IDs")
+
+                # Fetch messages from the channel (SPAM PREVENTION: Only 1 message at a time)
+                messages = await self.bot.telegram_client.get_messages(channel_name, limit=1)  # CRITICAL: Only 1 message to prevent spam
+                messages_processed = len(messages)
+                logger.debug(f"[INTELLIGENT-FETCH] Fetched {messages_processed} messages from {channel_name}")
+
+                # Track processed content for duplicate detection
+                processed_content = []
+
+                for message in messages:
+                    # Skip if message ID is blacklisted
+                    if message.id in blacklisted_ids:
+                        logger.debug(f"[INTELLIGENT-FETCH] Skipping blacklisted message {message.id}")
                         continue
-                    
-                    # Check if AI recommends posting
-                    if not ai_processed.should_post:
-                        logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - AI analysis recommends skip")
+
+                    # Get automation config to check requirements
+                    automation_config = getattr(self.bot, 'automation_config', {})
+                    require_media = automation_config.get('require_media', True)
+                    require_text = automation_config.get('require_text', True)
+
+                    # Check if message has text (if required)
+                    if require_text and not message.message:
+                        logger.debug(f"[INTELLIGENT-FETCH] Skipping message {message.id} - missing text (text required)")
                         continue
-                    
-                    # Check for duplicates
-                    if ai_processed.similarity_score > 0.8:
-                        logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - too similar to recent content (score: {ai_processed.similarity_score:.2f})")
+
+                    # Check for media requirement (only if required by config)
+                    if require_media and not message.media:
+                        logger.debug(f"[INTELLIGENT-FETCH] Skipping message {message.id} - text-only post (media required by config)")
                         continue
-                        
-                    # Use AI-processed content for posting
-                    final_content = ai_processed.translated_content
-                    
-                except Exception as e:
-                    logger.error(f"❌ [AI-ANALYSIS] Content analysis failed for message {message.id}: {e}")
-                    # Fall back to basic AI processing
-                    ai_processed = None
-                    final_content = cleaned_text
-                
-                # 🔄 LEGACY AI PROCESSING (fallback)
-                try:
-                    from src.services.ai_service import AIService
-                    
-                    # Initialize AI service with bot reference
-                    ai_service = AIService(self.bot)
-                    
-                    ai_result = ai_service.get_ai_result_comprehensive(final_content)
-                    if not ai_result:
-                        logger.warning(f"[INTELLIGENT-FETCH] Legacy AI processing failed for message {message.id}")
+
+                    # If media is present, check for suitable media types
+                    if message.media:
+                        # Check for photo or video media
+                        has_photo = hasattr(message.media, 'photo') and message.media.photo
+                        has_video = (
+                            (hasattr(message.media, 'document') and message.media.document and 
+                             hasattr(message.media.document, 'mime_type') and 
+                             message.media.document.mime_type and 
+                             message.media.document.mime_type.startswith('video/')) or
+                            (hasattr(message.media, 'video') and message.media.video) or
+                            (hasattr(message.media, 'file_reference') and message.media.file_reference)
+                        )
+
+                        if not (has_photo or has_video):
+                            logger.debug(f"[INTELLIGENT-FETCH] Skipping message {message.id} - no suitable media")
+                            continue
+
+                    # Clean the message text
+                    cleaned_text = message.message
+                    if cleaned_text:
+                        # Apply text cleaning
+                        cleaned_text = remove_emojis(cleaned_text)
+                        cleaned_text = remove_links(cleaned_text)
+                        cleaned_text = remove_source_phrases(cleaned_text)
+                        cleaned_text = cleaned_text.strip()
+
+                    # Check if content should be skipped (basic blacklist)
+                    if await self.should_skip_post(cleaned_text):
+                        logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - basic content filter")
                         continue
-                    
-                    # Check AI flags
-                    if ai_result.get('is_ad', False):
-                        logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - detected as advertisement")
+
+                    # 🧠 PHASE 1: NEWS INTELLIGENCE ANALYSIS
+                    try:
+                        # Analyze urgency and importance
+                        news_analysis = await self.news_intelligence.analyze_urgency(
+                            content=cleaned_text,
+                            channel=channel_name,
+                            media=[message.media] if message.media else []
+                        )
+
+                        logger.info(f"📊 [INTELLIGENCE] Message {message.id}: {news_analysis.urgency_level.value} "
+                                  f"(score: {news_analysis.urgency_score:.2f}, confidence: {news_analysis.confidence:.2f})")
+
+                        # Check if we should post immediately based on urgency
+                        should_post_immediately = await self.news_intelligence.should_post_immediately(news_analysis)
+                        posting_delay = await self.news_intelligence.get_posting_delay(news_analysis)
+
+                    except Exception as e:
+                        logger.error(f"❌ [INTELLIGENCE] News analysis failed for message {message.id}: {e}")
+                        # Continue with basic processing
+                        news_analysis = None
+                        should_post_immediately = True
+                        posting_delay = 0
+
+                    # 🤖 PHASE 2: AI CONTENT ANALYSIS  
+                    try:
+                        # Perform comprehensive AI analysis
+                        ai_processed = await self.ai_analyzer.process_content_intelligently(
+                            raw_content=cleaned_text,
+                            channel=channel_name,
+                            media=[message.media] if message.media else [],
+                            telegram_message=message,  # Pass telegram message for buttons
+                            message_id=message.id      # Pass message ID for reference
+                        )
+
+                        logger.info(f"🤖 [AI-ANALYSIS] Message {message.id}: {ai_processed.sentiment.sentiment.value} "
+                                  f"| {ai_processed.categories.primary_category.value} "
+                                  f"| Quality: {ai_processed.quality.overall_score:.2f} "
+                                  f"| Safety: {ai_processed.safety.safety_level.value} "
+                                  f"| Should post: {ai_processed.should_post}")
+
+                        # Check for safety filtering (most important)
+                        if ai_processed.safety.should_filter:
+                            logger.warning(f"🛡️ [SAFETY-FILTER] Skipping message {message.id} - content filtered for safety: {ai_processed.safety.safety_level.value}")
+                            logger.warning(f"🛡️ [SAFETY-FILTER] Safety issues: {ai_processed.safety.safety_issues}")
+                            # Add to blacklist to prevent future processing
+                            await _atomic_blacklist_add(self.bot, message.id)
+                            continue
+
+                        # Check if AI recommends posting
+                        if not ai_processed.should_post:
+                            logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - AI analysis recommends skip")
+                            continue
+
+                        # Check for duplicates
+                        if ai_processed.similarity_score > 0.8:
+                            logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - too similar to recent content (score: {ai_processed.similarity_score:.2f})")
+                            continue
+
+                        # Use AI-processed content for posting
+                        final_content = ai_processed.translated_content
+
+                    except Exception as e:
+                        logger.error(f"❌ [AI-ANALYSIS] Content analysis failed for message {message.id}: {e}")
+                        # Fall back to basic AI processing
+                        ai_processed = None
+                        final_content = cleaned_text
+
+                    # 🔄 LEGACY AI PROCESSING (fallback)
+                    try:
+                        from src.services.ai_service import AIService
+
+                        # Initialize AI service with bot reference
+                        ai_service = AIService(self.bot)
+
+                        ai_result = ai_service.get_ai_result_comprehensive(final_content)
+                        if not ai_result:
+                            logger.warning(f"[INTELLIGENT-FETCH] Legacy AI processing failed for message {message.id}")
+                            continue
+
+                        # Check AI flags
+                        if ai_result.get('is_ad', False):
+                            logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - detected as advertisement")
+                            continue
+
+                        if ai_result.get('is_not_syria', False):
+                            logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - not related to Syria")
+                            continue
+
+                        ai_title = ai_result.get('title', '')
+                        ai_english = ai_result.get('translation', ai_result.get('english', ''))
+                        ai_location = ai_result.get('location', 'Unknown')
+
+                    except Exception as e:
+                        logger.error(f"[INTELLIGENT-FETCH] Legacy AI processing error for message {message.id}: {e}")
                         continue
-                    
-                    if ai_result.get('is_not_syria', False):
-                        logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - not related to Syria")
-                        continue
-                    
-                    ai_title = ai_result.get('title', '')
-                    ai_english = ai_result.get('translation', ai_result.get('english', ''))
-                    ai_location = ai_result.get('location', 'Unknown')
-                    
-                except Exception as e:
-                    logger.error(f"[INTELLIGENT-FETCH] Legacy AI processing error for message {message.id}: {e}")
-                    continue
-                
-                # 📝 ENHANCED POSTING DECISION
-                try:
-                    # Always ping news role for all posts
-                    should_ping = True
-                    urgency_indicator = "📰"
-                    
-                    if news_analysis:
-                        urgency_indicator = await self.news_intelligence.format_urgency_indicator(news_analysis)
-                        if news_analysis.urgency_level == UrgencyLevel.BREAKING:
-                            logger.info(f"🚨 [BREAKING-NEWS] Message {message.id} will ping news role - breaking news detected!")
-                        else:
-                            logger.info(f"🔔 [NEWS-PING] Message {message.id} will ping news role - regular post")
-                    
-                    # Use only the AI title - let posting service add the single emoji
-                    enhanced_title = ai_title
-                    
-                    # Create enhanced FetchView with intelligence data
-                    fetch_view = FetchView(
-                        bot=self.bot,
-                        post=message,
-                        channelname=channel_name,
-                        message_id=message.id,
-                        media=message.media,
-                        arabic_text_clean=final_content,
-                        ai_english=ai_english,
-                        ai_title=enhanced_title,
-                        ai_location=ai_location,
-                        auto_mode=True,  # Important: enables auto mode
-                        # Pass intelligence data for enhanced posting
-                        urgency_level=news_analysis.urgency_level.value if news_analysis else "normal",
-                        should_ping_news=should_ping,
-                        content_category=ai_processed.categories.primary_category.value if ai_processed else "social",
-                        quality_score=ai_processed.quality.overall_score if ai_processed else 0.7
-                    )
-                    
-                    # Apply posting delay if needed
-                    if posting_delay > 0:
-                        logger.info(f"⏱️ [INTELLIGENT-FETCH] Delaying post by {posting_delay} seconds for message {message.id}")
-                        await asyncio.sleep(posting_delay)
-                    
-                    # Attempt to post
-                    post_success = await fetch_view.do_post_to_news()
-                    
-                    if post_success:
-                        # Add message ID to blacklist to prevent reposting
-                        await _atomic_blacklist_add(self.bot, message.id)
-                        
-                        # Log success with intelligence info
-                        success_msg = f"✅ [INTELLIGENT-FETCH] Successfully posted message {message.id} from {channel_name}"
+
+                    # 📝 ENHANCED POSTING DECISION
+                    try:
+                        # Always ping news role for all posts
+                        should_ping = True
+                        urgency_indicator = "📰"
+
                         if news_analysis:
-                            success_msg += f" | Urgency: {news_analysis.urgency_level.value}"
-                        if ai_processed:
-                            success_msg += f" | Category: {ai_processed.categories.primary_category.value}"
-                            success_msg += f" | Quality: {ai_processed.quality.overall_score:.2f}"
-                        if should_ping:
-                            success_msg += " | 🔔 NEWS ROLE PINGED"
-                            
-                        logger.info(success_msg)
-                        return True
-                    else:
-                        logger.warning(f"❌ [INTELLIGENT-FETCH] Failed to post message {message.id}")
+                            urgency_indicator = await self.news_intelligence.format_urgency_indicator(news_analysis)
+                            if news_analysis.urgency_level == UrgencyLevel.BREAKING:
+                                logger.info(f"🚨 [BREAKING-NEWS] Message {message.id} will ping news role - breaking news detected!")
+                            else:
+                                logger.info(f"🔔 [NEWS-PING] Message {message.id} will ping news role - regular post")
+
+                        # Use only the AI title - let posting service add the single emoji
+                        enhanced_title = ai_title
+
+                        # Create enhanced FetchView with intelligence data
+                        fetch_view = FetchView(
+                            bot=self.bot,
+                            post=message,
+                            channelname=channel_name,
+                            message_id=message.id,
+                            media=message.media,
+                            arabic_text_clean=final_content,
+                            ai_english=ai_english,
+                            ai_title=enhanced_title,
+                            ai_location=ai_location,
+                            auto_mode=True,  # Important: enables auto mode
+                            # Pass intelligence data for enhanced posting
+                            urgency_level=news_analysis.urgency_level.value if news_analysis else "normal",
+                            should_ping_news=should_ping,
+                            content_category=ai_processed.categories.primary_category.value if ai_processed else "social",
+                            quality_score=ai_processed.quality.overall_score if ai_processed else 0.7
+                        )
+
+                        # Apply posting delay if needed
+                        if posting_delay > 0:
+                            logger.info(f"⏱️ [INTELLIGENT-FETCH] Scheduling delayed post for message {message.id} in {posting_delay} seconds")
+
+                            # SPAM PREVENTION: Limit delayed posts to prevent overwhelming the system
+                            if not hasattr(self.bot, '_delayed_post_count'):
+                                self.bot._delayed_post_count = 0
+
+                            if self.bot._delayed_post_count >= 3:  # Maximum 3 delayed posts at once
+                                logger.warning(f"⚠️ [SPAM-PREVENTION] Too many delayed posts queued, skipping message {message.id}")
+                                continue
+
+                            self.bot._delayed_post_count += 1
+
+                            # Schedule the post for later execution (non-blocking)
+                            asyncio.create_task(self._schedule_delayed_post_with_cleanup(
+                                fetch_view, message.id, posting_delay, channel_name
+                            ))
+
+                            # Continue to next message without blocking
+                            continue
+
+                        # Attempt to post immediately
+                        post_success = await fetch_view.do_post_to_news()
+
+                        if post_success:
+                            # Add message ID to blacklist to prevent reposting
+                            await _atomic_blacklist_add(self.bot, message.id)
+
+                            # Log success with intelligence info
+                            success_msg = f"✅ [INTELLIGENT-FETCH] Successfully posted message {message.id} from {channel_name}"
+                            if news_analysis:
+                                success_msg += f" | Urgency: {news_analysis.urgency_level.value}"
+                            if ai_processed:
+                                success_msg += f" | Category: {ai_processed.categories.primary_category.value}"
+                                success_msg += f" | Quality: {ai_processed.quality.overall_score:.2f}"
+                            if should_ping:
+                                success_msg += " | 🔔 NEWS ROLE PINGED"
+
+                            logger.info(success_msg)
+                            return True
+                        else:
+                            logger.warning(f"❌ [INTELLIGENT-FETCH] Failed to post message {message.id}")
+
+                    except Exception as e:
+                        logger.error(f"❌ [INTELLIGENT-FETCH] Error posting message {message.id}: {e}")
+                        continue
+
+                logger.info(f"📊 [INTELLIGENT-FETCH] Processed {messages_processed} messages from {channel_name}, no suitable content found")
+                return False
+
+            except Exception as e:
+                logger.error(f"❌ [INTELLIGENT-FETCH] Error in intelligent auto-fetch for {channel_name}: {e}")
+                return False
+
+    async def _schedule_delayed_post(self, fetch_view, message_id, delay, channel_name):
+        """
+        Schedule and execute a delayed post with proper interval management.
+        
+        This method handles the delayed posting of content with comprehensive
+        blacklist checking, error handling, and crucially updates the posting
+        interval timer to prevent subsequent auto-posts from violating the
+        configured posting frequency.
+        
+        Args:
+            fetch_view: The FetchView instance containing the message data
+            message_id: Unique identifier for the message being posted
+            delay: Delay in seconds before posting (for spacing multiple posts)
+            channel_name: Name of the source Telegram channel
+            
+        Returns:
+            bool: True if posting was successful, False otherwise
+            
+        Note:
+            This method calls bot.mark_just_posted() on successful posting
+            to ensure the auto-posting interval timer is properly updated.
+            This prevents the bot from posting again too soon and maintains
+            the configured posting frequency.
+        """
+        try:
+            # Wait for the specified delay to space out multiple posts
+            await asyncio.sleep(delay)
+            
+            # Ensure we have a posting lock to prevent race conditions
+            if not hasattr(self.bot, '_posting_lock'):
+                self.bot._posting_lock = asyncio.Lock()
+            
+            async with self.bot._posting_lock:
+                logger.info(f"🚀 [DELAYED-POST] Attempting to post delayed message {message_id} from {channel_name}")
+                
+                # Double-check blacklist under lock to prevent duplicate posts
+                if hasattr(self.bot, 'json_cache') and self.bot.json_cache:
+                    blacklisted_ids = await self.bot.json_cache.get("blacklisted_posts") or []
+                    if message_id in blacklisted_ids:
+                        logger.info(f"⚠️ [DELAYED-POST] Message {message_id} was blacklisted while waiting, skipping")
+                        return False
+                
+                # Attempt to post the content
+                post_success = await fetch_view.do_post_to_news()
+                
+                if post_success:
+                    # Add message ID to blacklist to prevent reposting
+                    await _atomic_blacklist_add(self.bot, message_id)
+                    
+                    # CRITICAL: Update last post time to respect auto-post interval
+                    # This ensures the bot won't auto-post again too soon after this delayed post
+                    self.bot.mark_just_posted()
+                    
+                    # Build comprehensive success message with intelligence data
+                    success_msg = f"✅ [DELAYED-POST] Successfully posted message {message_id} from {channel_name}"
+                    if hasattr(fetch_view, 'urgency_level'):
+                        success_msg += f" | Urgency: {fetch_view.urgency_level}"
+                    if hasattr(fetch_view, 'content_category'):
+                        success_msg += f" | Category: {fetch_view.content_category}"
+                    if hasattr(fetch_view, 'quality_score'):
+                        success_msg += f" | Quality: {fetch_view.quality_score:.2f}"
+                    if hasattr(fetch_view, 'should_ping_news') and fetch_view.should_ping_news:
+                        success_msg += " | 🔔 NEWS ROLE PINGED"
                         
-                except Exception as e:
-                    logger.error(f"❌ [INTELLIGENT-FETCH] Error posting message {message.id}: {e}")
-                    continue
-            
-            logger.info(f"📊 [INTELLIGENT-FETCH] Processed {messages_processed} messages from {channel_name}, no suitable content found")
-            return False
-            
+                    logger.info(success_msg)
+                    
+                    # Brief delay to prevent rapid-fire posting
+                    await asyncio.sleep(2)
+                    return True
+                else:
+                    logger.warning(f"❌ [DELAYED-POST] Failed to post delayed message {message_id}")
+                    return False
+                
         except Exception as e:
-            logger.error(f"❌ [INTELLIGENT-FETCH] Error in intelligent auto-fetch for {channel_name}: {e}")
+            logger.error(f"❌ [DELAYED-POST] Error in delayed posting for message {message_id}: {e}")
+            return False
+
+    async def _schedule_delayed_post_with_cleanup(self, fetch_view, message_id, delay, channel_name):
+        """Schedule a delayed post with proper cleanup to prevent spam."""
+        try:
+            result = await self._schedule_delayed_post(fetch_view, message_id, delay, channel_name)
+            return result
+        finally:
+            # Always decrement the counter when done
+            if hasattr(self.bot, '_delayed_post_count'):
+                self.bot._delayed_post_count = max(0, self.bot._delayed_post_count - 1)
+                logger.debug(f"🔢 [SPAM-PREVENTION] Delayed post counter: {self.bot._delayed_post_count}")
+
+    async def auto_post_from_channel(self, channel_name: str) -> bool:
+        """
+        Enhanced auto-post implementation with intelligent content selection.
+        
+        This method performs the core auto-posting logic by fetching recent
+        messages from a Telegram channel, applying AI-powered filtering and
+        analysis, and posting the best suitable content to Discord.
+        
+        Features:
+        - Spam prevention through channel-specific posting locks
+        - Intelligent content filtering (length, media, duplicates)
+        - AI-powered translation and analysis
+        - Automatic last_post_time updating for interval management
+        
+        Args:
+            channel_name (str): Name of the Telegram channel to fetch from
+            
+        Returns:
+            bool: True if content was successfully posted, False otherwise
+            
+        Process Flow:
+        1. Acquire posting lock for the channel (spam prevention)
+        2. Fetch recent messages from Telegram channel
+        3. Filter messages by content quality and requirements
+        4. Process suitable messages with AI translation/analysis
+        5. Post the first suitable content via posting service
+        6. Update last_post_time to maintain posting intervals
+        """
+        try:
+            logger.debug(f"🔄 [FETCH] Starting auto_post_from_channel for: {channel_name}")
+            
+            # Check if posting is locked for this channel (spam prevention)
+            if channel_name in self.posting_locks:
+                logger.info(f"🔒 [SPAM-PREVENTION] Channel {channel_name} is currently locked, skipping auto-post")
+                return False
+            
+            # Acquire posting lock for this channel
+            self.posting_locks.add(channel_name)
+            logger.info(f"🔒 [SPAM-PREVENTION] Acquired posting lock for {channel_name}")
+            
+            try:
+                logger.info(f"🧠 [INTELLIGENT-FETCH] Starting enhanced auto-post for channel: {channel_name}")
+                
+                # Verify Telegram client availability
+                telegram_client = self.bot.telegram_client
+                if not telegram_client:
+                    logger.error("[FETCH] No Telegram client available")
+                    return False
+                
+                # Fetch recent messages from the channel
+                messages = await telegram_client.get_messages(channel_name, limit=10)
+                logger.debug(f"🔄 [FETCH] Retrieved {len(messages)} messages from {channel_name}")
+                
+                if not messages:
+                    logger.info(f"📊 [INTELLIGENT-FETCH] No messages found in {channel_name}")
+                    return False
+                
+                # Process messages with intelligent filtering
+                suitable_content = []
+                for i, message in enumerate(messages):
+                    # Check message quality requirements
+                    has_media = bool(message.media)
+                    message_text = message.text or ""
+                    text_length = len(message_text.strip())
+                    
+                    # Skip messages that don't meet basic requirements
+                    if text_length < 50:
+                        continue
+                    
+                    # Check for duplicate content
+                    if await self._is_duplicate_content(message_text):
+                        continue
+                    
+                    # Process with AI translation and analysis
+                    ai_service = self.bot.ai_service
+                    if ai_service:
+                        try:
+                            english_translation, ai_title, location = await ai_service.process_text_with_ai(message_text)
+                            
+                            if english_translation:
+                                # Prepare content data for posting
+                                content_data = {
+                                    "text": message_text,
+                                    "translation": english_translation,
+                                    "title": ai_title,
+                                    "location": location,
+                                    "media_urls": await self._extract_media_urls(message),
+                                    "source_channel": channel_name,
+                                    "message_id": message.id
+                                }
+                                
+                                suitable_content.append(content_data)
+                                logger.debug(f"🔄 [FETCH] Found suitable content: message {i+1}")
+                                break  # Found suitable content, post it
+                                
+                        except Exception as e:
+                            logger.debug(f"🔄 [FETCH] AI processing failed for message {i+1}: {str(e)}")
+                            continue
+                
+                logger.info(f"📊 [INTELLIGENT-FETCH] Processed {len(messages)} messages from {channel_name}, {len(suitable_content)} suitable content found")
+                
+                # Post the first suitable content if found
+                if suitable_content:
+                    content_data = suitable_content[0]
+                    
+                    posting_service = self.bot.posting_service
+                    if posting_service:
+                        success = await posting_service.post_news_content(content_data, is_manual=False)
+                        
+                        if success:
+                            # CRITICAL: Update last post time to respect auto-post interval
+                            # This prevents subsequent auto-posts from violating posting frequency
+                            self.bot.mark_just_posted()
+                            logger.info(f"✅ [INTELLIGENT-FETCH] Successfully posted content from {channel_name}")
+                            return True
+                        else:
+                            logger.debug(f"🔄 [FETCH] Posting failed for {channel_name}")
+                    else:
+                        logger.error("🔄 [FETCH] No posting service available")
+                
+                logger.info(f"ℹ️ No suitable content found in {channel_name}")
+                return False
+                
+            finally:
+                # Always release the posting lock
+                self.posting_locks.discard(channel_name)
+                logger.debug(f"🔄 [FETCH] Released posting lock for {channel_name}")
+                
+        except Exception as e:
+            logger.error(f"[FETCH] Error in auto-post for {channel_name}: {str(e)}")
             return False
 
 

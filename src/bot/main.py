@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
-"""
-🔒 PROPRIETARY SOFTWARE - NEWSBOT MAIN MODULE
-
-This is proprietary software developed for private use only.
-Unauthorized copying, distribution, or use is strictly prohibited.
-
-Copyright (c) 2025 NewsBot Project. All rights reserved.
-Syrian Discord News Aggregation Bot - CONFIDENTIAL
-"""
 
 # =============================================================================
-# NewsBot Main Entry Point Module - PROPRIETARY
+# NewsBot Main Entry Point Module
 # =============================================================================
 # This module contains the main entry point and initialization logic for the
-# private Syrian NewsBot. It handles bot startup, configuration loading, signal
+# Syrian NewsBot. It handles bot startup, configuration loading, signal
 # handling, and graceful shutdown procedures.
 #
-# CONFIDENTIAL - For authorized use only
 # Last updated: 2025-01-16
 
 # =============================================================================
@@ -44,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Local Application Imports
 # =============================================================================
 from src.bot.newsbot import NewsBot
-from src.core.config_manager import config
+from src.core.unified_config import unified_config as config
 from src.utils.base_logger import base_logger as logger
 
 # =============================================================================
@@ -127,16 +117,14 @@ async def main() -> None:
         # Set up signal handlers
         setup_signal_handlers()
 
-        # Load configuration
-        if not config.validate():
-            logger.error("❌ Configuration validation failed")
-            sys.exit(1)
-
-        # Get Discord token
-        discord_token = config.get("tokens.discord")
+        # Configuration is automatically validated on import
+        # Check if we can get required values
+        discord_token = config.get("discord.token")
         if not discord_token:
             logger.error("❌ Discord token not found in configuration")
             sys.exit(1)
+
+
 
         # Initialize and start the bot
         logger.info("🚀 Initializing Syrian NewsBot...")

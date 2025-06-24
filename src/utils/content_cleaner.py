@@ -150,6 +150,11 @@ class ContentCleaner:
             re.compile(r"[✓✔✗✘]", re.IGNORECASE),  # Check marks
         ]
 
+        # Discord spoiler tag patterns
+        patterns["spoilers"] = [
+            re.compile(r"\|\|([^|]*)\|\|", re.MULTILINE),  # Remove ||spoiler|| tags but keep content
+        ]
+
         # Telegram-specific patterns
         patterns["telegram"] = [
             # Forward indicators
@@ -221,6 +226,12 @@ class ContentCleaner:
             text = pattern.sub("", text)
         return text
 
+    def remove_spoiler_tags(self, text: str) -> str:
+        """Remove Discord spoiler tags ||text|| but keep the content."""
+        for pattern in self.patterns["spoilers"]:
+            text = pattern.sub(r"\1", text)  # Keep the content inside spoiler tags
+        return text
+
     def cleanup_whitespace(self, text: str) -> str:
         """Clean up excessive whitespace and formatting."""
         # Replace multiple spaces with single space
@@ -264,10 +275,13 @@ class ContentCleaner:
         # Step 5: Remove media references
         text = self.remove_media_references(text)
 
-        # Step 6: Remove emojis
+        # Step 6: Remove spoiler tags (keep content)
+        text = self.remove_spoiler_tags(text)
+
+        # Step 7: Remove emojis
         text = self.remove_emojis(text)
 
-        # Step 7: Clean up whitespace
+        # Step 8: Clean up whitespace
         text = self.cleanup_whitespace(text)
 
         # Step 8: Final validation

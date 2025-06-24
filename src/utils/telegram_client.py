@@ -24,7 +24,7 @@ from telethon.errors import FloodWaitError, RPCError, SessionPasswordNeededError
 # Local Application Imports
 # =============================================================================
 from src.utils.base_logger import base_logger as logger
-from src.utils.config import Config
+from src.core.unified_config import unified_config as config
 from src.utils.content_cleaner import clean_news_content
 from src.utils.error_handler import ErrorContext, error_handler
 from src.utils.rate_limiter import rate_limited, rate_limiter_manager
@@ -75,37 +75,46 @@ class TelegramManager:
             return
 
         try:
-            # Create the client
-            self.client = TelegramClient(
-                "newsbot_session", Config.TELEGRAM_API_ID, Config.TELEGRAM_API_HASH
-            )
-
-            # Connect to Telegram using user authentication (not bot)
+            # Get Telegram credentials from config manager
+            api_id = config.get("telegram.api_id")
+            api_hash = config.get("telegram.api_hash")
+            
+            if not api_id or not api_hash:
+                raise Exception("Your API ID or Hash cannot be empty or None. Refer to telethon.rtfd.io for more information.")
+            
+            logger.debug(f"Using Telegram API ID: {api_id}")
+            
+            # Create the client with session file
+            # Use data/sessions/newsbot.session (works both locally and on VPS)
+            import os
+            session_dir = "data/sessions"
+            os.makedirs(session_dir, exist_ok=True)
+            session_file = os.path.join(session_dir, "newsbot.session")
+            
+            self.client = TelegramClient(session_file, api_id, api_hash)
+            
             logger.info("Connecting to Telegram...")
-            await self.client.start()  # This will prompt for phone/code if needed
-
-            # Set up event handlers
+            
+            # Connect and start (will use existing session or prompt for auth)
+            await self.client.connect()
+            
+            if not await self.client.is_user_authorized():
+                logger.error("❌ Telegram user not authorized. Session file missing or invalid.")
+                logger.error("💡 You need to authenticate the Telegram client first.")
+                logger.error("📱 Run 'python authenticate_telegram.py' to create a session file.")
+                raise Exception("Telegram user not authorized - session required")
+            
+            # Set up event handlers and other initialization
             self._setup_event_handlers()
-
-            # Add custom rate limiting for Telegram client
             self._patch_telegram_methods()
-
             self.connected = True
-            logger.info("Successfully connected to Telegram")
-
-            # Send connection status to Discord
+            
+            logger.info("✅ Telegram client connected successfully")
             await self._send_connection_status()
-
+            
         except Exception as e:
-            self.connected = False
-            structured_logger.error(
-                "Failed to connect to Telegram",
-                extra_data={
-                    "api_id": Config.TELEGRAM_API_ID,
-                    "connection_state": self.connected,
-                    "error": str(e),
-                },
-            )
+            logger.error(f"❌ Failed to connect to Telegram: {e}")
+            self.client = None
             raise
 
     # =========================================================================
@@ -201,7 +210,8 @@ class TelegramManager:
                 embed = await self._create_message_embed(event)
 
                 # Send to Discord news channel
-                news_channel = self.discord_bot.get_channel(Config.NEWS_CHANNEL_ID)
+                news_channel_id = config.get("discord.channels.news") or config.get("channels.news")
+                news_channel = self.discord_bot.get_channel(news_channel_id) if news_channel_id else None
                 if news_channel:
                     await news_channel.send(embed=embed)
                     logger.info(
@@ -331,7 +341,8 @@ class TelegramManager:
         )
 
         # Send to log channel
-        log_channel = self.discord_bot.get_channel(Config.LOG_CHANNEL_ID)
+        log_channel_id = config.get("discord.channels.logs") or config.get("channels.logs")
+        log_channel = self.discord_bot.get_channel(log_channel_id) if log_channel_id else None
         if log_channel:
             await log_channel.send(embed=embed)
 

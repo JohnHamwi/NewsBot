@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 # Local Application Imports
 # =============================================================================
 from src.utils.base_logger import base_logger as logger
+from src.utils.debug_logger import debug_logger, debug_context
 
 
 # =============================================================================
@@ -28,202 +29,204 @@ class ValidationError(Exception):
 
 
 # =============================================================================
-# Configuration Validator Main Class
+# Enhanced Configuration Validator
 # =============================================================================
+"""
+Comprehensive configuration validation system for NewsBot.
+Validates all required settings and provides detailed error messages.
+"""
+
 class ConfigValidator:
-    """
-    Validates configuration against a schema.
+    """Enhanced configuration validator with detailed error reporting."""
     
-    Features:
-    - Type validation for all configuration values
-    - Required field checking with detailed error messages
-    - Default value application from schema
-    - Pattern matching for string validation
-    - Range validation for numeric values
-    - Enum validation for restricted value sets
-    """
-
-    @staticmethod
-    def validate(config: Dict, schema: Dict) -> Tuple[bool, List[str]]:
+    def __init__(self):
+        self.errors = []
+        self.warnings = []
+        
+    @debug_context("Config Validation")
+    def validate_all(self, config_data: Dict[str, Any]) -> bool:
         """
-        Validate configuration against a schema.
-
-        Args:
-            config: Configuration dictionary
-            schema: Schema definition
-
+        Validate all configuration sections.
+        
         Returns:
-            Tuple of (is_valid, error_messages)
+            bool: True if all validations pass, False otherwise
         """
-        errors = []
-        for key, schema_item in schema.items():
-            if "." in key:
-                # Handle nested keys with dot notation
-                parts = key.split(".")
-                value = config
-                for part in parts:
-                    if isinstance(value, dict) and part in value:
-                        value = value[part]
-                    else:
-                        if schema_item.get("required", False):
-                            errors.append(f"Missing required key: {key}")
-                        break
-                else:
-                    # We found the value, validate it
-                    result = ConfigValidator._validate_value(key, value, schema_item)
-                    if not result[0]:
-                        errors.extend(result[1])
-            elif key in config:
-                # Direct key
-                result = ConfigValidator._validate_value(key, config[key], schema_item)
-                if not result[0]:
-                    errors.extend(result[1])
-            elif schema_item.get("required", False):
-                errors.append(f"Missing required key: {key}")
+        self.errors = []
+        self.warnings = []
+        
+        # Define validation rules
+        validations = [
+            self._validate_discord_config,
+            self._validate_telegram_config,
+            self._validate_openai_config,
+            self._validate_channels_config,
+            self._validate_bot_config,
+            self._validate_automation_config
+        ]
+        
+        # Run all validations
+        for validation in validations:
+            try:
+                validation(config_data)
+            except Exception as e:
+                self.errors.append(f"Validation error in {validation.__name__}: {str(e)}")
+        
+        # Log results
+        if self.errors:
+            debug_logger.error("Configuration validation failed", 
+                             error_count=len(self.errors), 
+                             errors=self.errors,
+                             warnings=self.warnings)
+        elif self.warnings:
+            debug_logger.warning("Configuration validation passed with warnings",
+                               warning_count=len(self.warnings),
+                               warnings=self.warnings)
+        else:
+            debug_logger.info("Configuration validation passed completely")
+            
+        return len(self.errors) == 0
+    
+    def _validate_discord_config(self, config: Dict[str, Any]):
+        """Validate Discord configuration section."""
+        discord_config = config.get('discord', {})
+        
+        # Required fields
+        required_fields = ['token', 'guild_id']
+        for field in required_fields:
+            if not discord_config.get(field):
+                self.errors.append(f"Discord.{field} is required but missing or empty")
+        
+        # Token validation
+        token = discord_config.get('token', '')
+        if token and not self._is_valid_discord_token(token):
+            self.errors.append("Discord token format appears invalid")
+            
+        # Guild ID validation
+        guild_id = discord_config.get('guild_id')
+        if guild_id and not str(guild_id).isdigit():
+            self.errors.append("Discord guild_id must be a numeric string or integer")
+    
+    def _validate_telegram_config(self, config: Dict[str, Any]):
+        """Validate Telegram configuration section."""
+        telegram_config = config.get('telegram', {})
+        
+        # Required fields
+        required_fields = ['api_id', 'api_hash', 'phone_number']
+        for field in required_fields:
+            if not telegram_config.get(field):
+                self.errors.append(f"Telegram.{field} is required but missing or empty")
+        
+        # API ID validation
+        api_id = telegram_config.get('api_id')
+        if api_id and not str(api_id).isdigit():
+            self.errors.append("Telegram api_id must be numeric")
+            
+        # Phone number validation
+        phone = telegram_config.get('phone_number', '')
+        if phone and not re.match(r'^\+?[\d\s\-()]+$', phone):
+            self.warnings.append("Telegram phone_number format may be invalid")
+    
+    def _validate_openai_config(self, config: Dict[str, Any]):
+        """Validate OpenAI configuration section."""
+        openai_config = config.get('openai', {})
+        
+        # Required fields
+        api_key = openai_config.get('api_key')
+        if not api_key:
+            self.errors.append("OpenAI.api_key is required but missing or empty")
+        elif not api_key.startswith('sk-'):
+            self.errors.append("OpenAI API key should start with 'sk-'")
+    
+    def _validate_channels_config(self, config: Dict[str, Any]):
+        """Validate channels configuration section."""
+        # Check for channels in new discord.channels format first
+        discord_config = config.get('discord', {})
+        channels_config = discord_config.get('channels', {})
+        
+        # If not found in discord.channels, check legacy channels format
+        if not channels_config:
+            channels_config = config.get('channels', {})
+        
+        # Required channels
+        required_channels = ['news', 'logs', 'errors']
+        for channel in required_channels:
+            channel_id = channels_config.get(channel)
+            if not channel_id:
+                self.errors.append(f"Channels.{channel} is required but missing or empty")
+            elif not str(channel_id).isdigit():
+                self.errors.append(f"Channels.{channel} must be a numeric Discord channel ID")
+    
+    def _validate_bot_config(self, config: Dict[str, Any]):
+        """Validate bot configuration section."""
+        bot_config = config.get('bot', {})
+        
+        # Required fields
+        news_role_id = bot_config.get('news_role_id')
+        if not news_role_id:
+            self.errors.append("Bot.news_role_id is required but missing or empty")
+        elif not str(news_role_id).isdigit():
+            self.errors.append("Bot.news_role_id must be a numeric Discord role ID")
+    
+    def _validate_automation_config(self, config: Dict[str, Any]):
+        """Validate automation configuration section."""
+        automation_config = config.get('automation', {})
+        
+        # Check for active channels in different locations
+        active_channels = []
+        
+        # Check automation.active_channels
+        if automation_config.get('active_channels'):
+            active_channels = automation_config.get('active_channels', [])
+        # Check channels.active (new format)
+        elif config.get('channels', {}).get('active'):
+            active_channels = config.get('channels', {}).get('active', [])
+        
+        if not active_channels:
+            self.warnings.append("No active_channels configured - bot won't auto-post")
+        elif not isinstance(active_channels, list):
+            self.errors.append("Active channels must be a list")
+        
+        # Validate intervals
+        intervals = automation_config.get('intervals', {})
+        if intervals:
+            auto_post_interval = intervals.get('auto_post_minutes')
+            if auto_post_interval and (not isinstance(auto_post_interval, (int, float)) or auto_post_interval <= 0):
+                self.errors.append("Automation.intervals.auto_post_minutes must be a positive number")
+    
+    def _is_valid_discord_token(self, token: str) -> bool:
+        """Basic Discord token format validation."""
+        # Discord bot tokens typically have a specific format
+        if not token:
+            return False
+        
+        # Basic pattern check (this is simplified)
+        parts = token.split('.')
+        return len(parts) >= 3 and len(parts[0]) > 0
+    
+    def get_validation_report(self) -> str:
+        """Generate a detailed validation report."""
+        report_lines = []
+        
+        if self.errors:
+            report_lines.append("❌ CONFIGURATION ERRORS:")
+            for i, error in enumerate(self.errors, 1):
+                report_lines.append(f"  {i}. {error}")
+            report_lines.append("")
+        
+        if self.warnings:
+            report_lines.append("⚠️ CONFIGURATION WARNINGS:")
+            for i, warning in enumerate(self.warnings, 1):
+                report_lines.append(f"  {i}. {warning}")
+            report_lines.append("")
+        
+        if not self.errors and not self.warnings:
+            report_lines.append("✅ All configuration validation checks passed!")
+        
+        return "\n".join(report_lines)
 
-        return len(errors) == 0, errors
 
-    # =========================================================================
-    # Value Validation Methods
-    # =========================================================================
-    @staticmethod
-    def _validate_value(
-        key: str, value: Any, schema_item: Dict
-    ) -> Tuple[bool, List[str]]:
-        """
-        Validate a single value against its schema.
-
-        Args:
-            key: Key name
-            value: Value to validate
-            schema_item: Schema for this value
-
-        Returns:
-            Tuple of (is_valid, error_messages)
-        """
-        errors = []
-
-        # Check type
-        expected_type = schema_item.get("type")
-        if expected_type:
-            if expected_type == "str" and not isinstance(value, str):
-                errors.append(
-                    f"Key '{key}' must be a string, got {type(value).__name__}"
-                )
-            elif expected_type == "int" and not isinstance(value, int):
-                errors.append(
-                    f"Key '{key}' must be an integer, got {type(value).__name__}"
-                )
-            elif expected_type == "float" and not isinstance(value, (int, float)):
-                errors.append(
-                    f"Key '{key}' must be a number, got {type(value).__name__}"
-                )
-            elif expected_type == "bool" and not isinstance(value, bool):
-                errors.append(
-                    f"Key '{key}' must be a boolean, got {type(value).__name__}"
-                )
-            elif expected_type == "list" and not isinstance(value, list):
-                errors.append(f"Key '{key}' must be a list, got {type(value).__name__}")
-            elif expected_type == "dict" and not isinstance(value, dict):
-                errors.append(
-                    f"Key '{key}' must be a dictionary, got {type(value).__name__}"
-                )
-            elif expected_type == "str_or_int" and not isinstance(value, (str, int)):
-                errors.append(
-                    f"Key '{key}' must be a string or integer, got {type(value).__name__}"
-                )
-
-        # Check required
-        if schema_item.get("required", False) and (
-            value is None or (isinstance(value, str) and value == "")
-        ):
-            errors.append(f"Key '{key}' is required and cannot be empty")
-
-        # Check pattern
-        pattern = schema_item.get("pattern")
-        if pattern and isinstance(value, str):
-            if not re.match(pattern, value):
-                errors.append(
-                    f"Key '{key}' value '{value}' does not match pattern '{pattern}'"
-                )
-
-        # Check min/max for numeric values
-        if isinstance(value, (int, float)):
-            min_val = schema_item.get("min")
-            if min_val is not None and value < min_val:
-                errors.append(
-                    f"Key '{key}' value {value} is less than minimum {min_val}"
-                )
-
-            max_val = schema_item.get("max")
-            if max_val is not None and value > max_val:
-                errors.append(
-                    f"Key '{key}' value {value} is greater than maximum {max_val}"
-                )
-
-        # Check min/max length for strings and lists
-        if isinstance(value, (str, list)):
-            min_length = schema_item.get("min_length")
-            if min_length is not None and len(value) < min_length:
-                errors.append(
-                    f"Key '{key}' length {len(value)} is less than minimum length {min_length}"
-                )
-
-            max_length = schema_item.get("max_length")
-            if max_length is not None and len(value) > max_length:
-                errors.append(
-                    f"Key '{key}' length {len(value)} is greater than maximum length {max_length}"
-                )
-
-        # Check enum values
-        enum_values = schema_item.get("enum")
-        if enum_values and value not in enum_values:
-            errors.append(
-                f"Key '{key}' value '{value}' must be one of: {', '.join(str(v) for v in enum_values)}"
-            )
-
-        return len(errors) == 0, errors
-
-    # =========================================================================
-    # Default Value Application Methods
-    # =========================================================================
-    @staticmethod
-    def apply_defaults(config: Dict, schema: Dict) -> Dict:
-        """
-        Apply default values from schema to config.
-
-        Args:
-            config: Configuration dictionary
-            schema: Schema definition
-
-        Returns:
-            Updated configuration with defaults applied
-        """
-        # Create a deep copy to avoid modifying the original
-        import copy
-
-        result = copy.deepcopy(config)
-
-        for key, schema_item in schema.items():
-            if "default" in schema_item:
-                if "." in key:
-                    # Handle nested keys with dot notation
-                    parts = key.split(".")
-                    current = result
-                    # Navigate to the parent dictionary
-                    for part in parts[:-1]:
-                        if part not in current:
-                            current[part] = {}
-                        current = current[part]
-
-                    # Set the default if the key doesn't exist
-                    if parts[-1] not in current:
-                        current[parts[-1]] = schema_item["default"]
-                elif key not in result:
-                    # Direct key
-                    result[key] = schema_item["default"]
-
-        return result
+# Global validator instance
+config_validator = ConfigValidator()
 
 
 # NewsBot configuration schema
@@ -312,7 +315,7 @@ def validate_config(config: Dict) -> Tuple[bool, List[str]]:
     Returns:
         Tuple of (is_valid, error_messages)
     """
-    return ConfigValidator.validate(config, NEWSBOT_CONFIG_SCHEMA)
+    return config_validator.validate_all(config), config_validator.get_validation_report()
 
 
 def apply_defaults(config: Dict) -> Dict:

@@ -20,7 +20,7 @@ import discord
 # =============================================================================
 # Local Application Imports
 # =============================================================================
-from src.core.config_manager import config
+from src.core.unified_config import unified_config as config
 
 
 # =============================================================================

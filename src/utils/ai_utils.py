@@ -11,6 +11,16 @@
 # =============================================================================
 import re
 
+# =============================================================================
+# Third-Party Library Imports
+# =============================================================================
+import openai
+
+# =============================================================================
+# Local Application Imports
+# =============================================================================
+from src.core.unified_config import unified_config as config
+
 
 # =============================================================================
 # Text Cleaning Functions
@@ -80,12 +90,15 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
     21. FORBIDDEN: Omitting any factual details, names, locations, or quotes
     22. FORBIDDEN: Creating shorter versions or summaries of the original text
 
-    TITLE INSTRUCTIONS:
-    - Create a concise Arabic title in 3-6 words that captures the main news event
+    TITLE INSTRUCTIONS - CRITICAL:
+    - Create a concise Arabic title in EXACTLY 3-6 words (NO MORE, NO LESS)
     - The title should be in ARABIC only, not English
-    - Examples: "انفجار في دمشق", "قصف على حلب", "اشتباكات في إدلب", "عاجل من سوريا"
+    - MANDATORY: Count the words - must be between 3-6 words only
+    - Examples: "انفجار في دمشق" (3 words), "قصف على حلب" (3 words), "اشتباكات في إدلب" (3 words), "عاجل من سوريا" (3 words)
+    - FORBIDDEN: Titles longer than 6 words or shorter than 3 words
     - Use active voice and present tense when possible
     - Make it sound like a proper Arabic news headline
+    - DOUBLE-CHECK: Count your words before submitting the title
 
     LOCATION DETECTION INSTRUCTIONS - CRITICAL:
     - ALWAYS analyze the ENTIRE text to find the PRIMARY geographic location of the news event
@@ -106,6 +119,7 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
     - CRITICAL: Look for governorate mentions: محافظة حماة = Hama, Syria, محافظة دمشق = Damascus, Syria, etc.
     - Look for Arabic prepositions that indicate location: بـ (in), في (in), من (from), إلى (to), بمحافظة (in the governorate of)
     - Examples: "بدمشق" = "Damascus, Syria", "في حلب" = "Aleppo, Syria", "بمحافظة حماة" = "Hama, Syria"
+    - IMPORTANT: الدويلعة/دويلعة (Doueila) = "Damascus, Syria" (it's a district in Damascus)
     - ALWAYS format Syrian cities as "City, Syria" (e.g., "Damascus, Syria", "Aleppo, Syria", "Hama, Syria")
     - For other Middle Eastern locations: Iran, Iraq, Lebanon, Turkey, Jordan, Israel, Palestine, Saudi Arabia, Egypt, etc.
     - If multiple locations are mentioned, choose the PRIMARY location where the main event occurred
@@ -161,7 +175,22 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
         # Extract title
         title_match = re.search(r"TITLE:\s*(.*?)(?:\n|$)", raw_result)
         if title_match:
-            result["title"] = title_match.group(1).strip()
+            title = title_match.group(1).strip()
+            # ENFORCE 4-6 WORDS LIMIT: Split title and limit to maximum 6 words
+            title_words = title.split()
+            if len(title_words) > 6:
+                title = " ".join(title_words[:6])
+                if logger:
+                    logger.warning(f"[AI_UTILS] Title too long ({len(title_words)} words), truncated to: {title}")
+            elif len(title_words) < 3:
+                # If too short, pad with generic words if needed
+                if len(title_words) == 0:
+                    title = "أخبار سورية"
+                elif len(title_words) == 1:
+                    title = f"عاجل {title}"
+                elif len(title_words) == 2:
+                    title = f"{title} اليوم"
+            result["title"] = title
         else:
             result["title"] = "أخبار سورية"
 
@@ -217,6 +246,46 @@ def call_chatgpt_for_news(arabic_text, openai, logger=None):
             "translation": f"Translation unavailable: {str(e)}",
             "location": "Unknown",
         }
+
+
+async def get_openai_response(prompt: str, max_tokens: int = 200, temperature: float = 0.3) -> str:
+    """
+    Get response from OpenAI API for general prompts.
+    
+    Args:
+        prompt: The prompt to send to OpenAI
+        max_tokens: Maximum tokens in response
+        temperature: Temperature for response creativity
+        
+    Returns:
+        Response string from OpenAI, or None if failed
+    """
+    try:
+        # Get API key from config
+        api_key = config.get("openai.api_key")
+        if not api_key:
+            return None
+            
+        # Create async client
+        client = openai.AsyncOpenAI(api_key=api_key)
+        
+        # Make API call
+        response = await client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful AI assistant for news analysis."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        # Log error but don't raise to avoid breaking the caller
+        print(f"OpenAI API error: {e}")
+        return None
 
 
 # =============================================================================

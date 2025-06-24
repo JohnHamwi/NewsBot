@@ -1,244 +1,245 @@
-"""
-Pytest configuration and shared fixtures.
-"""
+# =============================================================================
+# NewsBot Test Configuration & Fixtures
+# =============================================================================
+# Shared test fixtures and configuration for the NewsBot test suite.
+# Provides mock objects and test data for comprehensive testing.
 
-import asyncio
-import logging
-import os
-import sys
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import discord
 import pytest
-from discord.ext import commands
+import asyncio
+import tempfile
+import shutil
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timezone
+import json
 
-from src.core.config_manager import config
+# Import our modules
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-
-class MockBot(discord.Client):
-    """Mock bot for testing."""
-
-    def __init__(self):
-        intents = discord.Intents.default()
-        intents.message_content = True
-        super().__init__(intents=intents)
-
-        # Initialize command tree for slash commands
-        self.tree = discord.app_commands.CommandTree(self)
-
-        # Mock attributes that tests might need
-        self.user = MagicMock()
-        self.user.id = 12345
-        self.user.name = "TestBot"
-
-        # Mock channels
-        self.news_channel = MagicMock()
-        self.errors_channel = MagicMock()
-        self.log_channel = MagicMock()
-
-        # Mock cache and services
-        self.json_cache = MagicMock()
-        self.rbac = MagicMock()
-        self.metrics = MagicMock()
-
-        # Auto-posting attributes
-        self.auto_post_interval = 0
-        self.last_post_time = None
-        self.force_auto_post = False
+from src.bot.newsbot import NewsBot
+from src.cache.json_cache import JSONCache
+from src.core.unified_config import UnifiedConfig
 
 
+# =============================================================================
+# Async Test Configuration
+# =============================================================================
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create an instance of the default event loop for the test session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+
+# =============================================================================
+# Mock Configuration
+# =============================================================================
 @pytest.fixture
 def mock_config():
-    """Provide a mock configuration."""
+    """Mock configuration for testing."""
     return {
-        "bot": {
-            "version": "4.5.0",
-            "guild_id": "123456789",
-            "application_id": "987654321",
-            "debug_mode": False,
+        'bot': {
+            'application_id': 123456789,
+            'guild_id': 987654321,
+            'admin_user_id': 111222333,
+            'debug_mode': True,
+            'version': '4.5.0'
         },
-        "channels": {"news": "111111111", "errors": "222222222", "logs": "333333333"},
-        "tokens": {
-            "discord": "mock_token",
-            "telegram": {"api_id": "mock_api_id", "api_hash": "mock_api_hash"},
+        'automation': {
+            'enabled': True,
+            'interval_minutes': 180,
+            'startup_delay_minutes': 5,
+            'require_media': True,
+            'require_text': True,
+            'min_content_length': 50
         },
+        'channels': {
+            'active': ['test_channel_1', 'test_channel_2'],
+            'blacklisted_posts': [],
+            'channel_metadata': {}
+        }
     }
 
 
+# =============================================================================
+# Temporary Directory Fixtures
+# =============================================================================
 @pytest.fixture
-async def bot():
-    """Provide a mock bot instance."""
-    return MockBot()
-
-
-@pytest.fixture
-async def mock_interaction():
-    """Provide a mock Discord interaction."""
-    interaction = AsyncMock(spec=discord.Interaction)
-    interaction.response = AsyncMock()
-    interaction.followup = AsyncMock()
-    interaction.channel = AsyncMock(spec=discord.TextChannel)
-    interaction.user = AsyncMock(spec=discord.Member)
-    return interaction
+def temp_dir():
+    """Create a temporary directory for test files."""
+    temp_path = tempfile.mkdtemp()
+    yield Path(temp_path)
+    shutil.rmtree(temp_path)
 
 
 @pytest.fixture
-def mock_guild():
-    """Provide a mock Discord guild."""
-    guild = MagicMock(spec=discord.Guild)
-    guild.id = int(config.get("bot.guild_id", "123456789"))
-    return guild
+def temp_config_file(temp_dir, mock_config):
+    """Create a temporary config file for testing."""
+    config_file = temp_dir / "test_config.yaml"
+    config_file.parent.mkdir(exist_ok=True)
+    
+    import yaml
+    with open(config_file, 'w') as f:
+        yaml.dump(mock_config, f)
+    
+    return config_file
+
+
+# =============================================================================
+# Bot Fixtures
+# =============================================================================
+@pytest.fixture
+def mock_bot():
+    """Create a mock NewsBot instance for testing."""
+    # Create a mock bot that doesn't initialize the actual Discord client
+    bot = MagicMock()
+    
+    # Mock essential attributes
+    bot.user = MagicMock()
+    bot.user.id = 123456789
+    bot.latency = 0.05
+    bot.startup_time = datetime.now(timezone.utc)
+    bot.auto_post_interval = 10800  # 3 hours in seconds
+    bot.last_post_time = None
+    bot.force_auto_post = False
+    bot.telegram_auth_failed = False
+    bot.disable_auto_post_on_startup = True
+    bot._just_posted = False
+    bot.startup_grace_period_minutes = 5
+    
+    # Mock cache
+    bot.json_cache = AsyncMock(spec=JSONCache)
+    bot.json_cache.get.return_value = None
+    bot.json_cache.set = AsyncMock()
+    bot.json_cache.save = AsyncMock()
+    bot.json_cache.get_next_channel_for_rotation = AsyncMock(return_value="test_channel")
+    
+    # Mock Telegram client
+    bot.telegram_client = AsyncMock()
+    bot.telegram_client.is_connected = AsyncMock(return_value=True)
+    bot.telegram_client.get_messages = AsyncMock(return_value=[])
+    
+    # Mock fetch commands
+    bot.fetch_commands = AsyncMock()
+    bot.fetch_commands.fetch_and_post_auto = AsyncMock(return_value=True)
+    bot.fetch_commands.auto_post_from_channel = AsyncMock(return_value=True)
+    
+    # Mock essential methods
+    bot.mark_just_posted = MagicMock()
+    bot.should_wait_for_startup_delay = MagicMock(return_value=(False, 0))
+    bot.fetch_and_post_auto = AsyncMock(return_value=True)
+    bot.save_auto_post_config = AsyncMock()
+    bot.get_automation_config = AsyncMock(return_value={
+        'interval_minutes': 180,
+        'last_post_time': None,
+        'next_post_time': None
+    })
+    bot.update_automation_config = AsyncMock(return_value=True)
+    bot.get_automation_status = MagicMock(return_value={
+        'enabled': True,
+        'interval_hours': 3,
+        'last_post_time': None,
+        'next_post_time': None,
+        'time_until_next_post': None
+    })
+    bot.set_auto_post_interval = MagicMock()
+    bot.enable_auto_post_after_startup = MagicMock()
+    bot.is_closed = MagicMock(return_value=False)
+    
+    # Mock services
+    bot.ai_service = AsyncMock()
+    bot.posting_service = AsyncMock()
+    bot.posting_service.post_news_content = AsyncMock(return_value=True)
+    
+    # Mock manual verification delay
+    bot._manual_verification_delay_until = {}
+    
+    return bot
 
 
 @pytest.fixture
-def mock_member():
-    """Provide a mock Discord member."""
-    member = MagicMock(spec=discord.Member)
-    member.guild_permissions = discord.Permissions(administrator=True)
-    return member
+async def json_cache(temp_dir):
+    """Create a real JSONCache instance for testing."""
+    cache_file = temp_dir / "test_cache.json"
+    cache = JSONCache(str(cache_file))
+    await cache.initialize()
+    yield cache
+
+
+# =============================================================================
+# Mock External Services
+# =============================================================================
+@pytest.fixture
+def mock_telegram_client():
+    """Mock Telegram client for testing."""
+    client = AsyncMock()
+    client.is_connected.return_value = True
+    client.get_messages.return_value = [
+        MagicMock(
+            id=1,
+            text="Test Arabic message للاختبار",
+            media=None,
+            date=datetime.now(timezone.utc)
+        )
+    ]
+    return client
 
 
 @pytest.fixture
-def mock_message():
-    """Provide a mock Discord message."""
-    message = AsyncMock(spec=discord.Message)
-    message.channel = AsyncMock(spec=discord.TextChannel)
-    return message
+def mock_ai_service():
+    """Mock AI service for testing."""
+    service = AsyncMock()
+    service.process_text_with_ai.return_value = (
+        "Test English translation for testing",
+        "Test News Title",
+        "Damascus"
+    )
+    return service
 
 
-class BaseCogTest:
-    """Base class for testing cogs."""
-
-    @pytest.fixture
-    async def cog(self, bot):
-        """Should be overridden by specific cog test classes."""
-        raise NotImplementedError("Cog fixture must be implemented by subclass")
-
-    @pytest.fixture
-    def mock_config(self):
-        """Override with specific config for your cog if needed."""
-        return {}
-
-    @pytest.fixture(autouse=True)
-    def setup_mocks(self, mock_config):
-        """Setup basic mocks that most cogs will need."""
-        with patch("src.core.config_manager.ConfigManager._config", mock_config):
-            yield
+# =============================================================================
+# Test Data Fixtures
+# =============================================================================
+@pytest.fixture
+def sample_message():
+    """Sample Telegram message for testing."""
+    return MagicMock(
+        id=12345,
+        text="هذا اختبار للرسائل العربية في النظام الجديد للأخبار السورية",
+        media=None,
+        date=datetime.now(timezone.utc)
+    )
 
 
-@pytest.fixture(scope="session", autouse=True)
-def setup_test_environment():
-    """
-    Set up the test environment with mock environment variables.
-    This fixture runs automatically for all tests.
-    """
-    # Save original environment variables
-    original_env = os.environ.copy()
-
-    # Set mock environment variables for testing
-    os.environ["TELEGRAM_API_ID"] = "12345"
-    os.environ["TELEGRAM_API_HASH"] = "mock_hash_for_testing"
-    os.environ["ADMIN_USER_ID"] = "123456789"
-    os.environ["DISCORD_TOKEN"] = "mock_discord_token"
-
-    # Mock config values
-    mock_config = {
-        "telegram.api_id": 12345,
-        "telegram.api_hash": "mock_hash_for_testing",
-        "bot.admin_role_id": 123456789,
-        "tokens.discord": "mock_discord_token",
-        "bot.guild_id": 987654321,
-        "channels.news": 111111,
-        "channels.errors": 222222,
-        "channels.logs": 333333,
-        "bot.admin_role_id": 444444,
-        "bot.application_id": "mock_app_id",
-        "bot.news_role_id": 555555,
+@pytest.fixture
+def sample_content_data():
+    """Sample content data for testing posting."""
+    return {
+        "text": "هذا اختبار للرسائل العربية",
+        "translation": "This is a test for Arabic messages",
+        "title": "Test News Article",
+        "location": "Damascus",
+        "media_urls": [],
+        "source_channel": "test_channel",
+        "message_id": 12345
     }
 
-    # Apply patching to prevent actual API connections
-    with (
-        patch("telethon.TelegramClient.__init__", return_value=None),
-        patch("telethon.TelegramClient.start", return_value=None),
-        patch("telethon.TelegramClient.connect", return_value=None),
-        patch(
-            "src.core.config_manager.ConfigManager.get",
-            side_effect=lambda key, default=None: mock_config.get(key, default),
-        ),
-    ):
 
-        yield
-
-    # Restore original environment variables after all tests
-    os.environ.clear()
-    os.environ.update(original_env)
+# =============================================================================
+# Time Fixtures
+# =============================================================================
+@pytest.fixture
+def fixed_time():
+    """Fixed time for consistent testing."""
+    return datetime(2025, 1, 16, 12, 0, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture
-def mock_fetch_cog_init():
-    """
-    Patch FetchCog initialization to avoid real API calls and use mocked values.
-    """
-    # Save the original __init__ method
-    original_init = None
-
-    try:
-        # Import the FetchCog class
-        from src.cogs.fetch_cog import FetchCog
-
-        original_init = FetchCog.__init__
-
-        # Create a new init method that sets required attributes
-        def mock_init(self, bot):
-            self.bot = bot
-            self.news_role_id = 555555
-
-            # Add any other required attributes
-            from src.utils.base_logger import base_logger
-
-            self.logger = base_logger
-
-            # Initialize necessary attributes used in tests
-            self.telegram_client = (
-                bot.telegram_client if hasattr(bot, "telegram_client") else None
-            )
-
-            # Create a mock RBAC system that always allows access
-            from unittest.mock import MagicMock
-
-            self.bot.rbac = MagicMock()
-            self.bot.rbac.has_permission = MagicMock(return_value=True)
-
-            # Create error_handler attribute
-            from src.utils import error_handler
-
-            self.error_handler = error_handler
-
-        # Apply the mock
-        FetchCog.__init__ = mock_init
-        yield
-    finally:
-        # Restore the original method if it was saved
-        if original_init:
-            from src.cogs.fetch_cog import FetchCog
-
-            FetchCog.__init__ = original_init
-
-
-@pytest.fixture(autouse=True)
-def patch_error_handler():
-    """
-    Patch the error handler to prevent issues with main.py's patched version.
-    """
-    from unittest.mock import patch
-
-    # Create a simple error handler function that doesn't try to use attributes from MagicMock objects
-    async def mock_send_error_embed(
-        error_title, error, context=None, user=None, channel=None, bot=None
-    ):
-        logging.debug(f"Mock error handler called: {error_title} - {error}")
-        return None
-
-    # Patch only the send_error_embed function
-    with patch("src.utils.error_handler.send_error_embed", mock_send_error_embed):
-        yield
+def mock_timezone_utils(fixed_time):
+    """Mock timezone utilities with fixed time."""
+    with patch('src.utils.timezone_utils.now_eastern') as mock_now:
+        from src.utils.timezone_utils import utc_to_eastern
+        mock_now.return_value = utc_to_eastern(fixed_time)
+        yield mock_now 

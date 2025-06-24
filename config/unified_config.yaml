@@ -1,0 +1,138 @@
+automation:
+  enabled: true
+  interval_minutes: 180
+  max_posts_per_session: 1
+  min_content_length: 50
+  notify_on_errors: true
+  notify_on_success: false
+  require_media: false
+  require_text: true
+  silent_mode: false
+  startup_delay_minutes: 2
+  use_ai_filtering: true
+bot:
+  admin_role_id: 1228455909827805311
+  admin_user_id: 259725211664908288
+  application_id: 1378540050006147114
+  debug_mode: true
+  guild_id: 1228455909827805308
+  news_role_id: 1312489916764131390
+  version: 4.5.0
+channels:
+  active:
+  - moraselalthawrah
+  - jh_team
+  - shaamnetwork
+  - alktroone
+  - alhourya_news
+  - alekhbariahsy
+  - samsyria01
+  blacklisted_posts:
+  - 168013
+  - 168050
+  - 168066
+  - 168065
+  - 168163
+  - 169334
+  - 11445
+  - 11452
+  - 77934
+  - 169442
+  - 1091
+  - 1092
+  channel_metadata:
+    alekhbariahsy:
+      date_added: '2025-06-10T22:04:16.738556'
+      date_deactivated: null
+      status: activated
+    alhourya_news:
+      date_added: '2025-06-10T22:03:30.383424'
+      date_deactivated: null
+      status: activated
+    alktroone:
+      date_added: '2025-06-10T22:01:32.494153'
+      date_deactivated: null
+      status: activated
+    jh_team:
+      date_added: '2025-06-10T22:00:16.211827'
+      date_deactivated: null
+      status: activated
+    moraselalthawrah:
+      date_added: '2025-06-10T16:08:19.691136'
+      date_deactivated: null
+      status: activated
+    samsyria01:
+      date_added: '2025-06-22T20:29:23.544967'
+      date_deactivated: null
+      status: activated
+    shaamnetwork:
+      date_added: '2025-06-10T22:00:49.279866'
+      date_deactivated: null
+      status: activated
+    symoigov:
+      date_added: '2025-06-10T22:02:12.750373'
+      date_deactivated: '2025-06-10T22:03:02.813444'
+      status: deactivated
+    test_add_channel_demo:
+      date_added: '2025-06-22T19:57:02.656413'
+      date_deactivated: '2025-06-22T19:57:02.660977'
+      status: deactivated
+    test_channel:
+      date_added: '2025-06-22T04:01:36.047120'
+      date_deactivated: '2025-06-22T20:21:46.018542'
+      status: deactivated
+    test_new_channel:
+      date_added: '2025-06-22T19:56:20.130223'
+      date_deactivated: '2025-06-22T19:56:20.131397'
+      status: deactivated
+discord:
+  channels:
+    errors: 1378781937279176774
+    logs: 1378553893083938957
+    news: 1382112473423020062
+  guild_id: 1228455909827805308
+  token: YOUR_DISCORD_BOT_TOKEN_HERE
+environments:
+  development:
+    automation:
+      interval_minutes: 60
+    bot:
+      debug_mode: true
+    monitoring:
+      log_level: DEBUG
+  production:
+    automation:
+      interval_minutes: 180
+    bot:
+      debug_mode: false
+    monitoring:
+      log_level: INFO
+features:
+  ai_categorization: true
+  ai_translation: true
+  auto_posting: true
+  forum_tags: true
+  health_monitoring: true
+  location_detection: true
+  news_role_pinging: true
+  rich_presence: true
+meta:
+  created: '2025-06-23T12:08:43.254900'
+  description: Unified NewsBot Configuration
+  last_updated: '2025-06-23T12:08:43.262169'
+  version: 1.0.0
+monitoring:
+  health_checks: true
+  log_level: INFO
+  log_retention_days: 30
+  max_log_size_mb: 50
+  performance_tracking: true
+openai:
+  api_key: YOUR_OPENAI_API_KEY_HERE
+  max_tokens: 4000
+  model: gpt-3.5-turbo
+telegram:
+  api_hash: f5f83a4c91b0f2f202ed3c730c3f7ef3
+  api_id: 23834972
+  phone_number: '+1234567890'
+  token: ''

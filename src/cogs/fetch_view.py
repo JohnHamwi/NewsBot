@@ -29,15 +29,14 @@ from src.services.media_service import MediaService
 from src.services.posting_service import PostingService
 from src.utils import error_handler
 from src.utils.base_logger import base_logger as logger
-from src.utils.config import Config
+
 from src.utils.content_cleaner import clean_news_content
 from src.utils.structured_logger import structured_logger
 
 # =============================================================================
 # Configuration Constants
 # =============================================================================
-GUILD_ID = Config.GUILD_ID or 0
-ADMIN_USER_ID = Config.ADMIN_USER_ID or 0
+# GUILD_ID and ADMIN_USER_ID will be set dynamically when needed
 
 
 # =============================================================================
@@ -430,12 +429,12 @@ class FetchView(ui.View):
             except Exception:
                 pass
 
-    @ui.button(label="Blacklist", style=discord.ButtonStyle.danger)
+    @ui.button(label="🚫 Blacklist Post", style=discord.ButtonStyle.danger)
     async def blacklist(
         self, interaction: discord.Interaction, button: ui.Button
     ) -> None:
         """
-        Handle the Blacklist button click.
+        Handle the Blacklist Post button click.
 
         Args:
             interaction: The Discord interaction from the button click
@@ -443,24 +442,52 @@ class FetchView(ui.View):
         """
         try:
             self.logger.info(
-                f"[FETCH][BTN] Blacklist button clicked by user {interaction.user.id}"
+                f"[FETCH][BTN] Blacklist Post button clicked by user {interaction.user.id}"
             )
 
-            # Check authorization (temporarily disabled for testing)
-            if False:  # Temporarily disable permission check
-                if interaction.user.id != ADMIN_USER_ID:
-                    await interaction.response.send_message("You are not authorized.")
-                    return
+            # Check if user is admin
+            def get_config():
+                """Get config manager instance."""
+                from src.core.unified_config import unified_config as unified_config
+                return unified_config
+            
+            admin_user_id = get_config().get("bot.admin_user_id")
+            if not admin_user_id or interaction.user.id != int(admin_user_id):
+                await interaction.response.send_message("❌ Only admins can blacklist posts.", ephemeral=True)
+                return
 
-            # Add to blacklist (this would need to be implemented in a blacklist service)
-            # For now, just acknowledge the action
-            await interaction.response.send_message(
-                f"⚠️ Message {self.message_id} from {self.channelname} has been blacklisted."
-            )
+            await interaction.response.defer()
 
-            self.logger.info(
-                f"[FETCH][BTN] Message {self.message_id} blacklisted by user {interaction.user.id}"
-            )
+            # Add message ID to blacklist
+            if hasattr(self.bot, 'json_cache') and self.bot.json_cache:
+                blacklisted_posts = await self.bot.json_cache.get("blacklisted_posts") or []
+                if self.message_id not in blacklisted_posts:
+                    blacklisted_posts.append(self.message_id)
+                    await self.bot.json_cache.set("blacklisted_posts", blacklisted_posts)
+                    await self.bot.json_cache.save()
+
+                    # Create blacklist confirmation
+                    embed = discord.Embed(
+                        title="🚫 Post Blacklisted",
+                        description=f"Message **{self.message_id}** from **{self.channelname}** has been blacklisted.",
+                        color=0xFF0000
+                    )
+                    embed.add_field(name="Message ID", value=str(self.message_id), inline=True)
+                    embed.add_field(name="Channel", value=self.channelname, inline=True)
+                    embed.add_field(name="Blacklisted by", value=f"<@{interaction.user.id}>", inline=True)
+
+                    # Disable all buttons
+                    for item in self.children:
+                        item.disabled = True
+
+                    await interaction.followup.edit_message(interaction.message.id, view=self)
+                    await interaction.followup.send(embed=embed)
+
+                    self.logger.info(f"🚫 [BLACKLIST] Post {self.message_id} from {self.channelname} blacklisted by {interaction.user.id}")
+                else:
+                    await interaction.followup.send(f"⚠️ Message **{self.message_id}** is already blacklisted.", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ Cache not available for blacklisting.", ephemeral=True)
 
         except Exception as e:
             self.logger.error(
@@ -468,9 +495,7 @@ class FetchView(ui.View):
             )
 
             try:
-                await interaction.response.send_message(
-                    f"❌ Error blacklisting: {str(e)}"
-                )
+                await interaction.followup.send(f"❌ Error blacklisting post: {str(e)}", ephemeral=True)
             except Exception:
                 pass
 

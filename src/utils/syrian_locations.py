@@ -100,6 +100,7 @@ SYRIAN_LOCATIONS = {
     },
     # Important Towns and Areas
     "Douma": {"emoji": "🏘️", "region": "Damascus Countryside", "arabic": ["دوما"]},
+    "Doueila": {"emoji": "🏘️", "region": "Damascus", "arabic": ["الدويلعة", "دويلعة"]},
     "Ghouta": {"emoji": "🌿", "region": "Damascus Countryside", "arabic": ["الغوطة"]},
     "Quneitra": {"emoji": "🏔️", "region": "Southern Syria", "arabic": ["القنيطرة"]},
     "As-Suwayda": {"emoji": "🏔️", "region": "Southern Syria", "arabic": ["السويداء"]},
@@ -119,6 +120,56 @@ SYRIAN_LOCATIONS = {
         "region": "Northwestern Syria",
         "arabic": ["معرة النعمان"],
     },
+}
+
+# Syrian Government Officials and Indicators
+SYRIAN_GOVERNMENT_INDICATORS = {
+    # Government Titles (Arabic)
+    "ministers": [
+        "وزير الاقتصاد", "وزير الصناعة", "وزير التجارة", "وزير الداخلية", 
+        "وزير الخارجية", "وزير الدفاع", "وزير التربية", "وزير الصحة",
+        "وزير العدل", "وزير المالية", "وزير النقل", "وزير الزراعة",
+        "وزير الطاقة", "وزير الإعلام", "وزير الثقافة", "وزير السياحة",
+        "رئيس الوزراء", "نائب رئيس الوزراء", "وزير الدولة"
+    ],
+    # Presidential and High-Level Titles (Arabic)
+    "presidential": [
+        "الرئيس السوري", "رئيس الجمهورية", "رئيس سوريا", "الرئيس أحمد الشرع",
+        "أحمد الشرع", "الشرع", "القائد العام", "رئيس مجلس الوزراء",
+        "رئيس الحكومة", "القيادة السورية", "الرئاسة السورية"
+    ],
+    # Government Titles (English)
+    "ministers_en": [
+        "Minister of Economy", "Minister of Industry", "Minister of Trade", 
+        "Minister of Interior", "Minister of Foreign Affairs", "Minister of Defense",
+        "Minister of Education", "Minister of Health", "Minister of Justice",
+        "Minister of Finance", "Minister of Transport", "Minister of Agriculture",
+        "Minister of Energy", "Minister of Information", "Minister of Culture",
+        "Minister of Tourism", "Prime Minister", "Deputy Prime Minister", "Minister of State"
+    ],
+    # Presidential and High-Level Titles (English)
+    "presidential_en": [
+        "Syrian President", "President of Syria", "Ahmed al-Sharaa", "Ahmad al-Sharaa",
+        "al-Sharaa", "Commander in Chief", "Syrian Leadership", "Syrian Presidency"
+    ],
+    # Known Syrian Officials (last names commonly mentioned)
+    "official_names": [
+        "الشعار", "Al-Sha'ar", "المقداد", "Mekdad", "الخطيب", "Al-Khatib",
+        "عرنوس", "Arnous", "المنسي", "Al-Mansi", "العبد الله", "Abdullah",
+        "الشرع", "al-Sharaa", "أحمد الشرع", "Ahmed al-Sharaa"
+    ],
+    # Government Institutions
+    "institutions": [
+        "وزارة الاقتصاد", "وزارة الصناعة", "وزارة التجارة", "وزارة الداخلية",
+        "وزارة الخارجية", "وزارة الدفاع", "وزارة التربية", "وزارة الصحة",
+        "الحكومة السورية", "مجلس الوزراء", "رئاسة الجمهورية"
+    ],
+    # Government Institutions (English)
+    "institutions_en": [
+        "Ministry of Economy", "Ministry of Industry", "Ministry of Trade",
+        "Ministry of Interior", "Ministry of Foreign Affairs", "Ministry of Defense",
+        "Syrian Government", "Council of Ministers", "Presidency"
+    ]
 }
 
 # Regional groupings
@@ -350,15 +401,76 @@ def format_syrian_location_tags(text: str) -> str:
 def detect_syrian_location(text: str) -> str:
     """
     Detect the primary Syrian location mentioned in text.
+    Enhanced with government official detection.
 
     Args:
         text: Text to analyze
 
     Returns:
-        Primary location name or empty string if none found
+        Primary location name or "Damascus" if Syrian officials mentioned
     """
+    if not text:
+        return ""
+    
+    # First check for Syrian government officials
+    if detect_syrian_government_official(text):
+        return "Damascus"  # Government officials are typically in Damascus
+    
     locations = detect_syrian_locations(text)
     return locations[0]["name"] if locations else ""
+
+
+def detect_syrian_government_official(text: str) -> bool:
+    """
+    Detect if the text mentions Syrian government officials, ministers, or institutions.
+    
+    Args:
+        text: Text to analyze
+        
+    Returns:
+        bool: True if Syrian government officials are mentioned
+    """
+    if not text:
+        return False
+    
+    text_lower = text.lower()
+    
+    # Check for minister titles (Arabic)
+    for minister_title in SYRIAN_GOVERNMENT_INDICATORS["ministers"]:
+        if minister_title in text:
+            return True
+    
+    # Check for presidential titles (Arabic)
+    for presidential_title in SYRIAN_GOVERNMENT_INDICATORS["presidential"]:
+        if presidential_title in text:
+            return True
+    
+    # Check for minister titles (English)  
+    for minister_title in SYRIAN_GOVERNMENT_INDICATORS["ministers_en"]:
+        if minister_title.lower() in text_lower:
+            return True
+    
+    # Check for presidential titles (English)
+    for presidential_title in SYRIAN_GOVERNMENT_INDICATORS["presidential_en"]:
+        if presidential_title.lower() in text_lower:
+            return True
+            
+    # Check for known official names
+    for official_name in SYRIAN_GOVERNMENT_INDICATORS["official_names"]:
+        if official_name.lower() in text_lower:
+            return True
+            
+    # Check for government institutions (Arabic)
+    for institution in SYRIAN_GOVERNMENT_INDICATORS["institutions"]:
+        if institution in text:
+            return True
+            
+    # Check for government institutions (English)
+    for institution in SYRIAN_GOVERNMENT_INDICATORS["institutions_en"]:
+        if institution.lower() in text_lower:
+            return True
+    
+    return False
 
 
 # =============================================================================

@@ -23,7 +23,7 @@ from discord.ext import commands
 # =============================================================================
 from src.components.embeds.base_embed import InfoEmbed, ErrorEmbed, SuccessEmbed
 from src.components.decorators.admin_required import admin_required
-from src.core.config_manager import config
+from src.core.unified_config import unified_config as config
 from src.utils.base_logger import base_logger as logger
 from src.utils.structured_logger import structured_logger
 

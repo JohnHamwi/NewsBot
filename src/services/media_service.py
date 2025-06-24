@@ -29,7 +29,7 @@ from src.utils.media_validator import MediaValidator
 # =============================================================================
 # Configuration Constants
 # =============================================================================
-DISCORD_MAX_FILESIZE_MB = int(os.getenv("DISCORD_MAX_FILESIZE_MB", "100"))
+DISCORD_MAX_FILESIZE_MB = 100  # Discord file size limit in MB
 MAX_DISCORD_FILE_SIZE = DISCORD_MAX_FILESIZE_MB * 1024 * 1024
 
 # =============================================================================

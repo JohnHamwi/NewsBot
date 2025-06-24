@@ -25,7 +25,7 @@ from discord.ext import commands
 # =============================================================================
 from src.monitoring.log_aggregator import log_aggregator
 from src.utils.structured_logger import structured_logger
-from src.utils.config import config
+from src.core.unified_config import unified_config as config
 
 
 # =============================================================================

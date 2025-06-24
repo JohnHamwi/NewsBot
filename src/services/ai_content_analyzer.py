@@ -28,14 +28,14 @@ import discord
 # =============================================================================
 try:
     from src.utils.base_logger import base_logger as logger
-    from src.core.config_manager import config
+    from src.core.unified_config import unified_config as config
 except ImportError:
     # Fallback for direct execution
     import sys
     import os
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from utils.base_logger import base_logger as logger
-    from core.config_manager import config
+    from core.unified_config import config
 
 
 # =============================================================================
@@ -325,10 +325,30 @@ class AIContentAnalyzer:
                 )
             
             # Send embed with or without buttons
+            message_content = ""
+            
+            # Ping user for flagged content that needs manual verification
+            if safety_level in ['graphic', 'disturbing', 'sensitive']:
+                # Get user ID from config
+                if hasattr(self.bot, 'unified_config'):
+                    user_id = self.bot.unified_config.get('admin.user_id')
+                    if user_id:
+                        message_content = f"<@{user_id}> 🚨 **Content flagged for manual verification** - Please review and take action (approve/blacklist)"
+                        
+                        # Set manual verification delay (1 hour = 3600 seconds)
+                        if not hasattr(self.bot, '_manual_verification_delay_until'):
+                            self.bot._manual_verification_delay_until = {}
+                        
+                        import datetime
+                        delay_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+                        self.bot._manual_verification_delay_until['auto_fetch'] = delay_until
+                        
+                        logger.info(f"🛡️ Manual verification required - auto-fetch delayed until {delay_until.strftime('%H:%M UTC')}")
+            
             if view:
-                await self.bot.log_channel.send(embed=embed, view=view)
+                await self.bot.log_channel.send(content=message_content, embed=embed, view=view)
             else:
-                await self.bot.log_channel.send(embed=embed)
+                await self.bot.log_channel.send(content=message_content, embed=embed)
             
         except Exception as e:
             logger.error(f"❌ Failed to send Discord log: {e}")
@@ -1013,8 +1033,8 @@ class ContentFilterView(discord.ui.View):
         """Post the filtered content anyway (admin override)."""
         try:
             # Check if user is admin
-            from src.core.config_manager import config
-            admin_user_id = config.get("bot.admin_user_id")
+            from src.core.unified_config import unified_config as unified_config
+            admin_user_id = unified_config.get("bot.admin_user_id")
             if not admin_user_id or interaction.user.id != int(admin_user_id):
                 await interaction.response.send_message("❌ Only admins can override content filtering.", ephemeral=True)
                 return
@@ -1045,119 +1065,142 @@ class ContentFilterView(discord.ui.View):
             await interaction.followup.edit_message(interaction.message.id, view=self)
             await interaction.followup.send(embed=embed)
             
+            # Clear manual verification delay since admin took action
+            if hasattr(self.bot, '_manual_verification_delay_until') and 'auto_fetch' in self.bot._manual_verification_delay_until:
+                del self.bot._manual_verification_delay_until['auto_fetch']
+                logger.info("🚀 Manual verification delay cleared - admin approved content")
+            
             logger.warning(f"🛡️ [ADMIN-OVERRIDE] Content posted despite safety filtering by {interaction.user.id}: {self.safety_level}")
             
         except Exception as e:
             logger.error(f"Error in post anyway: {e}")
             await interaction.followup.send(f"❌ Error posting content: {str(e)}", ephemeral=True)
     
-    @discord.ui.button(label="📥 Download Media", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="📥 Download Media", style=discord.ButtonStyle.secondary)
     async def download_media(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Download media from the filtered message for manual review."""
+        """Download the media from the filtered content."""
         try:
             # Check if user is admin
-            from src.core.config_manager import config
-            admin_user_id = config.get("bot.admin_user_id")
+            from src.core.unified_config import unified_config as unified_config
+            admin_user_id = unified_config.get("bot.admin_user_id")
             if not admin_user_id or interaction.user.id != int(admin_user_id):
-                await interaction.response.send_message("❌ Only admins can download filtered media.", ephemeral=True)
+                await interaction.response.send_message("❌ Only admins can download media.", ephemeral=True)
                 return
             
             await interaction.response.defer()
             
-            # Check if we have message data with media
-            if not self.telegram_message or not hasattr(self.telegram_message, 'media') or not self.telegram_message.media:
-                await interaction.followup.send("❌ No media found in this filtered message.", ephemeral=True)
+            # Check if we have telegram message data
+            if not self.telegram_message:
+                await interaction.followup.send("❌ No telegram message data available for download.", ephemeral=True)
                 return
             
-            # Import media service
-            from src.services.media_service import MediaService
-            import os
-            
-            media_service = MediaService(self.bot)
-            
-            # Download media
-            media_files, temp_path = await media_service.download_media_with_timeout(
-                self.telegram_message, self.telegram_message.media
-            )
-            
-            if media_files:
-                # Send the media files to Discord
-                discord_files = []
-                for file_path in media_files:
-                    if os.path.exists(file_path):
-                        filename = os.path.basename(file_path)
-                        discord_files.append(discord.File(file_path, filename=filename))
+            # Try to download media using the media service
+            try:
+                from src.services.media_service import MediaService
+                import os
                 
-                if discord_files:
-                    embed = discord.Embed(
-                        title="📥 Filtered Media Downloaded",
-                        description=f"Media from filtered content in **{self.channel}** for manual review.",
-                        color=0x3498db
+                media_service = MediaService(self.bot)
+                
+                if hasattr(self.telegram_message, 'media') and self.telegram_message.media:
+                    # Download media
+                    media_files, temp_path = await media_service.download_media_with_timeout(
+                        self.telegram_message, self.telegram_message.media
                     )
-                    embed.add_field(name="Safety Level", value=f"`{self.safety_level.upper()}`", inline=True)
-                    embed.add_field(name="Downloaded by", value=f"<@{interaction.user.id}>", inline=True)
-                    embed.add_field(name="Files", value=f"{len(discord_files)} file(s)", inline=True)
                     
-                    await interaction.followup.send(embed=embed, files=discord_files)
+                    if media_files:
+                        # Create download notification
+                        embed = discord.Embed(
+                            title="📥 Media Downloaded",
+                            description=f"Media from **{self.channel}** has been downloaded.",
+                            color=0x00FF00
+                        )
+                        embed.add_field(name="Files Downloaded", value=f"`{len(media_files)} files`", inline=True)
+                        embed.add_field(name="Downloaded by", value=f"<@{interaction.user.id}>", inline=True)
+                        embed.add_field(name="Safety Level", value=f"`{self.safety_level.upper()}`", inline=True)
+                        
+                        # Try to attach the first file if it's small enough
+                        try:
+                            if media_files and len(media_files) > 0:
+                                file_path = media_files[0]
+                                if os.path.exists(file_path) and os.path.getsize(file_path) < 8 * 1024 * 1024:  # 8MB limit
+                                    discord_file = discord.File(file_path)
+                                    await interaction.followup.send(embed=embed, file=discord_file)
+                                else:
+                                    embed.add_field(name="Note", value="File too large to attach to Discord", inline=False)
+                                    await interaction.followup.send(embed=embed)
+                            else:
+                                await interaction.followup.send(embed=embed)
+                        except Exception as e:
+                            logger.warning(f"Could not attach file to Discord: {e}")
+                            await interaction.followup.send(embed=embed)
+                        
+                        logger.info(f"📥 [DOWNLOAD] Media downloaded by {interaction.user.id} from {self.channel}: {len(media_files)} files")
+                    else:
+                        await interaction.followup.send("❌ Failed to download media files.", ephemeral=True)
                 else:
-                    await interaction.followup.send("❌ No valid media files to send.", ephemeral=True)
-                
-                # Cleanup
-                media_service.cleanup_media_files(media_files, temp_path)
-            else:
-                await interaction.followup.send("❌ Failed to download media from filtered message.", ephemeral=True)
+                    await interaction.followup.send("❌ No media available for download.", ephemeral=True)
+                    
+            except Exception as e:
+                logger.error(f"Error downloading media: {e}")
+                await interaction.followup.send(f"❌ Error downloading media: {str(e)}", ephemeral=True)
             
         except Exception as e:
-            logger.error(f"Error downloading filtered media: {e}")
+            logger.error(f"Error in download media button: {e}")
             await interaction.followup.send(f"❌ Error downloading media: {str(e)}", ephemeral=True)
     
-    @discord.ui.button(label="🚫 Blacklist Channel", style=discord.ButtonStyle.danger)
-    async def blacklist_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Blacklist the channel that produced this filtered content."""
+    @discord.ui.button(label="🚫 Blacklist Post", style=discord.ButtonStyle.danger)
+    async def blacklist_post(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Blacklist the message to prevent future processing."""
         try:
             # Check if user is admin
-            from src.core.config_manager import config
-            admin_user_id = config.get("bot.admin_user_id")
+            from src.core.unified_config import unified_config as unified_config
+            admin_user_id = unified_config.get("bot.admin_user_id")
             if not admin_user_id or interaction.user.id != int(admin_user_id):
-                await interaction.response.send_message("❌ Only admins can blacklist channels.", ephemeral=True)
+                await interaction.response.send_message("❌ Only admins can blacklist posts.", ephemeral=True)
                 return
-            
+
             await interaction.response.defer()
-            
-            # Add channel to blacklist
-            if hasattr(self.bot, 'json_cache') and self.bot.json_cache:
-                blacklisted_channels = await self.bot.json_cache.get("blacklisted_channels") or []
-                if self.channel not in blacklisted_channels:
-                    blacklisted_channels.append(self.channel)
-                    await self.bot.json_cache.set("blacklisted_channels", blacklisted_channels)
+
+            # Add message ID to blacklist
+            if hasattr(self.bot, 'json_cache') and self.bot.json_cache and self.message_id:
+                blacklisted_posts = await self.bot.json_cache.get("blacklisted_posts") or []
+                if self.message_id not in blacklisted_posts:
+                    blacklisted_posts.append(self.message_id)
+                    await self.bot.json_cache.set("blacklisted_posts", blacklisted_posts)
                     await self.bot.json_cache.save()
-                    
-                    # Update embed to show blacklisted
+
+                    # Create blacklist confirmation
                     embed = discord.Embed(
-                        title="🚫 Channel Blacklisted",
-                        description=f"Channel **{self.channel}** has been blacklisted due to safety violations.",
+                        title="🚫 Post Blacklisted",
+                        description=f"Message **{self.message_id}** from **{self.channel}** has been blacklisted.",
                         color=0xFF0000
                     )
+                    embed.add_field(name="Message ID", value=str(self.message_id), inline=True)
+                    embed.add_field(name="Channel", value=self.channel, inline=True)
                     embed.add_field(name="Safety Level", value=f"`{self.safety_level.upper()}`", inline=True)
                     embed.add_field(name="Blacklisted by", value=f"<@{interaction.user.id}>", inline=True)
-                    embed.add_field(name="Reason", value="Content safety filtering", inline=True)
-                    
+
                     # Disable all buttons
                     for item in self.children:
                         item.disabled = True
-                    
+
                     await interaction.followup.edit_message(interaction.message.id, view=self)
                     await interaction.followup.send(embed=embed)
-                    
-                    logger.warning(f"🚫 [BLACKLIST] Channel '{self.channel}' blacklisted by {interaction.user.id} due to {self.safety_level} content")
+
+                    # Clear manual verification delay since admin took action
+                    if hasattr(self.bot, '_manual_verification_delay_until') and 'auto_fetch' in self.bot._manual_verification_delay_until:
+                        del self.bot._manual_verification_delay_until['auto_fetch']
+                        logger.info("🚀 Manual verification delay cleared - admin blacklisted content")
+
+                    logger.info(f"🚫 [BLACKLIST] Content safety post {self.message_id} from {self.channel} blacklisted by {interaction.user.id}")
                 else:
-                    await interaction.followup.send(f"⚠️ Channel **{self.channel}** is already blacklisted.", ephemeral=True)
+                    await interaction.followup.send(f"⚠️ Message **{self.message_id}** is already blacklisted.", ephemeral=True)
             else:
-                await interaction.followup.send("❌ Cache not available for blacklisting.", ephemeral=True)
-            
+                await interaction.followup.send("❌ Cache not available for blacklisting or no message ID.", ephemeral=True)
+
         except Exception as e:
-            logger.error(f"Error blacklisting channel: {e}")
-            await interaction.followup.send(f"❌ Error blacklisting channel: {str(e)}", ephemeral=True)
+            logger.error(f"Error in blacklist button: {e}")
+            await interaction.followup.send(f"❌ Error blacklisting post: {str(e)}", ephemeral=True)
     
     async def on_timeout(self):
         """Called when the view times out."""

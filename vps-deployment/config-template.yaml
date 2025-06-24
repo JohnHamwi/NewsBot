@@ -1,0 +1,91 @@
+# NewsBot Configuration Template
+# This configuration is pre-filled with your actual values
+# You can modify any settings as needed
+
+# Bot Configuration
+bot:
+  version: "4.5.0"
+  debug_mode: true
+  application_id: 1378540050006147114
+  guild_id: 1228455909827805308
+  admin_role_id: 1271183251041681501
+  admin_user_id: 259725211664908288
+  news_role_id: 1312489916764131390
+
+# Channel Configuration
+channels:
+  news: 1382112473423020062
+  errors: 1378781937279176774
+  logs: 1378553893083938957
+
+# API Tokens
+tokens:
+  discord: "YOUR_DISCORD_BOT_TOKEN_HERE"
+
+# Auto-posting Configuration
+auto_post:
+  min_interval_hours: 1
+  max_interval_hours: 24
+  default_interval_hours: 6
+
+# Intelligence Services Configuration
+intelligence:
+  priority_sources:
+    - "alekhbariahsy"
+    - "syrianobserver" 
+    - "orient_news"
+    - "sana_en"
+  
+  notifications:
+    always_ping_news_role: true
+    breaking_news_threshold: 0.8
+    
+  content_analysis:
+    quality_threshold: 0.6
+    similarity_threshold: 0.8
+    cache_size: 50
+
+# Resource Monitoring
+monitoring:
+  metrics:
+    port: 8000
+    collection_interval: 300
+  resource_alerts:
+    enabled: false
+    cpu_threshold: 95.0
+    ram_threshold: 90.0
+    check_interval: 30
+
+# Rich Presence
+rich_presence:
+  update_interval: 60
+  posted_duration: 600
+
+# Logging
+logging:
+  file: "logs/NewsBot.log"
+  max_lines_tail: 15
+  heartbeat_interval: 3600
+
+# Circuit Breaker
+circuit_breaker:
+  failure_threshold: 5
+  reset_timeout: 300
+  half_open_timeout: 60
+
+# Cache
+cache:
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+
+# Telegram configuration
+telegram:
+  api_id: 23834972
+  api_hash: "f5f83a4c91b0f2f202ed3c730c3f7ef3"
+  bot_token: "7820027446:AAG1AJOKzqWgUEetXIcFjsJAzdsdlnVRKQE"
+
+# OpenAI Configuration
+openai:
+  api_key: "YOUR_OPENAI_API_KEY_HERE" 

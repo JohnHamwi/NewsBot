@@ -26,16 +26,15 @@ import pytz
 # =============================================================================
 from src.utils import error_handler
 from src.utils.base_logger import base_logger as logger
-from src.utils.config import Config
+from src.core.unified_config import unified_config as config
 
 # =============================================================================
 # Configuration Constants
 # =============================================================================
 try:
-    from src.utils.config import Config
-    NEWS_ROLE_ID = getattr(Config, "NEWS_ROLE_ID", None) or os.getenv("NEWS_ROLE_ID")
+    NEWS_ROLE_ID = config.get("bot.news_role_id")
 except Exception:
-    NEWS_ROLE_ID = os.getenv("NEWS_ROLE_ID")
+    NEWS_ROLE_ID = None
 
 # Forum tag mapping - maps category names to Discord forum tag IDs
 FORUM_TAG_MAPPING = {
@@ -48,6 +47,20 @@ FORUM_TAG_MAPPING = {
     "👥 Social": 1382115306842882118,
     "🚨 Security": 1382115376715927602,
     "📰 General News": 1382115427743826050,
+}
+
+# AI Category to Forum Tag mapping
+AI_CATEGORY_TO_FORUM_TAG = {
+    "politics": "🏛️ Politics",
+    "military": "⚔️ Military", 
+    "economy": "💰 Economy",
+    "health": "🏥 Health",
+    "international": "🌍 International",
+    "breaking": "🔴 Breaking News",
+    "social": "👥 Social",
+    "sports": "👥 Social",  # Map sports to social for now
+    "technology": "📰 General News",  # Map technology to general news
+    "culture": "👥 Social",  # Map culture to social
 }
 
 
@@ -186,19 +199,32 @@ class PostingService:
     ) -> bool:
         """Internal news posting logic."""
         try:
-            # Get the news channel using Config
-            from src.utils.config import Config
-            news_channel = self.bot.get_channel(Config.NEWS_CHANNEL_ID)
+            # Get the news channel using config manager
+            news_channel_id = config.get("discord.channels.news") or config.get("channels.news")
+            if not news_channel_id:
+                self.logger.error("[POSTING] News channel ID not configured")
+                return False
+                
+            news_channel = self.bot.get_channel(news_channel_id)
             if not news_channel:
-                self.logger.error(f"[POSTING] News channel not found with ID {Config.NEWS_CHANNEL_ID}")
+                self.logger.error(f"[POSTING] News channel not found with ID {news_channel_id}")
                 return False
 
-            # Generate thread title and message content
+            # Generate thread title and determine category for consistency
             thread_title = self._generate_thread_title(
                 arabic_text, ai_title, channelname, urgency_level
             )
+            
+            # Determine category once for consistent use in both forum tags and message content
+            if content_category != "social":
+                final_category = self._map_ai_category_to_forum_tag(content_category)
+                self.logger.info(f"[POSTING] Using AI category mapping: '{content_category}' -> '{final_category}'")
+            else:
+                final_category = self._categorize_content(arabic_text, english_translation)
+                self.logger.info(f"[POSTING] Using fallback categorization: '{final_category}'")
+            
             message_content = self._generate_message_content(
-                arabic_text, english_translation, channelname, message_id, ai_location, urgency_level, quality_score
+                arabic_text, english_translation, channelname, message_id, ai_location, urgency_level, quality_score, final_category
             )
             
             # 🔔 Prepare news role ping for all posts
@@ -221,18 +247,25 @@ class PostingService:
 
             # Create the thread and post - different approach for forum vs regular channels
             if isinstance(news_channel, discord.ForumChannel):
-                # Get the appropriate forum tag based on content category (use AI category if available)
-                category = content_category if content_category != "social" else self._categorize_content(arabic_text, english_translation)
-                applied_tags = self._get_forum_tags(news_channel, category)
+                # Use the already determined category for forum tags
+                applied_tags = self._get_forum_tags(news_channel, final_category)
+                self.logger.info(f"[POSTING] Final forum tags applied: {[tag.name for tag in applied_tags] if applied_tags else 'None'}")
 
                 # For forum channels, create thread with actual content directly
                 final_content = ping_content + message_content
-                thread, message = await news_channel.create_thread(
-                    name=thread_title,
-                    content=final_content,
-                    files=discord_files if discord_files else None,
-                    applied_tags=applied_tags,
-                )
+                
+                # Ensure parameters are properly formatted for Discord API
+                create_kwargs = {
+                    "name": thread_title,
+                    "content": final_content,
+                    "applied_tags": applied_tags or [],
+                }
+                
+                # Only add files parameter if we have files to attach
+                if discord_files:
+                    create_kwargs["files"] = discord_files
+                
+                thread, message = await news_channel.create_thread(**create_kwargs)
                 
                 if should_ping_news and ping_content:
                     if urgency_level == "breaking":
@@ -265,6 +298,10 @@ class PostingService:
             await self._send_confirmation_embed(
                 thread, thread_title, channelname, message_id, len(discord_files)
             )
+
+            # Mark that content was posted for rich presence
+            from src.core.rich_presence import mark_content_posted
+            await mark_content_posted(self.bot)
 
             self.logger.info(
                 f"[POSTING] Successfully posted to news channel: {thread_title}"
@@ -344,6 +381,7 @@ class PostingService:
         ai_location: Optional[str] = None,
         urgency_level: str = "normal",
         quality_score: float = 0.7,
+        category_override: Optional[str] = None,
     ) -> str:
         """Generate the message content for the news post."""
         # Clean up the Arabic text for display
@@ -373,7 +411,12 @@ class PostingService:
         else:
             location = self._detect_location(arabic_text, english_translation)
         
-        category = self._categorize_content(arabic_text, english_translation)
+        # Use category override if provided (for consistency with forum tags), otherwise categorize content
+        if category_override:
+            category = category_override
+        else:
+            category = self._categorize_content(arabic_text, english_translation)
+        
         damascus_tz = pytz.timezone("Asia/Damascus")
         current_time = datetime.datetime.now(damascus_tz).strftime(
             "%I:%M %p Damascus Time"
@@ -399,7 +442,9 @@ class PostingService:
         content_parts.append("---")
         content_parts.append("⚠️ **Beta Testing Notice**")
         content_parts.append(
-            "This bot is currently in beta testing. If you notice any issues, translation errors, or unexpected content, please contact <@259725211664908288>."
+            "This bot is currently in major development. News content and location accuracy may not be 100% accurate. "
+            "Location detection includes accuracy percentages to help gauge reliability. "
+            "If you notice any issues, translation errors, or unexpected content, please contact <@259725211664908288>."
         )
         content_parts.append("")  # Empty line
 
@@ -551,7 +596,8 @@ class PostingService:
         """Send a confirmation embed to the logs channel after successful posting."""
         try:
             # Get the logs channel
-            logs_channel = self.bot.get_channel(Config.LOG_CHANNEL_ID)
+            logs_channel_id = config.get("discord.channels.logs") or config.get("channels.logs")
+            logs_channel = self.bot.get_channel(logs_channel_id) if logs_channel_id else None
             if not logs_channel:
                 self.logger.warning(
                     "[POSTING] Logs channel not found, skipping confirmation embed"
@@ -844,3 +890,174 @@ class PostingService:
         except Exception as e:
             self.logger.error(f"[POSTING] Error getting forum tags: {str(e)}")
             return []
+
+    def _map_ai_category_to_forum_tag(self, ai_category: str) -> str:
+        """
+        Map AI category to forum tag.
+
+        Args:
+            ai_category: The AI-generated category string
+
+        Returns:
+            str: Corresponding forum tag string
+        """
+        try:
+            # Map AI category to forum tag
+            ai_category_lower = ai_category.lower()
+            mapped_tag = AI_CATEGORY_TO_FORUM_TAG.get(ai_category_lower, "📰 General News")
+            
+            self.logger.info(f"[POSTING] AI Category Mapping: '{ai_category}' -> '{ai_category_lower}' -> '{mapped_tag}'")
+            self.logger.info(f"[POSTING] Available AI categories: {list(AI_CATEGORY_TO_FORUM_TAG.keys())}")
+            
+            return mapped_tag
+
+        except Exception as e:
+            self.logger.error(f"[POSTING] Error mapping AI category to forum tag: {str(e)}")
+            return "📰 General News"
+
+    async def post_news_content(self, content_data: dict, content_category: str = "social", is_manual: bool = False) -> bool:
+        """
+        Enhanced posting with comprehensive debugging.
+        """
+        try:
+            self.logger.debug(f"📤 [POST-DEBUG] Starting post_news_content")
+            self.logger.debug(f"📤 [POST-DEBUG] Content category: {content_category}")
+            self.logger.debug(f"📤 [POST-DEBUG] Is manual: {is_manual}")
+            self.logger.debug(f"📤 [POST-DEBUG] Content keys: {list(content_data.keys())}")
+            
+            # Extract content data
+            arabic_text = content_data.get("text", "")
+            english_translation = content_data.get("translation", "")
+            ai_title = content_data.get("title", "أخبار سورية")
+            location = content_data.get("location", "Unknown")
+            media_urls = content_data.get("media_urls", [])
+            source_channel = content_data.get("source_channel", "Unknown")
+            
+            self.logger.debug(f"📤 [POST-DEBUG] Arabic text length: {len(arabic_text)}")
+            self.logger.debug(f"📤 [POST-DEBUG] English translation length: {len(english_translation)}")
+            self.logger.debug(f"📤 [POST-DEBUG] AI title: {ai_title}")
+            self.logger.debug(f"📤 [POST-DEBUG] Location: {location}")
+            self.logger.debug(f"📤 [POST-DEBUG] Media URLs count: {len(media_urls)}")
+            self.logger.debug(f"📤 [POST-DEBUG] Source channel: {source_channel}")
+
+            # Validate required content
+            if not arabic_text or not english_translation:
+                self.logger.debug("📤 [POST-DEBUG] Missing required text content")
+                self.logger.warning("[POSTING] Missing required text content")
+                return False
+
+            # Get Discord objects
+            self.logger.debug("📤 [POST-DEBUG] Getting Discord guild and channels...")
+            guild = self.bot.get_guild(self.guild_id)
+            if not guild:
+                self.logger.debug(f"📤 [POST-DEBUG] Guild not found: {self.guild_id}")
+                self.logger.error(f"[POSTING] Guild not found: {self.guild_id}")
+                return False
+
+            news_channel = guild.get_channel(self.news_channel_id)
+            log_channel = guild.get_channel(self.log_channel_id)
+            
+            self.logger.debug(f"📤 [POST-DEBUG] News channel found: {news_channel is not None}")
+            self.logger.debug(f"📤 [POST-DEBUG] Log channel found: {log_channel is not None}")
+
+            if not news_channel:
+                self.logger.debug(f"📤 [POST-DEBUG] News channel not found: {self.news_channel_id}")
+                self.logger.error(f"[POSTING] News channel not found: {self.news_channel_id}")
+                return False
+
+            # Create content parts
+            self.logger.debug("📤 [POST-DEBUG] Building content parts...")
+            content_parts = []
+            
+            # Add title
+            content_parts.append(f"# {ai_title}")
+            self.logger.debug(f"📤 [POST-DEBUG] Added title: {ai_title}")
+            
+            # Add original Arabic text
+            content_parts.append("## النص الأصلي (Arabic)")
+            content_parts.append(arabic_text)
+            self.logger.debug("📤 [POST-DEBUG] Added Arabic text")
+            
+            # Add English translation
+            content_parts.append("## Translation (English)")
+            content_parts.append(english_translation)
+            self.logger.debug("📤 [POST-DEBUG] Added English translation")
+            
+            # Add location with accuracy
+            if location and location != "Unknown":
+                content_parts.append(f"📍 **Location:** {location}")
+                self.logger.debug(f"📤 [POST-DEBUG] Added location: {location}")
+            
+            # Add source
+            content_parts.append(f"📺 **Source:** {source_channel}")
+            self.logger.debug(f"📤 [POST-DEBUG] Added source: {source_channel}")
+            
+            # Add news role ping
+            news_role = guild.get_role(self.news_role_id)
+            if news_role:
+                content_parts.append(f"📰 {news_role.mention} Update")
+                self.logger.debug(f"📤 [POST-DEBUG] Added role mention: {news_role.name}")
+            else:
+                self.logger.debug(f"📤 [POST-DEBUG] News role not found: {self.news_role_id}")
+
+            # Create the thread and post - different approach for forum vs regular channels
+            if isinstance(news_channel, discord.ForumChannel):
+                self.logger.debug("📤 [POST-DEBUG] Posting to forum channel")
+                
+                # Get the appropriate forum tag based on content category (use AI category if available)
+                self.logger.debug(f"📤 [POST-DEBUG] Original AI content_category: '{content_category}'")
+                
+                if content_category != "social":
+                    category = self._map_ai_category_to_forum_tag(content_category)
+                    self.logger.debug(f"📤 [POST-DEBUG] Mapped AI category '{content_category}' to '{category}'")
+                else:
+                    category = self._categorize_content(arabic_text, english_translation)
+                    self.logger.debug(f"📤 [POST-DEBUG] Used content categorization for 'social': '{category}'")
+                
+                applied_tags = self._get_forum_tags(news_channel, category)
+                self.logger.debug(f"📤 [POST-DEBUG] Applied forum tags: {[tag.name for tag in applied_tags]}")
+                
+                # Create forum thread
+                thread, message = await news_channel.create_thread(
+                    name=ai_title[:100],  # Discord limits thread names to 100 chars
+                    content="\n".join(content_parts),
+                    applied_tags=applied_tags
+                )
+                self.logger.debug(f"📤 [POST-DEBUG] Created forum thread: {thread.name}")
+            else:
+                self.logger.debug("📤 [POST-DEBUG] Posting to regular channel")
+                message = await news_channel.send("\n".join(content_parts))
+                thread = None
+                self.logger.debug(f"📤 [POST-DEBUG] Sent message to regular channel")
+
+            # Handle media attachments
+            if media_urls:
+                self.logger.debug(f"📤 [POST-DEBUG] Processing {len(media_urls)} media attachments...")
+                await self._handle_media_attachments(media_urls, thread or news_channel)
+                self.logger.debug("📤 [POST-DEBUG] Media attachments processed")
+
+            # Log successful post
+            if log_channel:
+                self.logger.debug("📤 [POST-DEBUG] Sending log notification...")
+                log_embed = discord.Embed(
+                    title="📰 News Posted Successfully",
+                    description=f"**Title:** {ai_title}\n**Source:** {source_channel}\n**Category:** {content_category}",
+                    color=0x00ff00,
+                    timestamp=datetime.utcnow()
+                )
+                if thread:
+                    log_embed.add_field(name="Thread", value=thread.mention, inline=False)
+                else:
+                    log_embed.add_field(name="Message", value=f"[Jump to message]({message.jump_url})", inline=False)
+                
+                await log_channel.send(embed=log_embed)
+                self.logger.debug("📤 [POST-DEBUG] Log notification sent")
+
+            self.logger.debug("📤 [POST-DEBUG] Post completed successfully")
+            self.logger.info(f"[POSTING] Successfully posted news: {ai_title[:50]}...")
+            return True
+
+        except Exception as e:
+            self.logger.debug(f"📤 [POST-DEBUG] Exception in posting: {str(e)}")
+            self.logger.error(f"[POSTING] Error posting news content: {str(e)}")
+            return False

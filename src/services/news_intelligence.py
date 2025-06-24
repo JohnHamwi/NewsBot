@@ -22,14 +22,14 @@ from datetime import datetime, timedelta
 # =============================================================================
 try:
     from src.utils.base_logger import base_logger as logger
-    from src.core.config_manager import config
+    from src.core.unified_config import unified_config as config
 except ImportError:
     # Fallback for direct execution
     import sys
     import os
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from utils.base_logger import base_logger as logger
-    from core.config_manager import config
+    from core.unified_config import config
 
 
 # =============================================================================
@@ -87,6 +87,19 @@ class NewsIntelligenceService:
             "flash", "developing", "live", "just in", "update"
         ]
         
+        # Critical/urgent event keywords for better detection
+        self.critical_keywords_ar = [
+            "قصف", "انفجار", "قتل", "قتلى", "ضحايا", "شهداء", "جرحى", 
+            "هجوم", "غارة", "قنابل", "صواريخ", "دمار", "استهداف",
+            "اشتباكات", "معارك", "حريق", "كارثة", "حادث", "إصابات"
+        ]
+        
+        self.critical_keywords_en = [
+            "bombing", "explosion", "killed", "casualties", "victims", "martyrs", "wounded",
+            "attack", "raid", "bombs", "missiles", "destruction", "targeting", 
+            "clashes", "battles", "fire", "disaster", "accident", "injuries"
+        ]
+        
         # Priority sources with high credibility
         self.priority_sources = config.get("intelligence.priority_sources", [
             "alekhbariahsy", "syrianobserver", "orient_news"
@@ -113,28 +126,41 @@ class NewsIntelligenceService:
             NewsAnalysis with comprehensive urgency assessment
         """
         try:
-            # Calculate individual component scores
-            keyword_score = await self._calculate_keyword_urgency(content)
+            # 🤖 AI-POWERED URGENCY ANALYSIS (Primary method)
+            ai_urgency_result = await self._analyze_urgency_with_ai(content, channel)
+            
+            if ai_urgency_result:
+                # Use AI analysis as primary method
+                urgency_level = ai_urgency_result['urgency_level']
+                urgency_score = ai_urgency_result['urgency_score']
+                breaking_indicators = ai_urgency_result['reasoning']
+                logger.info(f"🤖 AI urgency analysis: {urgency_level.value} (score: {urgency_score:.2f}) - {ai_urgency_result['reasoning']}")
+            else:
+                # Fallback to keyword-based analysis
+                logger.warning("🔄 AI analysis failed, using keyword fallback")
+                keyword_score = await self._calculate_keyword_urgency(content)
+                source_score = await self._calculate_source_credibility(channel)
+                time_score = await self._calculate_time_sensitivity(content)
+                media_score = await self._calculate_media_urgency(media or [])
+                
+                # Combine scores with weighted importance
+                urgency_score = (
+                    keyword_score * 0.4 +    # Keywords are most important
+                    source_score * 0.3 +     # Source credibility matters
+                    time_score * 0.2 +       # Time indicators
+                    media_score * 0.1        # Media presence
+                )
+                
+                # Determine urgency level based on score
+                urgency_level = self._determine_urgency_level(urgency_score)
+                breaking_indicators = await self._get_breaking_indicators(content)
+            
+            # Calculate source credibility for analysis result
             source_score = await self._calculate_source_credibility(channel)
             time_score = await self._calculate_time_sensitivity(content)
-            media_score = await self._calculate_media_urgency(media or [])
-            
-            # Combine scores with weighted importance
-            urgency_score = (
-                keyword_score * 0.4 +    # Keywords are most important
-                source_score * 0.3 +     # Source credibility matters
-                time_score * 0.2 +       # Time indicators
-                media_score * 0.1        # Media presence
-            )
-            
-            # Determine urgency level based on score
-            urgency_level = self._determine_urgency_level(urgency_score)
             
             # Always ping news role for all posts as requested
             should_ping = True
-            
-            # Get breaking indicators for logging
-            breaking_indicators = await self._get_breaking_indicators(content)
             
             # Create comprehensive analysis result
             analysis = NewsAnalysis(
@@ -164,6 +190,108 @@ class NewsIntelligenceService:
             )
 
     # =========================================================================
+    # AI-Powered Urgency Analysis
+    # =========================================================================
+    async def _analyze_urgency_with_ai(self, content: str, channel: str) -> Optional[Dict]:
+        """
+        Use OpenAI to intelligently analyze content urgency.
+        
+        Args:
+            content: News content to analyze
+            channel: Source channel name
+            
+        Returns:
+            Dict with urgency_level, urgency_score, and reasoning, or None if failed
+        """
+        try:
+            # Import AI utilities
+            from src.utils.ai_utils import get_openai_response
+            
+            # Create intelligent prompt for urgency analysis
+            prompt = f"""
+You are a news urgency analyst. Analyze this news content and determine its urgency level.
+
+Content: "{content}"
+Source: {channel}
+
+Based on the content, determine:
+1. Urgency Level: Choose ONE of: BREAKING, IMPORTANT, NORMAL, LOW
+2. Urgency Score: A number from 0.0 to 1.0 (1.0 = most urgent)
+3. Reasoning: Brief explanation of your decision
+
+Guidelines:
+- BREAKING (0.8-1.0): Immediate threats, major attacks, breaking developments, mass casualties
+- IMPORTANT (0.5-0.79): Significant events, military operations, political developments, targeted attacks
+- NORMAL (0.2-0.49): Regular news, updates, general information
+- LOW (0.0-0.19): Minor updates, social content, routine announcements
+
+Consider factors like:
+- Violence level (bombings, attacks, casualties)
+- Scale of impact (how many people affected)
+- Time sensitivity (just happened vs. ongoing)
+- Political/military significance
+
+Respond in this exact format:
+URGENCY_LEVEL: [BREAKING/IMPORTANT/NORMAL/LOW]
+URGENCY_SCORE: [0.0-1.0]
+REASONING: [Brief explanation]
+"""
+
+            # Get AI response
+            ai_response = await get_openai_response(
+                prompt=prompt,
+                max_tokens=200,
+                temperature=0.3  # Lower temperature for more consistent analysis
+            )
+            
+            if ai_response:
+                # Parse AI response
+                lines = ai_response.strip().split('\n')
+                urgency_level_str = None
+                urgency_score = None
+                reasoning = []
+                
+                for line in lines:
+                    if line.startswith('URGENCY_LEVEL:'):
+                        urgency_level_str = line.split(':', 1)[1].strip()
+                    elif line.startswith('URGENCY_SCORE:'):
+                        try:
+                            urgency_score = float(line.split(':', 1)[1].strip())
+                        except ValueError:
+                            pass
+                    elif line.startswith('REASONING:'):
+                        reasoning.append(line.split(':', 1)[1].strip())
+                
+                # Convert string to UrgencyLevel enum
+                urgency_level = None
+                if urgency_level_str:
+                    try:
+                        urgency_level = UrgencyLevel(urgency_level_str.lower())
+                    except ValueError:
+                        # Fallback mapping
+                        level_map = {
+                            'breaking': UrgencyLevel.BREAKING,
+                            'important': UrgencyLevel.IMPORTANT,
+                            'normal': UrgencyLevel.NORMAL,
+                            'low': UrgencyLevel.LOW
+                        }
+                        urgency_level = level_map.get(urgency_level_str.lower())
+                
+                if urgency_level and urgency_score is not None:
+                    return {
+                        'urgency_level': urgency_level,
+                        'urgency_score': max(0.0, min(1.0, urgency_score)),  # Clamp to 0-1
+                        'reasoning': reasoning[0] if reasoning else "AI analysis completed"
+                    }
+            
+            logger.warning("🤖 AI urgency analysis: Could not parse response")
+            return None
+            
+        except Exception as e:
+            logger.error(f"🤖 AI urgency analysis failed: {e}")
+            return None
+
+    # =========================================================================
     # Keyword Urgency Analysis
     # =========================================================================
     async def _calculate_keyword_urgency(self, content: str) -> float:
@@ -177,6 +305,14 @@ class NewsIntelligenceService:
         for keyword in self.breaking_keywords_ar + self.breaking_keywords_en:
             if keyword in content_lower:
                 breaking_found += 1
+        
+        # Check for critical event keywords (higher weight for urgent events)
+        critical_found = 0
+        total_critical = len(self.critical_keywords_ar) + len(self.critical_keywords_en)
+        
+        for keyword in self.critical_keywords_ar + self.critical_keywords_en:
+            if keyword in content_lower:
+                critical_found += 1
                 
         # Additional urgent patterns
         urgent_patterns = [
@@ -191,11 +327,16 @@ class NewsIntelligenceService:
             if re.search(pattern, content_lower):
                 pattern_matches += 1
         
-        # Calculate combined score
-        keyword_score = (breaking_found / total_keywords) * 0.7
-        pattern_score = (pattern_matches / len(urgent_patterns)) * 0.3
+        # Calculate combined score with higher weight for critical events
+        breaking_score = (breaking_found / total_keywords) * 0.4
+        critical_score = (critical_found / total_critical) * 0.5  # Higher weight for violence/disasters
+        pattern_score = (pattern_matches / len(urgent_patterns)) * 0.1
         
-        return min(1.0, keyword_score + pattern_score)
+        total_score = breaking_score + critical_score + pattern_score
+        
+        logger.debug(f"🔍 Urgency analysis: breaking={breaking_found}, critical={critical_found}, patterns={pattern_matches}, score={total_score:.2f}")
+        
+        return min(1.0, total_score)
 
     # =========================================================================
     # Source Credibility Assessment
@@ -264,11 +405,11 @@ class NewsIntelligenceService:
     # =========================================================================
     def _determine_urgency_level(self, urgency_score: float) -> UrgencyLevel:
         """Determine urgency level based on calculated score."""
-        if urgency_score >= 0.8:
+        if urgency_score >= 0.7:
             return UrgencyLevel.BREAKING
-        elif urgency_score >= 0.6:
+        elif urgency_score >= 0.4:  # Lowered from 0.6 to catch more urgent content
             return UrgencyLevel.IMPORTANT
-        elif urgency_score >= 0.3:
+        elif urgency_score >= 0.2:  # Lowered from 0.3
             return UrgencyLevel.NORMAL
         else:
             return UrgencyLevel.LOW

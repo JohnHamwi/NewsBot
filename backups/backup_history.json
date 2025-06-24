@@ -1,0 +1,38 @@
+[
+  {
+    "timestamp": "2025-06-24T10:52:05.226625",
+    "backup_type": "pre_deployment",
+    "files_included": [
+      "config",
+      "data",
+      "src",
+      "requirements",
+      "test_requirements",
+      "pytest_ini",
+      "run_py",
+      "logs"
+    ],
+    "total_size_bytes": 909098,
+    "compression_ratio": 0.06324715255001866,
+    "success": true,
+    "error_message": null
+  },
+  {
+    "timestamp": "2025-06-24T10:52:15.911287",
+    "backup_type": "pre_deployment",
+    "files_included": [
+      "config",
+      "data",
+      "src",
+      "requirements",
+      "test_requirements",
+      "pytest_ini",
+      "run_py",
+      "logs"
+    ],
+    "total_size_bytes": 909082,
+    "compression_ratio": 0.06323057240276898,
+    "success": true,
+    "error_message": null
+  }
+]

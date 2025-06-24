@@ -273,27 +273,63 @@ class JSONCache:
         Set the index of the last used channel for rotation.
         
         Args:
-            index: The index of the channel that was last used
+            index: The index to save (0-based)
             
         Returns:
             bool: True if successful, False otherwise
         """
         try:
             data = self._read()
-            rotation_data = data.setdefault("channel_rotation", {})
-            rotation_data["last_index"] = index
-            rotation_data["last_updated"] = datetime.datetime.utcnow().isoformat()
+            now = datetime.datetime.utcnow().isoformat()
+            data.setdefault("channel_rotation", {})["last_index"] = index
+            data["channel_rotation"]["last_updated"] = now
             self._write(data)
             await self.save()
-            logger.debug(f"Set last channel index to: {index}")
             return True
         except Exception as e:
             logger.error(f"Failed to set last channel index: {str(e)}")
             return False
 
+    async def get_last_channel_name(self) -> str:
+        """
+        Get the name of the last used channel for rotation.
+        
+        Returns:
+            str: The name of the last used channel, or empty string if not set
+        """
+        try:
+            data = self._read()
+            return data.get("channel_rotation", {}).get("last_channel", "")
+        except Exception as e:
+            logger.error(f"Failed to get last channel name: {str(e)}")
+            return ""
+
+    async def set_last_channel_name(self, channel_name: str) -> bool:
+        """
+        Set the name of the last used channel for rotation.
+        
+        Args:
+            channel_name: The channel name to save
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            data = self._read()
+            now = datetime.datetime.utcnow().isoformat()
+            data.setdefault("channel_rotation", {})["last_channel"] = channel_name
+            data["channel_rotation"]["last_updated"] = now
+            self._write(data)
+            await self.save()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set last channel name: {str(e)}")
+            return False
+
     async def get_next_channel_for_rotation(self) -> Optional[str]:
         """
         Get the next channel in the rotation sequence.
+        Enhanced to remember specific channel name across restarts.
         
         Returns:
             str: The next channel name to use, or None if no channels available
@@ -305,8 +341,16 @@ class JSONCache:
                 logger.warning("No active channels available for rotation")
                 return None
             
-            # Get last used index
-            last_index = await self.get_last_channel_index()
+            # Get last used channel name (more robust than index)
+            last_channel_name = await self.get_last_channel_name()
+            
+            # Find the index of the last used channel
+            try:
+                last_index = active_channels.index(last_channel_name)
+            except ValueError:
+                # Last channel no longer exists, start from beginning
+                logger.info(f"Last used channel '{last_channel_name}' no longer active, starting rotation from beginning")
+                last_index = -1
             
             # Calculate next index (with wraparound)
             next_index = (last_index + 1) % len(active_channels)
@@ -314,10 +358,11 @@ class JSONCache:
             # Get the next channel
             next_channel = active_channels[next_index]
             
-            # Update the last used index
+            # Update both index and channel name for backward compatibility
             await self.set_last_channel_index(next_index)
+            await self.set_last_channel_name(next_channel)
             
-            logger.info(f"Channel rotation: last_index={last_index}, next_index={next_index}, channel={next_channel}")
+            logger.info(f"Channel rotation: last_channel='{last_channel_name}', next_channel='{next_channel}' (index {next_index})")
             return next_channel
             
         except Exception as e:

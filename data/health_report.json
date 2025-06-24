@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-24T14:37:39.880282+00:00",
+  "status": "HEALTHY",
+  "score": 100.0,
+  "checks": {
+    "File Structure": true,
+    "Python Syntax": true,
+    "Configuration": true,
+    "Test Health": true,
+    "Critical Tests": true
+  }
+}

@@ -26,7 +26,7 @@ import discord
 # =============================================================================
 # Use the same base logger as the rest of the bot for consistent formatting
 from src.utils.base_logger import base_logger as rbac_logger
-from src.utils.config import Config
+from src.core.unified_config import unified_config as config
 
 
 # =============================================================================
@@ -212,7 +212,8 @@ class RBACManager:
             bool: Whether member has permission
         """
         # Admin role always has all permissions
-        if Config.ADMIN_ROLE_ID in [role.id for role in member.roles]:
+        admin_role_id = config.get("bot.admin_role_id")
+        if admin_role_id and admin_role_id in [role.id for role in member.roles]:
             return True
 
         # Check each role the member has
@@ -237,7 +238,8 @@ class RBACManager:
         permissions = set()
 
         # Admin role gets all permissions
-        if Config.ADMIN_ROLE_ID in [role.id for role in member.roles]:
+        admin_role_id = config.get("bot.admin_role_id")
+        if admin_role_id and admin_role_id in [role.id for role in member.roles]:
             return set(self.permissions.keys())
 
         # Combine permissions from all roles
@@ -317,11 +319,11 @@ class RBACManager:
         """Load and initialize all permissions and roles."""
         rbac_logger.debug("Loading RBAC permissions and roles")
 
-        # Add default roles
+        # Add default roles from config
         default_roles = {
-            "admin": int(os.getenv("ADMIN_ROLE_ID", "0")),
-            "moderator": int(os.getenv("MOD_ROLE_ID", "0")),
-            "user": int(os.getenv("USER_ROLE_ID", "0")),
+            "admin": config.get("bot.admin_role_id", 0),
+            "moderator": config.get("bot.moderator_role_id", 0),
+            "user": config.get("bot.user_role_id", 0),
         }
 
         for role_name, role_id in default_roles.items():

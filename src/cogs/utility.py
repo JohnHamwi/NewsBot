@@ -23,14 +23,19 @@ from discord.ext import commands
 # =============================================================================
 from src.components.embeds.base_embed import ErrorEmbed, InfoEmbed, SuccessEmbed
 from src.components.decorators.admin_required import admin_required
-from src.core.config_manager import config
+# Configuration will be accessed dynamically when needed
 from src.utils.base_logger import base_logger as logger
 from src.utils.structured_logger import structured_logger
 
 # =============================================================================
 # Configuration Constants
 # =============================================================================
-GUILD_ID = config.get("bot.guild_id") or 0
+# GUILD_ID will be set dynamically when needed
+
+def get_config():
+    """Get config manager instance when needed."""
+    from src.core.unified_config import unified_config as config
+    return config
 
 
 # =============================================================================
@@ -390,8 +395,9 @@ class UtilityCommands(commands.Cog):
         )
 
         # External services
+        from src.core.unified_config import unified_config as config
         telegram_status = "🟢 Connected" if hasattr(self.bot, 'telegram_client') else "🔴 Disconnected"
-        ai_status = "🟢 Available" if config.get("openai.api_key") else "🔴 Not configured"
+        ai_status = "🟢 Available" if get_config().get("openai.api_key") else "🔴 Not configured"
 
         embed.add_field(
             name="🔗 External Services",
@@ -436,7 +442,8 @@ class UtilityCommands(commands.Cog):
 
         if include_stats:
             # Basic stats
-            bot_version = config.get("bot.version", "4.5.0")
+            from src.core.unified_config import unified_config as config
+            bot_version = get_config().get("bot.version", "4.5.0")
             embed.add_field(
                 name="📊 Basic Statistics",
                 value=f"**Version:** NewsBot v{bot_version}\n**Servers:** {len(self.bot.guilds)}\n**Status:** {'🟢 Healthy' if self.bot.is_ready() else '🔴 Starting'}",
@@ -835,8 +842,9 @@ class UtilityCommands(commands.Cog):
         )
 
         # External services
+        from src.core.unified_config import unified_config as config
         telegram_status = "🟢 Connected" if hasattr(self.bot, 'telegram_client') else "🔴 Disconnected"
-        ai_status = "🟢 Available" if config.get("openai.api_key") else "🔴 Not configured"
+        ai_status = "🟢 Available" if get_config().get("openai.api_key") else "🔴 Not configured"
 
         embed.add_field(
             name="🔗 External Services",

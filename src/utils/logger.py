@@ -10,6 +10,7 @@
 # Standard Library Imports
 # =============================================================================
 from typing import Any, Dict, Optional
+import logging
 
 # =============================================================================
 # Local Application Imports
@@ -39,7 +40,7 @@ class BotLogger:
         command_usage (Dict[str, int]): Usage count for each command
     """
 
-    def __init__(self):
+    def __init__(self, enable_debug_mode=False):
         """Initialize the logger with custom formatting and handlers."""
         # Initialize metrics
         self.command_count: int = 0
@@ -47,6 +48,15 @@ class BotLogger:
         self.command_latencies: Dict[str, float] = {}
         self.command_usage: Dict[str, int] = {}
         self.logger = base_logger
+        self.debug_mode = enable_debug_mode
+        
+        if self.debug_mode:
+            self.logger.info("🐛 DEBUG MODE ENABLED - Enhanced logging active for testing phase")
+            # Set logger to debug level
+            import logging
+            self.logger.setLevel(logging.DEBUG)
+            for handler in self.logger.handlers:
+                handler.setLevel(logging.DEBUG)
 
     # =========================================================================
     # Basic Logging Methods
@@ -199,14 +209,15 @@ class BotLogger:
 # =============================================================================
 # Module-Level Functions
 # =============================================================================
-def get_logger(name: str = "NewsBot"):
+def get_logger(name: str = "NewsBot", enable_debug_mode: bool = False):
     """
     Get a logger instance.
 
     Args:
-        name: Logger name
+        name: Logger name (for compatibility)
+        enable_debug_mode: Enable enhanced debugging
 
     Returns:
         BotLogger: Logger instance
     """
-    return BotLogger()
+    return BotLogger(enable_debug_mode=enable_debug_mode)

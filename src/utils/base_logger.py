@@ -11,7 +11,8 @@
 # =============================================================================
 import logging
 import os
-from datetime import datetime
+import glob
+from datetime import datetime, timedelta
 from logging.handlers import TimedRotatingFileHandler
 from zoneinfo import ZoneInfo
 
@@ -34,6 +35,51 @@ EASTERN = ZoneInfo("America/New_York")
 # =============================================================================
 # Custom Handler Classes
 # =============================================================================
+class DailyLogFileHandler(logging.FileHandler):
+    """Custom FileHandler that creates a new log file each day with date in filename."""
+
+    def __init__(self, base_filename, mode='a', encoding=None, delay=False):
+        """Initialize with base filename pattern."""
+        self.base_filename = base_filename
+        self.current_date = None
+        self.current_filename = None
+        
+        # Create initial filename
+        self._update_filename()
+        
+        super().__init__(self.current_filename, mode, encoding, delay)
+
+    def _update_filename(self):
+        """Update filename based on current Eastern date."""
+        current_date = datetime.now(EASTERN).strftime("%Y-%m-%d")
+        
+        if current_date != self.current_date:
+            self.current_date = current_date
+            # Create filename like: logs/2025-01-16.log
+            base_dir = os.path.dirname(self.base_filename)
+            self.current_filename = os.path.join(base_dir, f"{current_date}.log")
+
+    def emit(self, record):
+        """Override emit to check if we need a new file for a new day."""
+        self._update_filename()
+        
+        # If filename changed, we need to switch to new file
+        if self.baseFilename != self.current_filename:
+            # Close current file
+            if self.stream:
+                self.stream.close()
+                self.stream = None
+            
+            # Update to new filename
+            self.baseFilename = self.current_filename
+            
+            # Let parent class handle opening new file
+            if not self.delay:
+                self.stream = self._open()
+
+        super().emit(record)
+
+
 class EasternTimedRotatingFileHandler(TimedRotatingFileHandler):
     """Custom TimedRotatingFileHandler that uses Eastern timezone for rotation."""
 
@@ -102,13 +148,67 @@ class EasternColoredFormatter(colorlog.ColoredFormatter):
 
 
 # =============================================================================
+# Utility Functions
+# =============================================================================
+def cleanup_old_logs(logs_dir: str = "logs", keep_days: int = 30):
+    """
+    Clean up old log files, keeping only the specified number of days.
+    
+    Args:
+        logs_dir (str): Directory containing log files
+        keep_days (int): Number of days of logs to keep
+    """
+    try:
+        if not os.path.exists(logs_dir):
+            return
+        
+        # Calculate cutoff date
+        cutoff_date = datetime.now(EASTERN) - timedelta(days=keep_days)
+        
+        # Find all log files matching the pattern (YYYY-MM-DD.log)
+        log_pattern = os.path.join(logs_dir, "????-??-??.log")
+        log_files = glob.glob(log_pattern)
+        
+        deleted_count = 0
+        for log_file in log_files:
+            try:
+                # Extract date from filename (YYYY-MM-DD.log)
+                filename = os.path.basename(log_file)
+                if filename.endswith(".log") and len(filename) == 14:  # YYYY-MM-DD.log = 14 chars
+                    date_str = filename[:-4]  # Remove ".log"
+                    try:
+                        file_date = datetime.strptime(date_str, "%Y-%m-%d")
+                        file_date = file_date.replace(tzinfo=EASTERN)
+                        
+                        # Delete if older than cutoff
+                        if file_date < cutoff_date:
+                            os.remove(log_file)
+                            deleted_count += 1
+                            
+                    except ValueError:
+                        # Skip files that don't match the expected date format
+                        continue
+                        
+            except Exception as e:
+                # Skip files that can't be processed
+                continue
+        
+        if deleted_count > 0:
+            print(f"🗑️ Cleaned up {deleted_count} old log files (older than {keep_days} days)")
+            
+    except Exception as e:
+        # Silently handle cleanup errors to avoid disrupting logging
+        pass
+
+
+# =============================================================================
 # Logger Setup Function
 # =============================================================================
 def setup_logger(name: str) -> logging.Logger:
     """
     Set up a basic logger with console and daily rotating file output.
 
-    Creates a new log file every day at midnight EST with format: newsbot_YYYY-MM-DD.log
+    Creates a new log file every day with format: newsbot_YYYY-MM-DD.log
 
     Args:
         name (str): Name of the logger
@@ -116,12 +216,15 @@ def setup_logger(name: str) -> logging.Logger:
     Returns:
         logging.Logger: Configured logger instance
     """
-    # Get debug mode from environment
-    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    # Debug mode disabled by default (can be enabled via config if needed)
+    debug_mode = False
 
     # Create logs directory if it doesn't exist
     if not os.path.exists("logs"):
         os.makedirs("logs")
+
+    # Clean up old log files (keep 30 days)
+    cleanup_old_logs("logs", 30)
 
     # Create and configure logger
     logger = logging.getLogger(name)
@@ -159,19 +262,14 @@ def setup_logger(name: str) -> logging.Logger:
     console_handler.setLevel(logging.DEBUG if debug_mode else logging.INFO)
     logger.addHandler(console_handler)
 
-    # Create daily rotating file handler
-    # This will create a new log file every day at midnight EST
-    # Files will be named: newsbot_2025-01-15.log, newsbot_2025-01-16.log, etc.
-    file_handler = EasternTimedRotatingFileHandler(
-        filename="logs/newsbot.log",
-        when="midnight",
-        interval=1,
-        backupCount=30,  # Keep 30 days of logs
-        encoding="utf-8",
+    # Create daily log file handler
+    # This will create files like: logs/2025-01-16.log, logs/2025-01-17.log, etc.
+    # Each day gets its own file automatically
+    file_handler = DailyLogFileHandler(
+        base_filename="logs/newsbot.log",
+        mode='a',
+        encoding="utf-8"
     )
-
-    # Set the suffix for rotated files to include the date
-    file_handler.suffix = "%Y-%m-%d"
 
     file_handler.setFormatter(file_formatter)
     file_handler.setLevel(logging.DEBUG if debug_mode else logging.INFO)
@@ -184,8 +282,10 @@ def setup_logger(name: str) -> logging.Logger:
     else:
         logger.info(f"🔧 Logger '{name}' initialized with INFO level")
 
-    logger.info(f"📅 Daily log rotation enabled - new file created at midnight EST")
-    logger.info(f"📁 Log files will be kept for 30 days")
+    # Get current date for log message
+    current_date = datetime.now(EASTERN).strftime("%Y-%m-%d")
+    logger.info(f"📅 Daily log files enabled - today's log: {current_date}.log")
+    logger.info(f"📁 Each day gets its own log file in the logs/ folder")
 
     return logger
 
