@@ -147,8 +147,11 @@ async def set_automatic_presence(
             activity_name = f"⏰ Next post in {hours}h {minutes}m"
         else:
             activity_name = f"⏰ Next post in {minutes}m"
+    elif seconds_until_next_post < 0:
+        # Post is overdue - show that we're actively trying to post
+        activity_name = "🔄 Looking for news..."
     else:
-        # Check if we have a last post time to determine if we're overdue
+        # seconds_until_next_post == 0 or no last post time
         if hasattr(bot, 'last_post_time') and bot.last_post_time:
             activity_name = "🚀 Ready to post!"
         else:

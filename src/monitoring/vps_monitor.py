@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.utils.base_logger import logger
+from src.utils.base_logger import base_logger as logger
 from src.core.unified_config import unified_config as config
 
 

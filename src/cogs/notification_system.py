@@ -14,18 +14,18 @@ import psutil
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 
-from src.utils.logger import get_logger
+from src.utils.base_logger import base_logger as logger
 from src.monitoring.health_monitor import HealthMonitor
 from src.monitoring.vps_monitor import VPSMonitor
 
-logger = get_logger(__name__)
+logger = logger
 
 class NotificationSystem(commands.Cog):
     """Proactive notification system for VPS and bot monitoring."""
     
     def __init__(self, bot):
         self.bot = bot
-        self.health_monitor = HealthMonitor()
+        self.health_monitor = HealthMonitor(bot)
         self.vps_monitor = VPSMonitor()
         
         # Notification settings
@@ -174,7 +174,7 @@ class NotificationSystem(commands.Cog):
                         'message': f'CPU usage at {cpu_percent:.1f}% - System may be unresponsive',
                         'severity': 'critical',
                         'color': discord.Color.red(),
-                        'actions': ['Check /q status', 'Run /emergency kill_high_cpu', 'Consider /q restart']
+                        'actions': ['Check system status', 'Kill high CPU processes manually', 'Consider restart']
                     })
             elif cpu_percent > 85:
                 if await self.should_send_alert("cpu_warning"):
@@ -184,7 +184,7 @@ class NotificationSystem(commands.Cog):
                         'message': f'CPU usage at {cpu_percent:.1f}% - Monitor closely',
                         'severity': 'warning',
                         'color': discord.Color.orange(),
-                        'actions': ['Check /q processes', 'Run /q status']
+                        'actions': ['Check running processes', 'Monitor system status']
                     })
             
             # Memory alerts
@@ -196,7 +196,7 @@ class NotificationSystem(commands.Cog):
                         'message': f'Memory usage at {memory.percent:.1f}% - System at risk',
                         'severity': 'critical',
                         'color': discord.Color.red(),
-                        'actions': ['Run /emergency clear_memory', 'Check /q processes', 'Consider restart']
+                        'actions': ['Clear memory manually', 'Check running processes', 'Consider restart']
                     })
             elif memory.percent > 90:
                 if await self.should_send_alert("memory_warning"):
@@ -206,7 +206,7 @@ class NotificationSystem(commands.Cog):
                         'message': f'Memory usage at {memory.percent:.1f}% - Consider cleanup',
                         'severity': 'warning',
                         'color': discord.Color.orange(),
-                        'actions': ['Run /q cleanup', 'Check /q status']
+                        'actions': ['Clean temporary files', 'Check system status']
                     })
             
             # Disk alerts
@@ -218,7 +218,7 @@ class NotificationSystem(commands.Cog):
                         'message': f'Disk usage at {disk.percent:.1f}% - System may fail',
                         'severity': 'critical',
                         'color': discord.Color.red(),
-                        'actions': ['Run /emergency disk_emergency', 'Clean logs urgently']
+                        'actions': ['Free disk space manually', 'Clean logs urgently']
                     })
             elif disk.percent > 95:
                 if await self.should_send_alert("disk_warning"):
@@ -228,7 +228,7 @@ class NotificationSystem(commands.Cog):
                         'message': f'Disk usage at {disk.percent:.1f}% - Cleanup needed',
                         'severity': 'warning',
                         'color': discord.Color.orange(),
-                        'actions': ['Run /q cleanup', 'Check log sizes']
+                        'actions': ['Clean temporary files', 'Check log sizes']
                     })
             
             # Bot health alerts
@@ -240,7 +240,7 @@ class NotificationSystem(commands.Cog):
                         'message': f'Bot health score: {health_score}/100 - Multiple issues detected',
                         'severity': 'critical',
                         'color': discord.Color.red(),
-                        'actions': ['Run /q health', 'Check /q logs', 'Consider /q restart']
+                        'actions': ['Check bot health', 'Review logs', 'Consider restart']
                     })
             elif health_score < 70:
                 if await self.should_send_alert("bot_health_warning"):
@@ -250,7 +250,7 @@ class NotificationSystem(commands.Cog):
                         'message': f'Bot health score: {health_score}/100 - Some issues detected',
                         'severity': 'warning',
                         'color': discord.Color.orange(),
-                        'actions': ['Run /q health', 'Check /q status']
+                        'actions': ['Check bot health', 'Monitor system status']
                     })
             
             # Bot connectivity alerts
@@ -398,135 +398,7 @@ class NotificationSystem(commands.Cog):
         except Exception as e:
             logger.error(f"Error in daily report: {e}")
 
-    @commands.group(name="notify", help="Notification system commands")
-    async def notify(self, ctx):
-        """Notification system management."""
-        if ctx.invoked_subcommand is None:
-            embed = discord.Embed(
-                title="🔔 Notification System",
-                description="Manage proactive notifications and alerts",
-                color=discord.Color.blue()
-            )
-            
-            embed.add_field(
-                name="📱 Settings",
-                value="`/notify settings` - View current settings\n"
-                      "`/notify toggle_dm` - Toggle DM notifications\n"
-                      "`/notify toggle_channel` - Toggle channel notifications\n"
-                      "`/notify critical_only` - Toggle critical-only mode",
-                inline=False
-            )
-            
-            embed.add_field(
-                name="📊 Information",
-                value="`/notify status` - Notification system status\n"
-                      "`/notify history` - Recent alert history\n"
-                      "`/notify test` - Send test notification",
-                inline=False
-            )
-            
-            await ctx.send(embed=embed)
-
-    @notify.command(name="settings")
-    async def notify_settings(self, ctx):
-        """View notification settings."""
-        embed = discord.Embed(
-            title="🔔 Notification Settings",
-            color=discord.Color.blue()
-        )
-        
-        embed.add_field(
-            name="📱 Current Settings",
-            value=f"**DM Notifications:** {'✅' if self.notification_config['dm_notifications'] else '❌'}\n"
-                  f"**Channel Notifications:** {'✅' if self.notification_config['channel_notifications'] else '❌'}\n"
-                  f"**Critical Only:** {'✅' if self.notification_config['critical_only'] else '❌'}\n"
-                  f"**Alert Cooldown:** {self.notification_config['alert_cooldown']}s",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="👤 Admin Contacts",
-            value=f"**Admin User:** {f'<@{self.admin_user_id}>' if self.admin_user_id else 'Not set'}\n"
-                  f"**Admin Channel:** {f'<#{self.admin_channel_id}>' if self.admin_channel_id else 'Not set'}\n"
-                  f"**Error Channel:** {f'<#{self.error_channel_id}>' if self.error_channel_id else 'Not set'}",
-            inline=False
-        )
-        
-        await ctx.send(embed=embed)
-
-    @notify.command(name="test")
-    async def notify_test(self, ctx):
-        """Send test notification."""
-        embed = discord.Embed(
-            title="🧪 Test Notification",
-            description="This is a test notification to verify the notification system is working.",
-            color=discord.Color.green()
-        )
-        
-        embed.add_field(
-            name="📊 Test Data",
-            value=f"**Sent by:** {ctx.author.display_name}\n"
-                  f"**Time:** {datetime.utcnow().strftime('%H:%M:%S UTC')}\n"
-                  f"**Bot Latency:** {round(self.bot.latency * 1000)}ms",
-            inline=False
-        )
-        
-        embed.set_footer(text="Test notification")
-        embed.timestamp = datetime.utcnow()
-        
-        await self.send_notification(embed, "info")
-        await ctx.send("✅ Test notification sent!")
-
-    @notify.command(name="history")
-    async def notify_history(self, ctx):
-        """View recent alert history."""
-        if not self.alert_history:
-            embed = discord.Embed(
-                title="📝 Alert History",
-                description="No alerts recorded yet",
-                color=discord.Color.green()
-            )
-            await ctx.send(embed=embed)
-            return
-        
-        # Show recent alerts
-        recent_alerts = self.alert_history[-20:]  # Last 20 alerts
-        
-        embed = discord.Embed(
-            title="📝 Recent Alert History",
-            description=f"Showing last {len(recent_alerts)} alerts:",
-            color=discord.Color.blue()
-        )
-        
-        alert_text = ""
-        for alert in recent_alerts:
-            timestamp = alert['timestamp'][:16].replace('T', ' ')
-            severity_emoji = "🔥" if alert['severity'] == 'critical' else "⚠️" if alert['severity'] == 'warning' else "ℹ️"
-            alert_text += f"{severity_emoji} `{timestamp}` {alert['type']}: {alert['message'][:50]}...\n"
-        
-        if len(alert_text) > 1024:
-            alert_text = alert_text[-1024:]
-        
-        embed.add_field(
-            name="Recent Alerts",
-            value=alert_text,
-            inline=False
-        )
-        
-        # Alert summary
-        total_alerts = len(self.alert_history)
-        critical_count = len([a for a in self.alert_history if a['severity'] == 'critical'])
-        warning_count = len([a for a in self.alert_history if a['severity'] == 'warning'])
-        
-        embed.add_field(
-            name="📊 Summary",
-            value=f"**Total Alerts:** {total_alerts}\n"
-                  f"**Critical:** {critical_count}\n"
-                  f"**Warnings:** {warning_count}",
-            inline=True
-        )
-        
-        await ctx.send(embed=embed)
+    # Traditional commands removed - notification system runs in background only
 
 async def setup(bot):
     """Set up the Notification System cog."""

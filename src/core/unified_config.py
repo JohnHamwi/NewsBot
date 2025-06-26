@@ -9,9 +9,14 @@ import yaml
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 from datetime import datetime
+import platform
+import socket
 
 from src.utils.debug_logger import debug_logger, debug_context
+from src.utils.logger import get_logger
 
+# Initialize logger for this module
+logger = get_logger("UnifiedConfig")
 
 class UnifiedConfig:
     """
@@ -30,9 +35,12 @@ class UnifiedConfig:
         self.config_data = {}
         self.runtime_overrides = {}
         self.last_modified = None
+        self.environment = "development"  # Default environment
         
         # Initialize configuration
         self._initialize_config()
+        self._detect_environment()
+        self._apply_environment_overrides()
     
     @debug_context("Config Initialization")
     def _initialize_config(self):
@@ -277,19 +285,24 @@ class UnifiedConfig:
             debug_logger.info("Configuration validation passed")
     
     def _save_config(self):
-        """Save configuration to file."""
+        """Save configuration to YAML file."""
         try:
-            # Update metadata
-            self.config_data['meta']['last_updated'] = datetime.now().isoformat()
-            
             with open(self.config_file, 'w', encoding='utf-8') as f:
-                yaml.dump(self.config_data, f, default_flow_style=False, indent=2)
+                yaml.dump(self.config_data, f, 
+                         default_flow_style=False, 
+                         sort_keys=False, 
+                         allow_unicode=True,
+                         indent=2)
             
             self.last_modified = self.config_file.stat().st_mtime
             debug_logger.info("Configuration saved")
             
         except Exception as e:
-            debug_logger.error("Failed to save configuration", error=e)
+            debug_logger.error(f"Failed to save configuration", error=e)
+    
+    def save(self):
+        """Public method to save configuration."""
+        self._save_config()
     
     def get(self, key: str, default: Any = None) -> Any:
         """
@@ -391,8 +404,8 @@ class UnifiedConfig:
         
         return merged_config
     
-    def _deep_merge(self, base: Dict, override: Dict):
-        """Deep merge two dictionaries."""
+    def _deep_merge(self, base: Dict, override: Dict) -> None:
+        """Deep merge override dict into base dict."""
         for key, value in override.items():
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):
                 self._deep_merge(base[key], value)
@@ -445,6 +458,107 @@ class UnifiedConfig:
         ])
         
         return "\n".join(lines)
+
+    def _detect_environment(self) -> None:
+        """
+        Automatically detect the environment based on system characteristics.
+        
+        Detection logic:
+        - Check for VPS indicators (specific hostnames, IP ranges, etc.)
+        - Check for development indicators (local paths, Mac/Windows, etc.)
+        - Allow manual override via environment variable
+        """
+        # Check for manual override first
+        env_override = os.getenv('NEWSBOT_ENV', '').lower()
+        if env_override in ['development', 'production']:
+            self.environment = env_override
+            logger.info(f"🔧 Environment manually set via NEWSBOT_ENV: {self.environment}")
+            return
+            
+        # Auto-detection logic
+        system = platform.system().lower()
+        hostname = socket.gethostname().lower()
+        
+        # VPS/Production indicators
+        vps_indicators = [
+            'vps' in hostname,
+            'server' in hostname,
+            'prod' in hostname,
+            'ubuntu' in hostname,
+            'debian' in hostname,
+            system == 'linux' and not self._is_wsl(),
+            self._has_systemd(),
+            self._is_cloud_instance()
+        ]
+        
+        # Development indicators  
+        dev_indicators = [
+            system in ['darwin', 'windows'],  # Mac or Windows
+            'macbook' in hostname,
+            'imac' in hostname,
+            '/Users/' in str(Path.cwd()),  # Mac user directory
+            'C:\\\\Users\\\\' in str(Path.cwd()),  # Windows user directory
+            self._is_wsl(),  # Windows Subsystem for Linux
+            os.getenv('USER') in ['johnhamwi', 'admin', 'developer']  # Common dev usernames
+        ]
+        
+        if any(vps_indicators):
+            self.environment = 'production'
+            logger.info(f"🏭 Auto-detected production environment (VPS): {hostname} ({system})")
+        elif any(dev_indicators):
+            self.environment = 'development' 
+            logger.info(f"💻 Auto-detected development environment: {hostname} ({system})")
+        else:
+            # Default to development if uncertain
+            self.environment = 'development'
+            logger.warning(f"❓ Could not determine environment, defaulting to development: {hostname} ({system})")
+    
+    def _is_wsl(self) -> bool:
+        """Check if running in Windows Subsystem for Linux."""
+        try:
+            with open('/proc/version', 'r') as f:
+                return 'microsoft' in f.read().lower()
+        except:
+            return False
+    
+    def _has_systemd(self) -> bool:
+        """Check if system uses systemd (common on VPS)."""
+        return Path('/run/systemd/system').exists()
+    
+    def _is_cloud_instance(self) -> bool:
+        """Check for cloud instance metadata."""
+        cloud_paths = [
+            '/sys/class/dmi/id/product_name',
+            '/sys/class/dmi/id/sys_vendor'
+        ]
+        
+        for path in cloud_paths:
+            try:
+                with open(path, 'r') as f:
+                    content = f.read().lower()
+                    if any(provider in content for provider in ['amazon', 'google', 'microsoft', 'digitalocean', 'vultr', 'linode']):
+                        return True
+            except:
+                continue
+        return False
+    
+    def _apply_environment_overrides(self) -> None:
+        """Apply environment-specific configuration overrides."""
+        if 'environments' in self.config_data and self.environment in self.config_data['environments']:
+            env_config = self.config_data['environments'][self.environment]
+            logger.info(f"🔧 Applying {self.environment} environment overrides")
+            
+            # Deep merge environment config into main config
+            self._deep_merge(self.config_data, env_config)
+            
+            # Log key environment-specific settings
+            if 'monitoring' in env_config and 'resource_alerts' in env_config['monitoring']:
+                alerts_config = env_config['monitoring']['resource_alerts']
+                if alerts_config.get('enabled', True):
+                    logger.info(f"📊 Resource monitoring enabled - CPU: {alerts_config.get('cpu_threshold', 85)}%, RAM: {alerts_config.get('ram_threshold', 80)}%")
+                else:
+                    logger.info(f"🔇 Resource monitoring disabled for {self.environment} environment")
+                    logger.info(f"💡 Reason: {alerts_config.get('reason', 'Not specified')}")
 
 
 # Global unified configuration instance

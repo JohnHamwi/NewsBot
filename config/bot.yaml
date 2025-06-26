@@ -1,0 +1,22 @@
+active_channels:
+- moraselalthawrah
+- jh_team
+- shaamnetwork
+- alktroone
+- alhourya_news
+- alekhbariahsy
+- samsyria01
+ai_analysis_enabled: true
+auto_posting_enabled: true
+cache_ttl_hours: 1
+health_checks_enabled: true
+log_level: INFO
+max_concurrent_analyses: 3
+max_posts_per_session: 1
+min_content_length: 50
+performance_tracking: true
+posting_interval_minutes: 30
+require_media: false
+startup_delay_minutes: 2
+translation_enabled: true
+use_ai_filtering: true

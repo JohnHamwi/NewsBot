@@ -13,6 +13,7 @@ from enum import Enum
 import discord
 
 from src.utils.debug_logger import debug_logger, debug_context, performance_monitor
+from src.utils.base_logger import base_logger as logger
 from src.core.unified_config import unified_config as config
 from src.cache.json_cache import JSONCache
 
@@ -252,19 +253,92 @@ class HealthMonitor:
                 duration_ms=(time.time() - start_time) * 1000
             )
     
+    @performance_monitor("Telegram Connection Check")
     async def _check_telegram_connection(self) -> HealthCheck:
         """Check Telegram client status."""
         start_time = time.time()
         
-        # This would require access to telegram client - simplified for now
-        return HealthCheck(
-            name="Telegram Connection",
-            status=HealthStatus.HEALTHY,
-            message="Telegram connection check not implemented",
-            details={'implemented': False},
-            timestamp=datetime.now(),
-            duration_ms=(time.time() - start_time) * 1000
-        )
+        try:
+            # Get telegram client from bot instance
+            telegram_client = getattr(self.bot, 'telegram_client', None)
+            
+            if telegram_client is None:
+                return HealthCheck(
+                    name="Telegram Connection",
+                    status=HealthStatus.WARNING,
+                    message="Telegram client not initialized",
+                    details={'client_available': False, 'reason': 'not_initialized'},
+                    timestamp=datetime.now(),
+                    duration_ms=(time.time() - start_time) * 1000
+                )
+            
+            # Check if telegram client is connected
+            is_connected = False
+            auth_failed = getattr(self.bot, 'telegram_auth_failed', True)
+            
+            try:
+                # Try to check if the client is connected
+                if hasattr(telegram_client, 'is_connected'):
+                    is_connected = await telegram_client.is_connected()
+                elif hasattr(telegram_client, '_client'):
+                    # Check underlying telethon client
+                    client = telegram_client._client
+                    if hasattr(client, 'is_connected'):
+                        is_connected = client.is_connected()
+                elif hasattr(telegram_client, 'connected'):
+                    is_connected = telegram_client.connected
+                else:
+                    # Fallback: assume connected if not auth failed
+                    is_connected = not auth_failed
+                    
+            except Exception as e:
+                logger.debug(f"Error checking telegram connection: {e}")
+                is_connected = False
+            
+            # Determine status based on connection and auth
+            if auth_failed:
+                status = HealthStatus.CRITICAL
+                message = "Telegram authentication failed"
+                details = {
+                    'connected': False,
+                    'authenticated': False,
+                    'auth_failed': True
+                }
+            elif is_connected:
+                status = HealthStatus.HEALTHY
+                message = "Telegram client connected and authenticated"
+                details = {
+                    'connected': True,
+                    'authenticated': True,
+                    'auth_failed': False
+                }
+            else:
+                status = HealthStatus.WARNING
+                message = "Telegram client not connected"
+                details = {
+                    'connected': False,
+                    'authenticated': not auth_failed,
+                    'auth_failed': auth_failed
+                }
+            
+            return HealthCheck(
+                name="Telegram Connection",
+                status=status,
+                message=message,
+                details=details,
+                timestamp=datetime.now(),
+                duration_ms=(time.time() - start_time) * 1000
+            )
+            
+        except Exception as e:
+            return HealthCheck(
+                name="Telegram Connection",
+                status=HealthStatus.CRITICAL,
+                message=f"Telegram connection check failed: {str(e)}",
+                details={'error': str(e), 'client_available': False},
+                timestamp=datetime.now(),
+                duration_ms=(time.time() - start_time) * 1000
+            )
     
     @performance_monitor("Database Connection Check")
     async def _check_database_connection(self) -> HealthCheck:
@@ -514,11 +588,49 @@ class HealthMonitor:
             self.performance_metrics['posts_failed'] += 1
     
     def record_translation_attempt(self, success: bool = True):
-        """Record a translation attempt for monitoring."""
+        """Record a translation attempt."""
         if success:
             self.performance_metrics['translations_successful'] += 1
         else:
             self.performance_metrics['translations_failed'] += 1
+    
+    async def get_health_score(self) -> int:
+        """Calculate and return a health score from 0-100 based on recent health checks."""
+        try:
+            if not self.last_health_check:
+                # No health check available, return moderate score
+                return 75
+            
+            # Count healthy vs total checks
+            healthy_checks = len([c for c in self.last_health_check.checks if c.status == HealthStatus.HEALTHY])
+            total_checks = len(self.last_health_check.checks)
+            
+            if total_checks == 0:
+                return 75
+            
+            # Base score from health check ratio
+            health_ratio = healthy_checks / total_checks
+            base_score = int(health_ratio * 100)
+            
+            # Apply modifiers for critical systems
+            critical_systems = ['Discord Connection', 'OpenAI API', 'Database Connection']
+            critical_penalties = 0
+            
+            for check in self.last_health_check.checks:
+                if check.name in critical_systems and check.status != HealthStatus.HEALTHY:
+                    if check.status == HealthStatus.CRITICAL:
+                        critical_penalties += 25
+                    elif check.status == HealthStatus.WARNING:
+                        critical_penalties += 10
+            
+            # Calculate final score
+            final_score = max(0, min(100, base_score - critical_penalties))
+            
+            return final_score
+            
+        except Exception as e:
+            logger.error(f"Error calculating health score: {e}")
+            return 50  # Return moderate score on error
     
     async def create_health_embed(self, health: SystemHealth) -> discord.Embed:
         """Create a Discord embed for health status."""

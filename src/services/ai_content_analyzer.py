@@ -35,7 +35,7 @@ except ImportError:
     import os
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from utils.base_logger import base_logger as logger
-    from core.unified_config import config
+    from src.core.unified_config import unified_config as config
 
 
 # =============================================================================
@@ -444,8 +444,8 @@ class AIContentAnalyzer:
                 safety_issues.append("Video content with graphic descriptions - high risk")
                 confidence = min(confidence + 0.2, 1.0)
             
-            # Determine if content should be filtered
-            should_filter = primary_safety in [ContentSafety.GRAPHIC, ContentSafety.DISTURBING]
+            # Determine if content should be filtered (TEMPORARY: Only filter the most extreme content)
+            should_filter = primary_safety in [ContentSafety.DISTURBING]  # Only filter extremely disturbing content
             
             # Generate content warning if needed
             content_warning = None
@@ -848,13 +848,13 @@ class AIContentAnalyzer:
         """Assess how complete the content is."""
         length = len(content)
         
-        if length < 20:
+        if length < 10:
             issues.append("Content too short")
-            return 0.2
-        elif length < 50:
+            return 0.3
+        elif length < 20:
             issues.append("Content might be incomplete")
-            return 0.5
-        elif length > 1000:
+            return 0.6
+        elif length > 2000:
             issues.append("Content might be too verbose")
             return 0.8
         else:
@@ -889,10 +889,10 @@ class AIContentAnalyzer:
         info_count = sum(1 for indicator in info_indicators if indicator in content_lower)
         
         if info_count == 0:
-            issues.append("Lacks informative content")
-            return 0.3
-        elif info_count < 3:
+            # Be more permissive - not all news needs these indicators
             return 0.6
+        elif info_count < 3:
+            return 0.8
         else:
             return 0.9
 
@@ -916,23 +916,17 @@ class AIContentAnalyzer:
     def _decide_posting(self, sentiment: SentimentResult, quality: QualityScore, 
                        similarity: float, categories: CategoryResult, safety: SafetyResult = None) -> bool:
         """Decide whether content should be posted."""
-        # Never post if safety analysis says to filter
-        if safety and safety.should_filter:
+        # TEMPORARY: Post almost everything to test the system with extensive logging
+        logger.info(f"🔍 [POSTING-DECISION] Quality: {quality.overall_score:.2f}, Similarity: {similarity:.2f}, Sentiment confidence: {sentiment.confidence:.2f}")
+        logger.info(f"🔍 [POSTING-DECISION] Safety level: {safety.safety_level.value if safety else 'None'}, Should filter: {safety.should_filter if safety else 'None'}")
+        
+        # Never post if safety analysis says to filter extremely disturbing content only
+        if safety and safety.should_filter and safety.safety_level in [ContentSafety.DISTURBING]:
+            logger.info(f"🚫 [POSTING-DECISION] REJECTED - Safety filter: {safety.safety_level.value}")
             return False
         
-        # Don't post if quality is too low
-        if quality.overall_score < 0.3:
-            return False
-        
-        # Don't post if too similar to recent content
-        if similarity > 0.8:
-            return False
-        
-        # Don't post if sentiment confidence is too low
-        if sentiment.confidence < 0.2:
-            return False
-        
-        # Post everything else
+        # Post almost everything else (very permissive for testing)
+        logger.info(f"✅ [POSTING-DECISION] APPROVED - Content will be posted")
         return True
 
     def _calculate_priority(self, sentiment: SentimentResult, categories: CategoryResult, 

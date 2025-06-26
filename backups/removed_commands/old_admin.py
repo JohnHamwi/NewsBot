@@ -994,20 +994,97 @@ class AdminCommands(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            lines = max(5, min(lines, 50))
+            lines = max(5, min(lines, 50))  # Clamp between 5 and 50
             level_value = level.value if level else "all"
-
+            
             logger.info(f"[ADMIN] Logs command by {interaction.user.id}, lines={lines}, level={level_value}")
 
+            # Initialize log aggregator if needed
+            try:
+                from src.monitoring.log_aggregator import log_aggregator
+                
+                # Calculate time range - look back enough to get the requested lines
+                from datetime import datetime, timedelta
+                end_time = datetime.utcnow()
+                start_time = end_time - timedelta(hours=24)  # Look back 24 hours
+                
+                # Convert Discord level choice to actual log level
+                log_level = None
+                if level_value != "all":
+                    log_level = level_value.upper()
+                
+                # Get logs from aggregator
+                logs = log_aggregator.get_logs(
+                    level=log_level,
+                    start_time=start_time,
+                    end_time=end_time,
+                    limit=lines
+                )
+                
+                if not logs:
+                    # Fallback to file-based reading if aggregator has no logs
+                    logs = await self._read_logs_from_file(lines, level_value)
+                
+            except Exception as e:
+                logger.warning(f"Log aggregator unavailable, falling back to file reading: {e}")
+                logs = await self._read_logs_from_file(lines, level_value)
+
             embed = InfoEmbed(
-                f"📋 System Logs ({lines} lines)",
+                f"📋 System Logs ({len(logs)} lines)",
                 f"Recent log entries (level: {level_value})"
             )
 
-            # This would integrate with your log aggregator
+            if logs:
+                # Format logs for display
+                log_text = ""
+                for log_entry in logs[-lines:]:  # Get most recent entries
+                    if isinstance(log_entry, dict):
+                        # From log aggregator
+                        timestamp = datetime.fromisoformat(log_entry["timestamp"]).strftime("%H:%M:%S")
+                        level_str = log_entry["level"]
+                        message = log_entry["message"]
+                        
+                        # Add emoji based on level
+                        emoji = "ℹ️"
+                        if level_str == "WARNING":
+                            emoji = "⚠️"
+                        elif level_str == "ERROR":
+                            emoji = "❌"
+                        elif level_str == "CRITICAL":
+                            emoji = "🔥"
+                        elif level_str == "DEBUG":
+                            emoji = "🔍"
+                        
+                        log_text += f"`{timestamp}` {emoji} **{level_str}** {message}\n"
+                    else:
+                        # From file reading
+                        log_text += f"{log_entry}\n"
+                
+                # Truncate if too long for Discord
+                if len(log_text) > 4000:
+                    log_text = log_text[-4000:]
+                    log_text = "...\n" + log_text
+                
+                embed.add_field(
+                    name="📄 Recent Logs",
+                    value=log_text if log_text else "No logs found",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="📄 Log Status",
+                    value="No logs found matching the criteria",
+                    inline=False
+                )
+
+            # Add helpful information
             embed.add_field(
-                name="💡 Log Access",
-                value="Log viewing functionality will be implemented here.\nUse the development tools for now: `python tools/view_logs.py`",
+                name="💡 Usage Tips",
+                value=(
+                    "• Use `/admin logfile` to download complete log files\n"
+                    "• Filter by level to focus on specific log types\n"
+                    "• Check error logs for troubleshooting issues"
+                ),
                 inline=False
             )
 
@@ -1018,6 +1095,280 @@ class AdminCommands(commands.Cog):
             error_embed = ErrorEmbed(
                 "Logs Command Error",
                 f"Failed to retrieve logs: {str(e)}"
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+
+    async def _read_logs_from_file(self, lines: int, level_filter: str = "all") -> List[str]:
+        """
+        Fallback method to read logs directly from log files.
+        
+        Args:
+            lines: Number of lines to read
+            level_filter: Log level filter (all, error, warning, info)
+            
+        Returns:
+            List of log lines
+        """
+        try:
+            import os
+            from datetime import datetime
+            
+            # Try to find the most recent log file
+            logs_dir = "logs"
+            log_files = []
+            
+            if os.path.exists(logs_dir):
+                # Get today's log file first
+                today = datetime.now().strftime("%Y-%m-%d")
+                today_log = os.path.join(logs_dir, f"{today}.log")
+                
+                if os.path.exists(today_log):
+                    log_files.append(today_log)
+                
+                # Also check for NewsBot.log (fallback)
+                newsbot_log = os.path.join(logs_dir, "NewsBot.log")
+                if os.path.exists(newsbot_log):
+                    log_files.append(newsbot_log)
+                
+                # Get other .log files as fallback
+                for file in os.listdir(logs_dir):
+                    if file.endswith('.log') and file not in [f"{today}.log", "NewsBot.log"]:
+                        log_files.append(os.path.join(logs_dir, file))
+            
+            all_lines = []
+            for log_file in log_files[:2]:  # Check up to 2 most relevant files
+                try:
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        file_lines = f.readlines()
+                        all_lines.extend(file_lines)
+                except Exception as e:
+                    logger.warning(f"Could not read log file {log_file}: {e}")
+            
+            if not all_lines:
+                return ["No log files found or accessible"]
+            
+            # Filter by log level if specified
+            if level_filter != "all":
+                level_upper = level_filter.upper()
+                filtered_lines = []
+                for line in all_lines:
+                    if f"[{level_upper}]" in line or f" {level_upper} " in line:
+                        filtered_lines.append(line.strip())
+                all_lines = filtered_lines
+            else:
+                all_lines = [line.strip() for line in all_lines]
+            
+            # Return the most recent lines
+            return all_lines[-lines:] if len(all_lines) > lines else all_lines
+            
+        except Exception as e:
+            logger.error(f"Error reading logs from file: {e}")
+            return [f"Error reading log files: {str(e)}"]
+
+    @admin_group.command(name="logfile", description="📄 Download log file")
+    @app_commands.describe(
+        log_type="Type of log file to download"
+    )
+    @app_commands.choices(
+        log_type=[
+            app_commands.Choice(name="📅 Today's Log", value="today"),
+            app_commands.Choice(name="🗓️ Yesterday's Log", value="yesterday"),
+            app_commands.Choice(name="📋 Latest Log", value="latest"),
+            app_commands.Choice(name="🔄 All Recent Logs (ZIP)", value="all_recent"),
+        ]
+    )
+    async def logfile_command(
+        self,
+        interaction: discord.Interaction,
+        log_type: app_commands.Choice[str] = None
+    ) -> None:
+        """Download log files."""
+        if not self._is_admin(interaction.user):
+            await interaction.response.send_message("❌ Admin access required.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            log_type_value = log_type.value if log_type else "today"
+            logger.info(f"[ADMIN] Log file download requested by {interaction.user.id}, type={log_type_value}")
+
+            # Get the logs directory
+            logs_dir = "logs"
+            if not os.path.exists(logs_dir):
+                error_embed = ErrorEmbed(
+                    "❌ Logs Directory Not Found",
+                    f"The logs directory '{logs_dir}' does not exist."
+                )
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
+                return
+
+            files_to_send = []
+            embed_title = ""
+            embed_description = ""
+
+            if log_type_value == "today":
+                # Get today's log file
+                today = datetime.now().strftime("%Y-%m-%d")
+                log_file = os.path.join(logs_dir, f"{today}.log")
+                
+                if os.path.exists(log_file):
+                    files_to_send.append(log_file)
+                    file_size = os.path.getsize(log_file) / 1024  # Size in KB
+                    embed_title = f"📅 Today's Log File ({today})"
+                    embed_description = f"**File:** `{today}.log`\n**Size:** {file_size:.1f} KB"
+                else:
+                    error_embed = ErrorEmbed(
+                        "❌ Today's Log Not Found",
+                        f"No log file found for today ({today})."
+                    )
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
+                    return
+
+            elif log_type_value == "yesterday":
+                # Get yesterday's log file
+                yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+                log_file = os.path.join(logs_dir, f"{yesterday}.log")
+                
+                if os.path.exists(log_file):
+                    files_to_send.append(log_file)
+                    file_size = os.path.getsize(log_file) / 1024  # Size in KB
+                    embed_title = f"🗓️ Yesterday's Log File ({yesterday})"
+                    embed_description = f"**File:** `{yesterday}.log`\n**Size:** {file_size:.1f} KB"
+                else:
+                    error_embed = ErrorEmbed(
+                        "❌ Yesterday's Log Not Found",
+                        f"No log file found for yesterday ({yesterday})."
+                    )
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
+                    return
+
+            elif log_type_value == "latest":
+                # Get the most recent log file
+                log_files = [f for f in os.listdir(logs_dir) if f.endswith('.log')]
+                
+                if not log_files:
+                    error_embed = ErrorEmbed(
+                        "❌ No Log Files Found",
+                        "No log files found in the logs directory."
+                    )
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
+                    return
+                
+                # Sort by modification time, get the newest
+                log_files.sort(key=lambda x: os.path.getmtime(os.path.join(logs_dir, x)), reverse=True)
+                latest_file = os.path.join(logs_dir, log_files[0])
+                files_to_send.append(latest_file)
+                
+                file_size = os.path.getsize(latest_file) / 1024  # Size in KB
+                embed_title = f"📋 Latest Log File"
+                embed_description = f"**File:** `{log_files[0]}`\n**Size:** {file_size:.1f} KB"
+
+            elif log_type_value == "all_recent":
+                # Get recent log files and create a ZIP
+                import zipfile
+                import tempfile
+                
+                # Get log files from the last 7 days
+                recent_files = []
+                for i in range(7):
+                    date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+                    log_file = os.path.join(logs_dir, f"{date}.log")
+                    if os.path.exists(log_file):
+                        recent_files.append((log_file, f"{date}.log"))
+                
+                if not recent_files:
+                    error_embed = ErrorEmbed(
+                        "❌ No Recent Logs Found",
+                        "No log files found for the last 7 days."
+                    )
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
+                    return
+                
+                # Create a temporary ZIP file
+                temp_zip = tempfile.NamedTemporaryFile(suffix='.zip', delete=False)
+                temp_zip.close()
+                
+                with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for file_path, archive_name in recent_files:
+                        zip_file.write(file_path, archive_name)
+                
+                files_to_send.append(temp_zip.name)
+                zip_size = os.path.getsize(temp_zip.name) / 1024  # Size in KB
+                embed_title = f"🔄 Recent Log Files (Last 7 Days)"
+                embed_description = f"**Files:** {len(recent_files)} log files\n**ZIP Size:** {zip_size:.1f} KB"
+
+            # Check file size limits (Discord has 25MB limit for nitro, 8MB for regular users)
+            total_size = sum(os.path.getsize(f) for f in files_to_send)
+            max_size = 25 * 1024 * 1024  # 25MB limit
+            
+            if total_size > max_size:
+                error_embed = ErrorEmbed(
+                    "❌ File Too Large",
+                    f"Log file(s) are too large for Discord upload ({total_size/1024/1024:.1f} MB > 25 MB limit).\n"
+                    f"Consider using a file sharing service or request specific date ranges."
+                )
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
+                return
+
+            # Create success embed
+            success_embed = SuccessEmbed(
+                embed_title,
+                embed_description
+            )
+            
+            success_embed.add_field(
+                name="💡 Usage Tips",
+                value=(
+                    "• Open the file in a text editor\n"
+                    "• Search for specific timestamps or error messages\n"
+                    "• Use log levels (ERROR, WARNING, INFO) to filter content"
+                ),
+                inline=False
+            )
+            
+            success_embed.add_field(
+                name="🔍 Common Searches",
+                value=(
+                    "• `ERROR` - Find error messages\n"
+                    "• `Auto-post` - Track posting activity\n"
+                    "• `[ADMIN]` - See admin command usage"
+                ),
+                inline=False
+            )
+
+            # Send the log file(s)
+            discord_files = []
+            for file_path in files_to_send:
+                if log_type_value == "all_recent":
+                    # For ZIP files, use a descriptive name
+                    filename = f"newsbot_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+                else:
+                    filename = os.path.basename(file_path)
+                
+                discord_files.append(discord.File(file_path, filename=filename))
+
+            await interaction.followup.send(
+                embed=success_embed,
+                files=discord_files,
+                ephemeral=True
+            )
+
+            # Clean up temporary files
+            if log_type_value == "all_recent":
+                try:
+                    os.unlink(temp_zip.name)
+                except:
+                    pass
+
+            logger.info(f"[ADMIN] Log file(s) sent successfully to {interaction.user.id}")
+
+        except Exception as e:
+            logger.error(f"Error in logfile command: {e}")
+            traceback.print_exc()
+            error_embed = ErrorEmbed(
+                "❌ Log File Download Error",
+                f"Failed to download log file: {str(e)}"
             )
             await interaction.followup.send(embed=error_embed, ephemeral=True)
 
@@ -1585,485 +1936,10 @@ class AdminCommands(commands.Cog):
             await interaction.followup.send(embed=error_embed)
 
     # =============================================================================
-    # Feature Management Commands
+    # Traditional commands removed - only slash commands remain
     # =============================================================================
-    @commands.group(name='feature', invoke_without_command=True)
-    @commands.has_permissions(administrator=True)
-    async def feature_group(self, ctx):
-        """Feature management commands."""
-        from src.core.feature_manager import feature_manager
-        
-        embed = InfoEmbed(
-            "🎛️ Feature Management", 
-            "Use subcommands to manage bot features"
-        )
-        
-        embed.add_field(
-            name="📋 Available Commands",
-            value=(
-                "`!feature list` - List all features\n"
-                "`!feature status <name>` - Check feature status\n"
-                "`!feature enable <name>` - Enable a feature\n"
-                "`!feature disable <name>` - Disable a feature\n"
-                "`!feature report` - Generate feature report"
-            ),
-            inline=False
-        )
-        
-        # Quick stats
-        enabled_count = len(feature_manager.get_enabled_features())
-        disabled_count = len(feature_manager.get_disabled_features())
-        experimental_count = len(feature_manager.get_experimental_features())
-        
-        embed.add_field(
-            name="📊 Quick Stats",
-            value=f"✅ Enabled: {enabled_count}\n❌ Disabled: {disabled_count}\n🧪 Experimental: {experimental_count}",
-            inline=True
-        )
-        
-        await ctx.send(embed=embed)
-    
-    @feature_group.command(name='list')
-    @commands.has_permissions(administrator=True)
-    async def feature_list(self, ctx):
-        """List all available features."""
-        from src.core.feature_manager import feature_manager
-        
-        embed = InfoEmbed("🎛️ Feature List", "All available bot features")
-        
-        enabled_features = feature_manager.get_enabled_features()
-        disabled_features = feature_manager.get_disabled_features()
-        experimental_features = feature_manager.get_experimental_features()
-        
-        if enabled_features:
-            embed.add_field(
-                name="✅ Enabled Features",
-                value="\n".join([f"• {name}" for name in sorted(enabled_features)]),
-                inline=False
-            )
-        
-        if disabled_features:
-            embed.add_field(
-                name="❌ Disabled Features", 
-                value="\n".join([f"• {name}" for name in sorted(disabled_features)]),
-                inline=False
-            )
-        
-        if experimental_features:
-            embed.add_field(
-                name="🧪 Experimental Features",
-                value="\n".join([f"• {name}" for name in sorted(experimental_features)]),
-                inline=False
-            )
-        
-        await ctx.send(embed=embed)
-    
-    @feature_group.command(name='status')
-    @commands.has_permissions(administrator=True)
-    async def feature_status(self, ctx, feature_name: str):
-        """Check the status of a specific feature."""
-        from src.core.feature_manager import feature_manager
-        
-        feature = feature_manager.features.get(feature_name)
-        if not feature:
-            embed = ErrorEmbed("Feature Not Found", f"No feature named '{feature_name}' exists.")
-            await ctx.send(embed=embed)
-            return
-        
-        status = feature_manager.get_feature_status(feature_name)
-        is_enabled = feature_manager.is_enabled(feature_name)
-        
-        status_emoji = "✅" if is_enabled else "❌" if status == feature_manager.FeatureStatus.DISABLED else "🧪"
-        
-        embed = InfoEmbed(f"{status_emoji} Feature Status: {feature_name}", feature.description)
-        
-        embed.add_field(name="Status", value=status.value.title(), inline=True)
-        embed.add_field(name="Enabled", value="Yes" if is_enabled else "No", inline=True)
-        embed.add_field(name="Version Added", value=feature.version_added, inline=True)
-        
-        if feature.dependencies:
-            deps_status = []
-            for dep in feature.dependencies:
-                dep_enabled = feature_manager.is_enabled(dep)
-                deps_status.append(f"{'✅' if dep_enabled else '❌'} {dep}")
-            
-            embed.add_field(
-                name="Dependencies",
-                value="\n".join(deps_status),
-                inline=False
-            )
-        
-        if feature.config_requirements:
-            from src.core.unified_config import unified_config as config
-            config_status = []
-            for req in feature.config_requirements:
-                has_config = bool(config.get(req))
-                config_status.append(f"{'✅' if has_config else '❌'} {req}")
-            
-            embed.add_field(
-                name="Config Requirements",
-                value="\n".join(config_status),
-                inline=False
-            )
-        
-        await ctx.send(embed=embed)
-    
-    @feature_group.command(name='enable')
-    @commands.has_permissions(administrator=True)
-    async def feature_enable(self, ctx, feature_name: str):
-        """Enable a feature."""
-        from src.core.feature_manager import feature_manager
-        
-        if feature_manager.enable_feature(feature_name):
-            embed = SuccessEmbed("Feature Enabled", f"Successfully enabled feature '{feature_name}'")
-        else:
-            embed = ErrorEmbed("Enable Failed", f"Failed to enable feature '{feature_name}'. Check dependencies and config requirements.")
-        
-        await ctx.send(embed=embed)
-    
-    @feature_group.command(name='disable')
-    @commands.has_permissions(administrator=True)
-    async def feature_disable(self, ctx, feature_name: str):
-        """Disable a feature."""
-        from src.core.feature_manager import feature_manager
-        
-        if feature_manager.disable_feature(feature_name):
-            embed = SuccessEmbed("Feature Disabled", f"Successfully disabled feature '{feature_name}'")
-        else:
-            embed = ErrorEmbed("Disable Failed", f"Failed to disable feature '{feature_name}'. Check for dependent features.")
-        
-        await ctx.send(embed=embed)
-    
-    @feature_group.command(name='report')
-    @commands.has_permissions(administrator=True)
-    async def feature_report(self, ctx):
-        """Generate a comprehensive feature report."""
-        from src.core.feature_manager import feature_manager
-        
-        report = feature_manager.generate_feature_report()
-        
-        # Split long reports across multiple messages
-        if len(report) > 1900:
-            chunks = [report[i:i+1900] for i in range(0, len(report), 1900)]
-            for i, chunk in enumerate(chunks):
-                embed = InfoEmbed(
-                    f"📋 Feature Report (Part {i+1}/{len(chunks)})",
-                    f"```\n{chunk}\n```"
-                )
-                await ctx.send(embed=embed)
-        else:
-            embed = InfoEmbed("📋 Feature Report", f"```\n{report}\n```")
-            await ctx.send(embed=embed)
-
-    # =============================================================================
-    # Health Monitoring Commands
-    # =============================================================================
-    @commands.group(name='health', invoke_without_command=True)
-    @commands.has_permissions(administrator=True)
-    async def health_group(self, ctx):
-        """System health monitoring commands."""
-        embed = InfoEmbed(
-            "🏥 Health Monitoring", 
-            "System health and performance monitoring"
-        )
-        
-        embed.add_field(
-            name="📋 Available Commands",
-            value=(
-                "`!health check` - Run full health check\n"
-                "`!health status` - Quick health status\n"
-                "`!health metrics` - Performance metrics\n"
-                "`!health history` - Health check history"
-            ),
-            inline=False
-        )
-        
-        await ctx.send(embed=embed)
-    
-    @health_group.command(name='check')
-    @commands.has_permissions(administrator=True)
-    async def health_check(self, ctx):
-        """Run a comprehensive health check."""
-        from src.monitoring.health_monitor import health_monitor
-        
-        if not health_monitor:
-            embed = ErrorEmbed("Health Monitor Unavailable", "Health monitor is not initialized.")
-            await ctx.send(embed=embed)
-            return
-        
-        # Send initial message
-        checking_embed = InfoEmbed("🔄 Running Health Check", "Please wait while I check all systems...")
-        message = await ctx.send(embed=checking_embed)
-        
-        try:
-            # Run health check
-            health = await health_monitor.run_full_health_check()
-            
-            # Create health embed
-            health_embed = await health_monitor.create_health_embed(health)
-            
-            # Update message with results
-            await message.edit(embed=health_embed)
-            
-        except Exception as e:
-            error_embed = ErrorEmbed("Health Check Failed", f"Health check encountered an error: {str(e)}")
-            await message.edit(embed=error_embed)
-    
-    @health_group.command(name='status')
-    @commands.has_permissions(administrator=True)
-    async def health_status(self, ctx):
-        """Get quick health status."""
-        from src.monitoring.health_monitor import health_monitor
-        
-        if not health_monitor or not health_monitor.last_health_check:
-            embed = WarningEmbed("No Health Data", "No recent health check data available. Run `!health check` first.")
-            await ctx.send(embed=embed)
-            return
-        
-        health = health_monitor.last_health_check
-        
-        # Quick status embed
-        status_emoji = "✅" if health.overall_status.value == "healthy" else "⚠️" if health.overall_status.value == "warning" else "❌"
-        
-        embed = InfoEmbed(
-            f"{status_emoji} System Status: {health.overall_status.value.title()}",
-            f"Last checked: {health.last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        
-        # Quick stats
-        healthy_count = len([c for c in health.checks if c.status.value == "healthy"])
-        total_checks = len(health.checks)
-        
-        embed.add_field(name="Health Checks", value=f"{healthy_count}/{total_checks} Passing", inline=True)
-        embed.add_field(name="Uptime", value=str(timedelta(seconds=int(health.uptime_seconds))), inline=True)
-        
-        # Top issues
-        issues = [c for c in health.checks if c.status.value in ["critical", "warning"]]
-        if issues:
-            issue_text = "\n".join([f"{'❌' if c.status.value == 'critical' else '⚠️'} {c.name}: {c.message}" for c in issues[:5]])
-            embed.add_field(name="Issues", value=issue_text, inline=False)
-        
-        await ctx.send(embed=embed)
-    
-    @health_group.command(name='metrics')
-    @commands.has_permissions(administrator=True)
-    async def health_metrics(self, ctx):
-        """Show performance metrics."""
-        from src.monitoring.health_monitor import health_monitor
-        
-        if not health_monitor:
-            embed = ErrorEmbed("Health Monitor Unavailable", "Health monitor is not initialized.")
-            await ctx.send(embed=embed)
-            return
-        
-        metrics = health_monitor.performance_metrics
-        
-        embed = InfoEmbed("📊 Performance Metrics", "Current system performance statistics")
-        
-        # API calls
-        api_calls = metrics['api_calls']
-        embed.add_field(
-            name="🔌 API Calls",
-            value=f"OpenAI: {api_calls['openai']}\nDiscord: {api_calls['discord']}\nTelegram: {api_calls['telegram']}",
-            inline=True
-        )
-        
-        # Errors
-        errors = metrics['errors']
-        total_errors = sum(errors.values())
-        embed.add_field(
-            name="❌ Errors",
-            value=f"Total: {total_errors}\nOpenAI: {errors['openai']}\nDiscord: {errors['discord']}\nTelegram: {errors['telegram']}\nGeneral: {errors['general']}",
-            inline=True
-        )
-        
-        # Success rates
-        total_posts = metrics['posts_successful'] + metrics['posts_failed']
-        post_success_rate = (metrics['posts_successful'] / total_posts * 100) if total_posts > 0 else 100
-        
-        total_translations = metrics['translations_successful'] + metrics['translations_failed']
-        translation_success_rate = (metrics['translations_successful'] / total_translations * 100) if total_translations > 0 else 100
-        
-        embed.add_field(
-            name="📈 Success Rates",
-            value=f"Posts: {post_success_rate:.1f}% ({metrics['posts_successful']}/{total_posts})\nTranslations: {translation_success_rate:.1f}% ({metrics['translations_successful']}/{total_translations})",
-            inline=True
-        )
-        
-        await ctx.send(embed=embed)
-
-    # =============================================================================
-    # Debug Commands
-    # =============================================================================
-    @commands.group(name='debug', invoke_without_command=True)
-    @commands.has_permissions(administrator=True)
-    async def debug_group(self, ctx):
-        """Advanced debugging commands."""
-        embed = InfoEmbed(
-            "🐛 Debug Tools", 
-            "Advanced debugging and troubleshooting tools"
-        )
-        
-        embed.add_field(
-            name="📋 Available Commands",
-            value=(
-                "`!debug config` - Validate configuration\n"
-                "`!debug features` - Check feature dependencies\n"
-                "`!debug api` - Test API connections\n"
-                "`!debug channels` - Verify channel access\n"
-                "`!debug permissions` - Check bot permissions"
-            ),
-            inline=False
-        )
-        
-        await ctx.send(embed=embed)
-    
-    @debug_group.command(name='config')
-    @commands.has_permissions(administrator=True)
-    async def debug_config(self, ctx):
-        """Validate bot configuration."""
-        from src.core.config_validator import config_validator
-        from src.core.unified_config import unified_config as config
-        
-        # Run validation
-        is_valid = config_validator.validate_all(config._config)
-        report = config_validator.get_validation_report()
-        
-        status_emoji = "✅" if is_valid else "❌"
-        title = f"{status_emoji} Configuration Validation"
-        
-        embed = InfoEmbed(title, f"```\n{report}\n```")
-        await ctx.send(embed=embed)
-    
-    @debug_group.command(name='features')
-    @commands.has_permissions(administrator=True)
-    async def debug_features(self, ctx):
-        """Check feature dependencies."""
-        from src.core.feature_manager import feature_manager
-        
-        issues = feature_manager.validate_feature_dependencies()
-        
-        if not issues:
-            embed = SuccessEmbed("Feature Dependencies", "All feature dependencies are satisfied ✅")
-        else:
-            issue_text = "\n".join([f"• {issue}" for issue in issues])
-            embed = WarningEmbed("Feature Dependency Issues", issue_text)
-        
-        await ctx.send(embed=embed)
-    
-    @debug_group.command(name='api')
-    @commands.has_permissions(administrator=True)
-    async def debug_api(self, ctx):
-        """Test API connections."""
-        from src.core.unified_config import unified_config as config
-        import openai
-        
-        embed = InfoEmbed("🔌 API Connection Tests", "Testing external API connectivity")
-        
-        # Test OpenAI API
-        try:
-            api_key = config.get("openai.api_key")
-            if not api_key:
-                embed.add_field(name="❌ OpenAI API", value="API key not configured", inline=False)
-            else:
-                # Quick test (minimal cost)
-                client = openai.OpenAI(api_key=api_key)
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": "test"}],
-                    max_tokens=1
-                )
-                embed.add_field(name="✅ OpenAI API", value="Connection successful", inline=False)
-        except Exception as e:
-            embed.add_field(name="❌ OpenAI API", value=f"Error: {str(e)}", inline=False)
-        
-        # Test Discord API (already connected if this command works)
-        embed.add_field(name="✅ Discord API", value="Connection successful (bot is online)", inline=False)
-        
-        await ctx.send(embed=embed)
-    
-    @debug_group.command(name='channels')
-    @commands.has_permissions(administrator=True)
-    async def debug_channels(self, ctx):
-        """Verify channel access."""
-        from src.core.unified_config import unified_config as config
-        
-        embed = InfoEmbed("📺 Channel Access Verification", "Checking configured channel accessibility")
-        
-        guild = ctx.guild
-        channel_configs = {
-                            "news": config.get("discord.channels.news") or config.get("channels.news"),
-                "logs": config.get("discord.channels.logs") or config.get("channels.logs"),
-                "errors": config.get("discord.channels.errors") or config.get("channels.errors")
-        }
-        
-        for channel_name, channel_id in channel_configs.items():
-            if not channel_id:
-                embed.add_field(name=f"❌ {channel_name.title()} Channel", value="Not configured", inline=False)
-                continue
-            
-            channel = guild.get_channel(channel_id)
-            if not channel:
-                embed.add_field(name=f"❌ {channel_name.title()} Channel", value=f"Channel {channel_id} not found", inline=False)
-            else:
-                # Check permissions
-                permissions = channel.permissions_for(guild.me)
-                can_send = permissions.send_messages
-                can_embed = permissions.embed_links
-                
-                status = "✅" if can_send and can_embed else "⚠️"
-                perm_status = "Full access" if can_send and can_embed else f"Limited access (send: {can_send}, embed: {can_embed})"
-                
-                embed.add_field(
-                    name=f"{status} {channel_name.title()} Channel",
-                    value=f"{channel.mention} - {perm_status}",
-                    inline=False
-                )
-        
-        await ctx.send(embed=embed)
-    
-    @debug_group.command(name='permissions')
-    @commands.has_permissions(administrator=True)
-    async def debug_permissions(self, ctx):
-        """Check bot permissions."""
-        guild = ctx.guild
-        bot_member = guild.me
-        
-        embed = InfoEmbed("🔐 Bot Permissions Check", f"Permissions for {bot_member.mention}")
-        
-        # Check critical permissions
-        critical_perms = {
-            "send_messages": "Send Messages",
-            "embed_links": "Embed Links", 
-            "attach_files": "Attach Files",
-            "read_message_history": "Read Message History",
-            "manage_messages": "Manage Messages",
-            "create_public_threads": "Create Public Threads",
-            "send_messages_in_threads": "Send Messages in Threads"
-        }
-        
-        missing_perms = []
-        for perm_name, display_name in critical_perms.items():
-            has_perm = getattr(bot_member.guild_permissions, perm_name)
-            status = "✅" if has_perm else "❌"
-            embed.add_field(name=f"{status} {display_name}", value="Granted" if has_perm else "Missing", inline=True)
-            
-            if not has_perm:
-                missing_perms.append(display_name)
-        
-        if missing_perms:
-            embed.add_field(
-                name="⚠️ Missing Permissions",
-                value=f"The bot is missing: {', '.join(missing_perms)}",
-                inline=False
-            )
-        
-        await ctx.send(embed=embed)
 
 
-# =============================================================================
-# Manual Fetch Preview View
-# =============================================================================
 class ManualFetchPreview(discord.ui.View):
     """View for manual fetch preview with post/download buttons."""
 
@@ -2314,17 +2190,20 @@ class ManualFetchPreview(discord.ui.View):
                 else:
                     await interaction.followup.send("❌ Failed to download media files.", ephemeral=True)
 
+            except ImportError as e:
+                logger.error(f"Import error downloading media: {e}")
+                await interaction.followup.send("❌ Media service not available.", ephemeral=True)
             except Exception as e:
                 logger.error(f"Error downloading media: {e}")
                 await interaction.followup.send(f"❌ Error downloading media: {str(e)}", ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Error in download media button: {e}")
-            await interaction.followup.send(f"❌ Error downloading media: {str(e)}", ephemeral=True)
+            logger.error(f"Error in download media: {e}")
+            await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
     @discord.ui.button(label="🚫 Blacklist Post", style=discord.ButtonStyle.danger)
     async def blacklist_post(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Blacklist the message to prevent future processing."""
+        """Blacklist this post to prevent it from being fetched again."""
         try:
             # Check if user is admin
             def get_config():
@@ -2343,51 +2222,49 @@ class ManualFetchPreview(discord.ui.View):
 
             await interaction.response.defer()
 
-            # Add message ID to blacklist
-            if hasattr(self.bot, 'json_cache') and self.bot.json_cache:
-                blacklisted_posts = await self.bot.json_cache.get("blacklisted_posts") or []
-                if self.message.id not in blacklisted_posts:
-                    blacklisted_posts.append(self.message.id)
-                    await self.bot.json_cache.set("blacklisted_posts", blacklisted_posts)
-                    await self.bot.json_cache.save()
+            # Add to blacklist
+            blacklisted_ids = await self.bot.json_cache.get("blacklisted_posts") or []
+            if self.message.id not in blacklisted_ids:
+                blacklisted_ids.append(self.message.id)
+                await self.bot.json_cache.set("blacklisted_posts", blacklisted_ids)
+                await self.bot.json_cache.save()
 
-                    # Create blacklist confirmation
-                    embed = discord.Embed(
-                        title="🚫 Post Blacklisted",
-                        description=f"Message **{self.message.id}** from **{self.channel}** has been blacklisted.",
-                        color=0xFF0000
-                    )
-                    embed.add_field(name="Message ID", value=str(self.message.id), inline=True)
-                    embed.add_field(name="Channel", value=self.channel, inline=True)
-                    embed.add_field(name="Blacklisted by", value=f"<@{interaction.user.id}>", inline=True)
+                # Create blacklist notification
+                embed = discord.Embed(
+                    title="🚫 Post Blacklisted",
+                    description=f"Message from **{self.channel}** has been blacklisted.",
+                    color=0xFF0000  # Red
+                )
+                embed.add_field(name="Message ID", value=str(self.message.id), inline=True)
+                embed.add_field(name="Blacklisted by", value=f"<@{interaction.user.id}>", inline=True)
+                embed.add_field(name="Channel", value=self.channel, inline=True)
 
-                    # Disable all buttons
-                    for item in self.children:
-                        item.disabled = True
+                # Disable all buttons
+                for item in self.children:
+                    item.disabled = True
 
-                    await interaction.followup.edit_message(interaction.message.id, view=self)
-                    await interaction.followup.send(embed=embed)
+                await interaction.followup.edit_message(interaction.message.id, view=self)
+                await interaction.followup.send(embed=embed)
 
-                    logger.info(f"🚫 [BLACKLIST] Manual fetch post {self.message.id} from {self.channel} blacklisted by {interaction.user.id}")
-                else:
-                    await interaction.followup.send(f"⚠️ Message **{self.message.id}** is already blacklisted.", ephemeral=True)
+                logger.info(f"🚫 [BLACKLIST] Post blacklisted by {interaction.user.id}: {self.message.id}")
             else:
-                await interaction.followup.send("❌ Cache not available for blacklisting.", ephemeral=True)
+                await interaction.followup.send("⚠️ This post is already blacklisted.", ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Error in blacklist button: {e}")
+            logger.error(f"Error blacklisting post: {e}")
             await interaction.followup.send(f"❌ Error blacklisting post: {str(e)}", ephemeral=True)
 
     async def on_timeout(self):
-        """Called when the view times out."""
-        # Disable all buttons
-        for item in self.children:
-            item.disabled = True
+        """Disable all buttons when the view times out."""
+        try:
+            for item in self.children:
+                item.disabled = True
+            # Try to update the message if possible
+            # Note: This might fail if the message was deleted
+        except:
+            pass
 
 
-# =============================================================================
-# Modal for Adding Channels
-# =============================================================================
 class AddChannelModal(discord.ui.Modal, title="➕ Add Telegram Channel"):
     """Modal for adding a new Telegram channel."""
 
@@ -2396,79 +2273,81 @@ class AddChannelModal(discord.ui.Modal, title="➕ Add Telegram Channel"):
         self.bot = bot
 
     channel_name = discord.ui.TextInput(
-        label="Channel Username",
-        placeholder="Enter channel username (e.g., alekhbariahsy)",
+        label="Channel Name",
+        placeholder="Enter the Telegram channel name (without @)...",
         required=True,
-        max_length=50
+        max_length=100
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        """Handle modal submission."""
-        await interaction.response.defer()
-
+        """Handle channel addition."""
         try:
-            channel = self.channel_name.value.strip().lower()
+            await interaction.response.defer()
 
+            channel_name = self.channel_name.value.strip()
+            
             # Remove @ if present
-            if channel.startswith('@'):
-                channel = channel[1:]
+            if channel_name.startswith('@'):
+                channel_name = channel_name[1:]
 
-            # Basic validation
-            if not channel or len(channel) < 3:
-                embed = ErrorEmbed(
-                    "❌ Invalid Channel Name",
-                    "Channel name must be at least 3 characters long."
-                )
-                await interaction.followup.send(embed=embed, ephemeral=True)
+            # Validate channel name
+            if not channel_name:
+                await interaction.followup.send("❌ Please enter a valid channel name.", ephemeral=True)
                 return
 
-            # Check for valid characters
-            if not channel.replace('_', '').replace('-', '').isalnum():
-                embed = ErrorEmbed(
-                    "❌ Invalid Characters",
-                    "Channel name can only contain letters, numbers, underscores, and hyphens."
-                )
-                await interaction.followup.send(embed=embed, ephemeral=True)
-                return
+            # Get current config
+            from src.core.unified_config import unified_config as config
 
-            # Add channel to cache
-            if hasattr(self.bot, 'json_cache') and self.bot.json_cache:
-                success = await self.bot.json_cache.add_telegram_channel(channel)
-                if success:
-                    embed = SuccessEmbed(
-                        "➕ Channel Added Successfully",
-                        f"Channel **{channel}** has been added and activated."
-                    )
-                    embed.add_field(
-                        name="📋 Next Steps",
-                        value="The channel is now active and will be included in auto-posting rotation.",
-                        inline=False
-                    )
-                    logger.info(f"[ADMIN] Channel '{channel}' added by {interaction.user.id}")
-                else:
-                    embed = ErrorEmbed(
-                        "❌ Channel Already Exists",
-                        f"Channel **{channel}** is already in the system."
-                    )
-            else:
-                embed = ErrorEmbed(
-                    "❌ Cache Error",
-                    "Unable to access channel cache system."
-                )
+            # Get current channels
+            current_channels = config.get("telegram.channels") or []
+
+            # Check if channel already exists
+            for existing_channel in current_channels:
+                if existing_channel.get("name") == channel_name:
+                    await interaction.followup.send(f"❌ Channel `{channel_name}` already exists.", ephemeral=True)
+                    return
+
+            # Add new channel
+            new_channel = {
+                "name": channel_name,
+                "active": True,
+                "priority": 1,
+                "category": "news"
+            }
+
+            current_channels.append(new_channel)
+
+            # Update config
+            config.set("telegram.channels", current_channels)
+            await config.save()
+
+            # Create success embed
+            embed = discord.Embed(
+                title="✅ Channel Added",
+                description=f"Successfully added channel `{channel_name}` to the configuration.",
+                color=0x00FF00
+            )
+            embed.add_field(name="Channel Name", value=channel_name, inline=True)
+            embed.add_field(name="Status", value="Active", inline=True)
+            embed.add_field(name="Priority", value="1", inline=True)
 
             await interaction.followup.send(embed=embed)
+            logger.info(f"✅ Channel '{channel_name}' added by {interaction.user.id}")
 
         except Exception as e:
-            logger.error(f"Error in AddChannelModal: {e}")
-            error_embed = ErrorEmbed(
-                "❌ Add Channel Error",
-                f"Failed to add channel: {str(e)}"
-            )
-            await interaction.followup.send(embed=error_embed, ephemeral=True)
+            logger.error(f"Error adding channel: {e}")
+            await interaction.followup.send(f"❌ Error adding channel: {str(e)}", ephemeral=True)
 
 
 def setup_admin_commands(bot):
-    """Setup admin commands for the bot."""
-    cog = AdminCommands(bot)
-    bot.tree.add_command(AdminCommands.admin_group)
-    logger.info("✅ Admin commands loaded")
+    """Set up admin commands cog."""
+    from src.utils.base_logger import base_logger as logger
+    
+    try:
+        cog = AdminCommands(bot)
+        asyncio.create_task(bot.add_cog(cog))
+        logger.info("✅ Admin commands cog loaded successfully")
+        return cog
+    except Exception as e:
+        logger.error(f"❌ Failed to load admin commands cog: {e}")
+        raise

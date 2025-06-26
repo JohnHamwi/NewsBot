@@ -13,6 +13,7 @@ import asyncio
 import datetime
 import os
 import platform
+import socket
 from typing import TYPE_CHECKING
 import time as time_module  # Import time module with alias to avoid scope issues
 
@@ -210,29 +211,37 @@ async def resource_monitor(bot: "NewsBot") -> None:
     """Monitor CPU and RAM usage and alert if thresholds are exceeded."""
     from src.core.unified_config import unified_config as config
     
-    # Load configuration
+    # Get environment-aware configuration
+    environment = getattr(config, 'environment', 'development')
     alerts_enabled = config.get("monitoring.resource_alerts.enabled", True)
-    cpu_threshold = config.get("monitoring.resource_alerts.cpu_threshold", 80.0)
-    ram_threshold = config.get("monitoring.resource_alerts.ram_threshold", 70.0)
-    check_interval = config.get("monitoring.resource_alerts.check_interval", 60)
+    cpu_threshold = config.get("monitoring.resource_alerts.cpu_threshold", 85.0)
+    ram_threshold = config.get("monitoring.resource_alerts.ram_threshold", 80.0)
+    check_interval = config.get("monitoring.resource_alerts.check_interval", 120)
+    reason = config.get("monitoring.resource_alerts.reason", "Resource monitoring")
     admin_user_id = config.get("bot.admin_user_id", 0)
     
     process = psutil.Process()
 
-    logger.debug(f"🛡️ Starting resource monitor - Alerts enabled: {alerts_enabled}")
+    logger.info(f"🛡️ Starting resource monitor for {environment} environment")
+    logger.info(f"🔧 Configuration: Alerts={alerts_enabled}, CPU={cpu_threshold}%, RAM={ram_threshold}%, Interval={check_interval}s")
+    logger.info(f"💡 Reason: {reason}")
+    
     if not alerts_enabled:
-        logger.info("🔇 Resource alerts are disabled in configuration")
+        logger.info("🔇 Resource alerts are disabled for this environment")
         return  # Exit early if alerts are disabled
 
     try:
         while True:
             try:
-                cpu = psutil.cpu_percent()
+                # Use longer interval for CPU measurement to reduce overhead
+                cpu = psutil.cpu_percent(interval=2.0)  # Increased from default to 2 seconds
                 ram = process.memory_percent()
 
+                # Only check thresholds if CPU or RAM are actually high
                 if cpu > cpu_threshold or ram > ram_threshold:
-                    await send_resource_alert(bot, cpu, ram, process.pid, admin_user_id)
+                    await send_resource_alert(bot, cpu, ram, process.pid, admin_user_id, environment)
 
+                # Use configured sleep interval
                 await asyncio.sleep(check_interval)
 
             except Exception as e:
@@ -245,37 +254,40 @@ async def resource_monitor(bot: "NewsBot") -> None:
 
 
 async def send_resource_alert(
-    bot: "NewsBot", cpu: float, ram: float, pid: int, admin_user_id: int
+    bot: "NewsBot", cpu: float, ram: float, pid: int, admin_user_id: int, environment: str
 ) -> None:
-    """Send resource usage alert to admin."""
+    """Send resource usage alert to admin using rate-limited error handler."""
     try:
-        if not bot.errors_channel:
-            return
-
-        embed = discord.Embed(
-            title="⚠️ High Resource Usage Alert",
-            description=f"The bot is experiencing high resource usage.",
-            color=discord.Color.red(),
-            timestamp=discord.utils.utcnow(),
-        )
-
-        embed.add_field(
-            name="📊 Current Usage",
-            value=f"**CPU:** {cpu:.1f}%\n**RAM:** {ram:.1f}%\n**PID:** {pid}",
-            inline=False,
-        )
-
-        embed.add_field(
-            name="🔧 Recommended Actions",
-            value="• Check for memory leaks\n• Monitor background tasks\n• Consider restarting if usage remains high",
-            inline=False,
-        )
-
-        await bot.errors_channel.send(f"<@{admin_user_id}>", embed=embed)
-        logger.warning(f"⚠️ Sent resource alert - CPU: {cpu:.1f}%, RAM: {ram:.1f}%")
-
+        # Create a resource usage exception for the error handler
+        class ResourceUsageError(Exception):
+            def __init__(self, cpu: float, ram: float, pid: int, environment: str):
+                self.cpu = cpu
+                self.ram = ram
+                self.pid = pid
+                self.environment = environment
+                system_info = f"{platform.system()} ({socket.gethostname()})"
+                super().__init__(f"High resource usage detected on {environment} environment - {system_info} - CPU: {cpu:.1f}%, RAM: {ram:.1f}%, PID: {pid}")
+        
+        # Use the error handler with rate-limited pings
+        from src.utils.error_handler import error_handler
+        
+        resource_error = ResourceUsageError(cpu, ram, pid, environment)
+        
+        # Check if errors channel is available before sending
+        if hasattr(bot, 'errors_channel') and bot.errors_channel:
+            await error_handler.send_error_embed(
+                error_title=f"🚨 High Resource Usage Alert ({environment.title()})",
+                error=resource_error,
+                context=f"System: {platform.system()} ({socket.gethostname()}) | Environment: {environment}",
+                bot=bot
+            )
+            logger.info(f"⚠️ Sent {environment} resource alert - CPU: {cpu:.1f}%, RAM: {ram:.1f}%")
+        else:
+            # Fallback: Log the alert if errors channel is not available
+            logger.warning(f"⚠️ High resource usage detected on {environment} environment but errors channel not available - CPU: {cpu:.1f}%, RAM: {ram:.1f}%, PID: {pid}")
+            
     except Exception as e:
-        logger.error(f"❌ Failed to send resource alert: {str(e)}")
+        logger.error(f"❌ Failed to send resource alert: {e}")
 
 
 async def update_metrics(bot: "NewsBot") -> None:
@@ -429,46 +441,57 @@ async def rich_presence_task(bot: "NewsBot"):
                         
                         # Calculate seconds until next post if automation is enabled
                         seconds_until_next_post = 0
-                        automation_enabled = bot.automation_config.get('enabled', True) if hasattr(bot, 'automation_config') else True
+                        automation_enabled = bot.auto_post_interval > 0  # Auto-posting enabled if interval > 0
                         
                         # Check if we're still in startup grace period (same as auto-post task)
                         in_startup_grace, _ = bot.should_wait_for_startup_delay()
                         
                         if (automation_enabled and 
-                            bot.auto_post_interval > 0 and 
                             bot.last_post_time and
                             not in_startup_grace):
                             
-                            # Calculate next post time
-                            next_post = bot.last_post_time + datetime.timedelta(seconds=bot.auto_post_interval)
-                            current_time = now_eastern()
-                            time_until = next_post - current_time
-                            
-                            # Only show countdown if next post is in the future
-                            if time_until.total_seconds() > 0:
+                            # TIMEZONE FIX: Ensure both times are timezone-aware before calculation
+                            try:
+                                # Make sure last_post_time is timezone-aware
+                                last_post_aware = bot.last_post_time
+                                if last_post_aware.tzinfo is None:
+                                    from src.utils.timezone_utils import EASTERN
+                                    last_post_aware = last_post_aware.replace(tzinfo=EASTERN)
+                                
+                                # Calculate next post time with timezone-aware datetime
+                                next_post = last_post_aware + datetime.timedelta(seconds=bot.auto_post_interval)
+                                current_time = now_eastern()
+                                time_until = next_post - current_time
+                                
+                                # Always calculate countdown based on interval from last post time
                                 seconds_until_next_post = int(time_until.total_seconds())
+                                
                                 # Only log when the countdown changes by more than 60 seconds using class variable
                                 current_time_seconds = time_module.time()
                                 if not hasattr(bot.__class__, '_last_rich_presence_log_seconds') or \
                                    abs(seconds_until_next_post - getattr(bot.__class__, '_last_rich_presence_log_seconds', 0)) > 60 or \
                                    (current_time_seconds - getattr(bot.__class__, '_last_rich_presence_log_time', 0)) > 60:
-                                    logger.debug(f"📱 Rich presence: Next post in {seconds_until_next_post}s")
+                                    if seconds_until_next_post > 0:
+                                        logger.debug(f"📱 Rich presence: Next post in {seconds_until_next_post}s")
+                                    else:
+                                        logger.debug(f"📱 Rich presence: Post overdue by {abs(seconds_until_next_post)}s - trying to post")
                                     bot.__class__._last_rich_presence_log_seconds = seconds_until_next_post
                                     bot.__class__._last_rich_presence_log_time = current_time_seconds
-                            else:
-                                # Post is overdue, should post soon
+                                        
+                            except Exception as tz_error:
+                                logger.error(f"❌ Rich presence timezone calculation error: {tz_error}")
                                 seconds_until_next_post = 0
-                                current_time_seconds = time_module.time()
-                                if not hasattr(bot.__class__, '_last_rich_presence_overdue_log') or \
-                                   (current_time_seconds - bot.__class__._last_rich_presence_overdue_log) > 60:
-                                    logger.debug("📱 Rich presence: Post overdue, should post soon")
-                                    bot.__class__._last_rich_presence_overdue_log = current_time_seconds
                         else:
                             # Only log this once every 5 minutes using class variable
                             current_time_seconds = time_module.time()
                             if not hasattr(bot.__class__, '_last_rich_presence_no_automation_log') or \
                                (current_time_seconds - bot.__class__._last_rich_presence_no_automation_log) > 300:
-                                logger.debug("📱 Rich presence: No automation or no last post time")
+                                if not automation_enabled:
+                                    logger.debug("📱 Rich presence: Auto-posting disabled (interval = 0)")
+                                elif not bot.last_post_time:
+                                    logger.debug("📱 Rich presence: No previous post time recorded")
+                                else:
+                                    logger.debug("📱 Rich presence: In startup grace period")
                                 bot.__class__._last_rich_presence_no_automation_log = current_time_seconds
                         
                         # Use the enhanced rich presence function
@@ -577,25 +600,38 @@ async def auto_post_task(bot: "NewsBot"):
 
                 # Calculate time since last post to determine if interval has elapsed
                 if bot.last_post_time:
-                    time_since_last = (
-                        now_eastern() - bot.last_post_time
-                    ).total_seconds()
-                    logger.debug(
-                        f"⏱️ Time since last post: {time_since_last:.0f}s (need {bot.auto_post_interval}s)"
-                    )
+                    # TIMEZONE FIX: Ensure both times are timezone-aware before calculation
+                    try:
+                        # Make sure last_post_time is timezone-aware
+                        last_post_aware = bot.last_post_time
+                        if last_post_aware.tzinfo is None:
+                            from src.utils.timezone_utils import EASTERN
+                            last_post_aware = last_post_aware.replace(tzinfo=EASTERN)
+                        
+                        time_since_last = (
+                            now_eastern() - last_post_aware
+                        ).total_seconds()
+                        logger.debug(
+                            f"⏱️ Time since last post: {time_since_last:.0f}s (need {bot.auto_post_interval}s)"
+                        )
 
-                    # Check if we need to wait longer before next post
-                    if (
-                        time_since_last < bot.auto_post_interval
-                        and not bot.force_auto_post
-                    ):
-                        remaining = bot.auto_post_interval - time_since_last
-                        remaining_minutes = remaining / 60
-                        logger.debug(f"⏳ Not time yet, waiting {remaining_minutes:.1f} minutes more")
-                        await asyncio.sleep(60)  # Check every minute
+                        # Check if we need to wait longer before next post
+                        if (
+                            time_since_last < bot.auto_post_interval
+                            and not bot.force_auto_post
+                        ):
+                            remaining = bot.auto_post_interval - time_since_last
+                            remaining_minutes = remaining / 60
+                            logger.debug(f"⏳ Not time yet, waiting {remaining_minutes:.1f} minutes more")
+                            await asyncio.sleep(60)  # Check every minute
+                            continue
+                        else:
+                            logger.debug("📅 Ready to post - time interval met")
+                    except Exception as tz_error:
+                        logger.error(f"❌ Auto-post timezone calculation error: {tz_error}")
+                        # If there's a timezone error, wait and try again
+                        await asyncio.sleep(60)
                         continue
-                    else:
-                        logger.debug("📅 Ready to post - time interval met")
                 elif not bot.last_post_time:
                     logger.debug("📅 No previous post time recorded - ready to post")
                 else:
@@ -621,45 +657,72 @@ async def auto_post_task(bot: "NewsBot"):
 
                 # Channel selection and posting attempt
                 try:
-                    # Get the next channel using rotation system for fairness
-                    channel = await bot.json_cache.get_next_channel_for_rotation()
+                    # Enhanced multi-channel fallback system
+                    # Try up to 3 channels before waiting the full interval
+                    max_channel_attempts = 3
+                    channels_tried = []
+                    posting_successful = False
+                    
+                    for attempt in range(max_channel_attempts):
+                        # Get the next channel using rotation system for fairness
+                        channel = await bot.json_cache.get_next_channel_for_rotation()
 
-                    if not channel:
-                        logger.warning(
-                            "⚠️ No active channels configured for auto-posting"
-                        )
-                        logger.info(
-                            "💡 Use /admin channels activate <channel_name> to add channels for auto-posting"
-                        )
-                        await asyncio.sleep(300)  # Wait 5 minutes before retrying
-                        continue
+                        if not channel:
+                            logger.warning(
+                                "⚠️ No active channels configured for auto-posting"
+                            )
+                            logger.info(
+                                "💡 Use /admin channels activate <channel_name> to add channels for auto-posting"
+                            )
+                            await asyncio.sleep(300)  # Wait 5 minutes before retrying
+                            break
 
-                    logger.info(f"🔄 Using channel rotation - selected channel: {channel}")
+                        # Skip if we already tried this channel in this cycle
+                        if channel in channels_tried:
+                            logger.debug(f"🔄 Channel {channel} already tried this cycle, getting next...")
+                            continue
+                            
+                        channels_tried.append(channel)
+                        logger.info(f"🔄 Attempt {attempt + 1}/{max_channel_attempts} - trying channel: {channel}")
 
-                    # Attempt to fetch and post from the selected channel
-                    try:
-                        result = await bot.fetch_and_post_auto(channel)
-                        if result:
-                            # IMPORTANT: Update last post time and mark content as posted
-                            # This ensures interval timing is properly maintained
-                            bot.mark_just_posted()  # Sets last_post_time and saves to cache
-                            
-                            # Update rich presence to show posting status
-                            from src.core.rich_presence import mark_content_posted
-                            await mark_content_posted(bot)
-                            
-                            logger.info(f"✅ Successfully posted from {channel} at {bot.last_post_time}")
-                            
-                            # Brief pause before next check to allow interval timing
-                            await asyncio.sleep(60)
+                        # Attempt to fetch and post from the selected channel
+                        try:
+                            result = await bot.fetch_and_post_auto(channel)
+                            if result:
+                                # IMPORTANT: Update last post time and mark content as posted
+                                # This ensures interval timing is properly maintained
+                                bot.mark_just_posted()  # Sets last_post_time and saves to cache
+                                
+                                # Update rich presence to show posting status
+                                from src.core.rich_presence import mark_content_posted
+                                await mark_content_posted(bot)
+                                
+                                logger.info(f"✅ Successfully posted from {channel} at {bot.last_post_time}")
+                                posting_successful = True
+                                break  # Exit the attempt loop on success
+                            else:
+                                logger.info(f"ℹ️ No suitable content found in {channel} (attempt {attempt + 1})")
+                                # Continue to next channel without waiting
+                                
+                        except Exception as e:
+                            logger.error(f"❌ Failed to fetch from {channel}: {str(e)}")
+                            # Continue to next channel on error
+                            continue
+                    
+                    # After trying multiple channels
+                    if posting_successful:
+                        # Brief pause before next check to allow interval timing
+                        await asyncio.sleep(60)
+                    else:
+                        # No content found in any of the attempted channels
+                        if channels_tried:
+                            logger.info(f"ℹ️ No suitable content found in any channels tried: {', '.join(channels_tried)}")
                         else:
-                            logger.info(f"ℹ️ No suitable content found in {channel}")
-                            # If no content found, wait before trying again
-                            await asyncio.sleep(300)  # Wait 5 minutes before next attempt
-                    except Exception as e:
-                        logger.error(f"❌ Failed to fetch from {channel}: {str(e)}")
-                        # If this channel fails, we'll try the next one in the next cycle
-                        # This prevents getting stuck on a broken channel
+                            logger.warning("⚠️ No channels available to try")
+                        
+                        # Wait longer before trying again (but less than full interval)
+                        logger.info("⏳ Waiting 10 minutes before next multi-channel attempt...")
+                        await asyncio.sleep(600)  # Wait 10 minutes before next attempt
 
                 except Exception as e:
                     logger.error(f"❌ Auto-post failed: {str(e)}")

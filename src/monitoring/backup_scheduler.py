@@ -20,6 +20,7 @@ from dataclasses import dataclass, asdict
 import schedule
 import time
 from threading import Thread
+import re
 
 # Configure logging
 logger = logging.getLogger('NewsBot.BackupScheduler')
@@ -427,6 +428,115 @@ class BackupScheduler:
         except Exception as e:
             logger.error(f"❌ Backup restore failed: {e}")
             return False
+
+    def _load_backup_history(self) -> None:
+        """Load backup history from JSON file."""
+        try:
+            if self.history_file.exists():
+                with open(self.history_file, 'r') as f:
+                    data = json.load(f)
+                    
+                for backup_data in data.get('backups', []):
+                    try:
+                        # Improved date parsing with multiple format support
+                        timestamp_str = backup_data.get('timestamp', '')
+                        
+                        # Try different timestamp formats
+                        timestamp = None
+                        formats_to_try = [
+                            '%Y-%m-%d %H:%M:%S.%f',  # With microseconds
+                            '%Y-%m-%d %H:%M:%S',     # Without microseconds
+                            '%Y-%m-%dT%H:%M:%S.%fZ', # ISO format with Z
+                            '%Y-%m-%dT%H:%M:%S.%f',  # ISO format without Z
+                            '%Y-%m-%dT%H:%M:%S',     # ISO format simple
+                        ]
+                        
+                        for fmt in formats_to_try:
+                            try:
+                                timestamp = datetime.strptime(timestamp_str, fmt)
+                                break
+                            except ValueError:
+                                continue
+                        
+                        if not timestamp:
+                            logger.debug(f"⚠️ Could not parse timestamp: {timestamp_str}")
+                            continue
+                        
+                        # Create BackupInfo object
+                        backup_info = BackupInfo(
+                            filename=backup_data.get('filename', ''),
+                            timestamp=timestamp,
+                            size_mb=backup_data.get('size_mb', 0),
+                            backup_type=backup_data.get('type', 'unknown'),
+                            success=backup_data.get('success', False)
+                        )
+                        
+                        self.backup_history.append(backup_info)
+                        
+                    except Exception as e:
+                        logger.debug(f"⚠️ Error processing backup entry: {e}")
+                        continue
+                        
+        except FileNotFoundError:
+            logger.debug("📝 No backup history file found, starting fresh")
+        except json.JSONDecodeError as e:
+            logger.warning(f"⚠️ Invalid backup history JSON: {e}")
+        except Exception as e:
+            logger.error(f"❌ Error loading backup history: {e}")
+
+    def _scan_existing_backups(self) -> None:
+        """Scan for existing backup files and add to history if missing."""
+        try:
+            backup_pattern = re.compile(r'newsbot_backup_.*_(\d{8}_\d{6})\.tar\.gz$')
+            
+            for backup_file in self.backup_dir.glob('newsbot_backup_*.tar.gz'):
+                # Check if this backup is already in history
+                if any(info.filename == backup_file.name for info in self.backup_history):
+                    continue
+                
+                try:
+                    # Extract date from filename using improved regex
+                    match = backup_pattern.search(backup_file.name)
+                    if match:
+                        date_str = match.group(1)
+                        # Parse date: format is YYYYMMDD_HHMMSS
+                        timestamp = datetime.strptime(date_str, '%Y%m%d_%H%M%S')
+                    else:
+                        # Fallback to file modification time
+                        timestamp = datetime.fromtimestamp(backup_file.stat().st_mtime)
+                        logger.debug(f"⚠️ Could not parse date from filename {backup_file.name}, using file mtime")
+                    
+                    # Get file size
+                    size_mb = backup_file.stat().st_size / (1024 * 1024)
+                    
+                    # Determine backup type from filename
+                    backup_type = 'unknown'
+                    if 'manual' in backup_file.name:
+                        backup_type = 'manual'
+                    elif 'scheduled' in backup_file.name:
+                        backup_type = 'scheduled'
+                    elif 'pre_deployment' in backup_file.name:
+                        backup_type = 'pre_deployment'
+                    
+                    # Create BackupInfo
+                    backup_info = BackupInfo(
+                        filename=backup_file.name,
+                        timestamp=timestamp,
+                        size_mb=size_mb,
+                        backup_type=backup_type,
+                        success=True  # Assume existing files are successful
+                    )
+                    
+                    self.backup_history.append(backup_info)
+                    logger.debug(f"📁 Added existing backup to history: {backup_file.name}")
+                    
+                except Exception as e:
+                    # Don't log as warning, just debug - these are parsing errors for existing files
+                    logger.debug(f"⚠️ Could not process existing backup file {backup_file.name}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ Error scanning existing backups: {e}")
 
 
 # Integration with bot

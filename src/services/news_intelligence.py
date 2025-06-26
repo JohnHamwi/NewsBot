@@ -29,7 +29,7 @@ except ImportError:
     import os
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from utils.base_logger import base_logger as logger
-    from core.unified_config import config
+    from src.core.unified_config import unified_config as config
 
 
 # =============================================================================
@@ -447,10 +447,12 @@ REASONING: [Brief explanation]
 
     async def format_urgency_indicator(self, analysis: NewsAnalysis) -> str:
         """Format urgency indicator for display."""
+        # User preference: Always use calendar emoji for consistency
+        # Previously used different emojis based on urgency, but user prefers consistent calendar emoji
         indicators = {
-            UrgencyLevel.BREAKING: "🚨",
-            UrgencyLevel.IMPORTANT: "📢", 
+            UrgencyLevel.BREAKING: "📅",
+            UrgencyLevel.IMPORTANT: "📅", 
             UrgencyLevel.NORMAL: "📅",
-            UrgencyLevel.LOW: "📝"
+            UrgencyLevel.LOW: "📅"
         }
-        return indicators.get(analysis.urgency_level, "📰") 
+        return indicators.get(analysis.urgency_level, "📅") 

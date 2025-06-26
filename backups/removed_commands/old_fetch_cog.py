@@ -167,15 +167,33 @@ class FetchCommands(commands.Cog):
     """
 
     def __init__(self, bot: discord.Client) -> None:
-        """Initialize the FetchCommands cog with intelligence services."""
+        """Initialize the FetchCommands cog with enhanced capabilities."""
         self.bot = bot
-        self.scheduled_fetches = {}  # Store scheduled fetch tasks
+        self.posting_locks = set()  # Track locked channels to prevent spam posting
         
-        # Initialize intelligence services
-        self.news_intelligence = NewsIntelligenceService()
-        self.ai_analyzer = AIContentAnalyzer(bot)
+        # DUPLICATE PREVENTION: In-memory tracking for messages being processed
+        # This prevents race conditions where the same message gets processed
+        # multiple times before it can be added to the persistent blacklist
+        self._processing_messages = set()  # Track messages currently being processed
+        self._processing_lock = asyncio.Lock()  # Lock for processing set operations
         
-        logger.debug("🔧 FetchCommands cog initialized with intelligence services")
+        # Initialize AI services for intelligent analysis
+        try:
+            self.news_intelligence = NewsIntelligenceService()
+            self.ai_analyzer = AIContentAnalyzer(bot)
+            logger.info("🧠 AI services initialized for FetchCommands")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize AI services: {e}")
+            self.news_intelligence = None
+            self.ai_analyzer = None
+        
+        logger.info("🔧 FetchCommands cog initialized with spam prevention and duplicate tracking")
+
+    async def _cleanup_processing_message(self, message_id: int, reason: str = "completed"):
+        """Remove a message from the processing set with logging."""
+        async with self._processing_lock:
+            self._processing_messages.discard(message_id)
+            logger.debug(f"🔓 [DUPLICATE-PREVENTION] Removed message {message_id} from processing set ({reason})")
 
     async def source_autocomplete(
         self,
@@ -229,160 +247,8 @@ class FetchCommands(commands.Cog):
             logger.error(f"Error in source autocomplete: {e}")
             return [app_commands.Choice(name="🌐 All Active Channels", value="all")]
 
-    @app_commands.command(
-        name="fetch", description="Enhanced news fetching with advanced options"
-    )
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(
-        action="Choose what type of fetch operation to perform",
-        source="Telegram channel name to fetch from (e.g., 'news_channel' or 'all' for all active channels)",
-        post_immediately="Automatically post fetched content to Discord (true/false)",
-        schedule_time="Schedule for later: 'YYYY-MM-DD HH:MM' (e.g., '2024-01-15 14:30') or relative '+30m', '+2h'",
-        quality_check="Enable content quality filtering to ensure high-quality posts (recommended: true)",
-        batch_size="How many posts to fetch at once (1-50, recommended: 5-10 for best performance)",
-        content_type="Filter by content type (all = everything, news = news articles, media = images/videos)",
-        language_filter="Filter by language (all = any language, ar = Arabic only, en = English only)",
-        keyword_filter="Search for specific keywords in posts (separate multiple with commas: 'politics,economy')",
-        dry_run="Preview mode: show what would be fetched without actually posting (useful for testing)"
-    )
-    @app_commands.choices(
-        action=[
-            app_commands.Choice(name="🔄 Fetch Latest (get newest posts now)", value="latest"),
-            app_commands.Choice(name="📅 Scheduled Fetch (set up for later)", value="schedule"),
-            app_commands.Choice(name="🎯 Targeted Fetch (specific channel/criteria)", value="targeted"),
-            app_commands.Choice(name="📊 Batch Fetch (multiple posts at once)", value="batch"),
-            app_commands.Choice(name="🔍 Preview Fetch (test without posting)", value="preview"),
-            app_commands.Choice(name="⏹️ Cancel Scheduled (stop pending fetch)", value="cancel"),
-            app_commands.Choice(name="📋 List Scheduled (show pending fetches)", value="list_scheduled"),
-        ],
-        content_type=[
-            app_commands.Choice(name="📰 All Content (everything)", value="all"),
-            app_commands.Choice(name="📰 News Only (articles & reports)", value="news"),
-            app_commands.Choice(name="📢 Updates Only (announcements)", value="updates"),
-            app_commands.Choice(name="🖼️ Media Only (images & videos)", value="media"),
-            app_commands.Choice(name="📝 Text Only (no media)", value="text"),
-        ],
-        language_filter=[
-            app_commands.Choice(name="🌐 All Languages (any language)", value="all"),
-            app_commands.Choice(name="🇸🇦 Arabic (العربية)", value="ar"),
-            app_commands.Choice(name="🇺🇸 English", value="en"),
-            app_commands.Choice(name="🤖 Auto-Detect (smart detection)", value="auto"),
-        ]
-    )
-    @app_commands.autocomplete(source=source_autocomplete)
-    @admin_required
-    async def fetch_command(
-        self,
-        interaction: discord.Interaction,
-        action: app_commands.Choice[str],
-        source: str = "all",
-        post_immediately: bool = False,
-        schedule_time: str = None,
-        quality_check: bool = True,
-        batch_size: int = 5,
-        content_type: app_commands.Choice[str] = None,
-        language_filter: app_commands.Choice[str] = None,
-        keyword_filter: str = None,
-        dry_run: bool = False,
-    ) -> None:
-        """
-        Enhanced news fetching with advanced options and scheduling.
-
-        Args:
-            interaction: The Discord interaction
-            action: What fetch action to perform
-            source: Source to fetch from
-            post_immediately: Post content immediately
-            schedule_time: Schedule for later execution
-            quality_check: Enable content quality filtering
-            batch_size: Number of posts to fetch
-            content_type: Type of content to filter
-            language_filter: Language filtering
-            keyword_filter: Keyword filtering
-            dry_run: Preview mode without actual posting
-        """
-        try:
-            action_value = action.value
-            content_type_value = content_type.value if content_type else "all"
-            language_filter_value = language_filter.value if language_filter else "all"
-
-            # Validate batch size
-            if batch_size < 1 or batch_size > 50:
-                await interaction.response.send_message(
-                    "❌ Batch size must be between 1 and 50.", ephemeral=True
-                )
-                return
-
-            logger.info(
-                f"[FETCH][CMD] Enhanced fetch command invoked by user {interaction.user.id}, "
-                f"action={action_value}, source={source}, batch_size={batch_size}, "
-                f"post_immediately={post_immediately}, dry_run={dry_run}"
-            )
-
-            await interaction.response.defer()
-
-            # Validate source parameter
-            if source == "none":
-                await interaction.followup.send(
-                    embed=ErrorEmbed(
-                        "❌ Invalid Source",
-                        "Please select a valid channel or 'all' for all channels."
-                    )
-                )
-                return
-
-            # Handle different actions
-            if action_value == "latest":
-                await self._handle_latest_fetch(
-                    interaction, source, post_immediately, quality_check, 
-                    batch_size, content_type_value, language_filter_value, 
-                    keyword_filter, dry_run
-                )
-            elif action_value == "schedule":
-                await self._handle_scheduled_fetch(
-                    interaction, source, schedule_time, quality_check,
-                    batch_size, content_type_value, language_filter_value,
-                    keyword_filter
-                )
-            elif action_value == "targeted":
-                await self._handle_targeted_fetch(
-                    interaction, source, quality_check, content_type_value,
-                    language_filter_value, keyword_filter, dry_run
-                )
-            elif action_value == "batch":
-                await self._handle_batch_fetch(
-                    interaction, source, batch_size, post_immediately,
-                    quality_check, content_type_value, language_filter_value,
-                    keyword_filter, dry_run
-                )
-            elif action_value == "preview":
-                await self._handle_preview_fetch(
-                    interaction, source, batch_size, content_type_value,
-                    language_filter_value, keyword_filter
-                )
-            elif action_value == "cancel":
-                await self._handle_cancel_scheduled(interaction, source)
-            elif action_value == "list_scheduled":
-                await self._handle_list_scheduled(interaction)
-
-            logger.info(
-                f"[FETCH][CMD] Enhanced fetch command completed successfully for user {interaction.user.id}"
-            )
-
-        except Exception as e:
-            structured_logger.error(
-                "Error executing enhanced fetch command",
-                extra_data={"error": str(e), "traceback": traceback.format_exc()},
-            )
-
-            error_embed = ErrorEmbed(
-                "Fetch Command Error", f"An error occurred: {str(e)}"
-            )
-
-            try:
-                await interaction.followup.send(embed=error_embed)
-            except discord.errors.NotFound:
-                structured_logger.warning("Could not send error response")
+    # Manual fetch command removed - bot is fully automated
+    # All fetch functionality is handled by background automation
 
     async def _handle_latest_fetch(
         self, interaction, source, post_immediately, quality_check,
@@ -1095,10 +961,21 @@ class FetchCommands(commands.Cog):
                 processed_content = []
 
                 for message in messages:
-                    # Skip if message ID is blacklisted
-                    if message.id in blacklisted_ids:
-                        logger.debug(f"[INTELLIGENT-FETCH] Skipping blacklisted message {message.id}")
-                        continue
+                    # CRITICAL DUPLICATE PREVENTION: Check both persistent blacklist and in-memory processing
+                    async with self._processing_lock:
+                        # Check if message is currently being processed
+                        if message.id in self._processing_messages:
+                            logger.warning(f"🚫 [DUPLICATE-PREVENTION] Message {message.id} already being processed, skipping to prevent duplicate")
+                            continue
+                        
+                        # Check persistent blacklist
+                        if message.id in blacklisted_ids:
+                            logger.debug(f"[INTELLIGENT-FETCH] Skipping blacklisted message {message.id}")
+                            continue
+                        
+                        # Mark message as being processed to prevent duplicate processing
+                        self._processing_messages.add(message.id)
+                        logger.debug(f"🔒 [DUPLICATE-PREVENTION] Marked message {message.id} as being processed")
 
                     # Get automation config to check requirements
                     automation_config = getattr(self.bot, 'automation_config', {})
@@ -1108,11 +985,15 @@ class FetchCommands(commands.Cog):
                     # Check if message has text (if required)
                     if require_text and not message.message:
                         logger.debug(f"[INTELLIGENT-FETCH] Skipping message {message.id} - missing text (text required)")
+                        # Remove from processing set since we're skipping
+                        await self._cleanup_processing_message(message.id, "missing text")
                         continue
 
                     # Check for media requirement (only if required by config)
                     if require_media and not message.media:
                         logger.debug(f"[INTELLIGENT-FETCH] Skipping message {message.id} - text-only post (media required by config)")
+                        # Remove from processing set since we're skipping
+                        await self._cleanup_processing_message(message.id, "no media")
                         continue
 
                     # If media is present, check for suitable media types
@@ -1148,19 +1029,26 @@ class FetchCommands(commands.Cog):
 
                     # 🧠 PHASE 1: NEWS INTELLIGENCE ANALYSIS
                     try:
-                        # Analyze urgency and importance
-                        news_analysis = await self.news_intelligence.analyze_urgency(
-                            content=cleaned_text,
-                            channel=channel_name,
-                            media=[message.media] if message.media else []
-                        )
+                        # Check if news intelligence service is available
+                        if hasattr(self, 'news_intelligence') and self.news_intelligence is not None:
+                            # Analyze urgency and importance
+                            news_analysis = await self.news_intelligence.analyze_urgency(
+                                content=cleaned_text,
+                                channel=channel_name,
+                                media=[message.media] if message.media else []
+                            )
 
-                        logger.info(f"📊 [INTELLIGENCE] Message {message.id}: {news_analysis.urgency_level.value} "
-                                  f"(score: {news_analysis.urgency_score:.2f}, confidence: {news_analysis.confidence:.2f})")
+                            logger.info(f"📊 [INTELLIGENCE] Message {message.id}: {news_analysis.urgency_level.value} "
+                                      f"(score: {news_analysis.urgency_score:.2f}, confidence: {news_analysis.confidence:.2f})")
 
-                        # Check if we should post immediately based on urgency
-                        should_post_immediately = await self.news_intelligence.should_post_immediately(news_analysis)
-                        posting_delay = await self.news_intelligence.get_posting_delay(news_analysis)
+                            # Check if we should post immediately based on urgency
+                            should_post_immediately = await self.news_intelligence.should_post_immediately(news_analysis)
+                            posting_delay = await self.news_intelligence.get_posting_delay(news_analysis)
+                        else:
+                            logger.debug("📊 [INTELLIGENCE] News intelligence service not available, using defaults")
+                            news_analysis = None
+                            should_post_immediately = True
+                            posting_delay = 0
 
                     except Exception as e:
                         logger.error(f"❌ [INTELLIGENCE] News analysis failed for message {message.id}: {e}")
@@ -1171,41 +1059,47 @@ class FetchCommands(commands.Cog):
 
                     # 🤖 PHASE 2: AI CONTENT ANALYSIS  
                     try:
-                        # Perform comprehensive AI analysis
-                        ai_processed = await self.ai_analyzer.process_content_intelligently(
-                            raw_content=cleaned_text,
-                            channel=channel_name,
-                            media=[message.media] if message.media else [],
-                            telegram_message=message,  # Pass telegram message for buttons
-                            message_id=message.id      # Pass message ID for reference
-                        )
+                        # Check if AI analyzer service is available
+                        if hasattr(self, 'ai_analyzer') and self.ai_analyzer is not None:
+                            # Perform comprehensive AI analysis
+                            ai_processed = await self.ai_analyzer.process_content_intelligently(
+                                raw_content=cleaned_text,
+                                channel=channel_name,
+                                media=[message.media] if message.media else [],
+                                telegram_message=message,  # Pass telegram message for buttons
+                                message_id=message.id      # Pass message ID for reference
+                            )
 
-                        logger.info(f"🤖 [AI-ANALYSIS] Message {message.id}: {ai_processed.sentiment.sentiment.value} "
-                                  f"| {ai_processed.categories.primary_category.value} "
-                                  f"| Quality: {ai_processed.quality.overall_score:.2f} "
-                                  f"| Safety: {ai_processed.safety.safety_level.value} "
-                                  f"| Should post: {ai_processed.should_post}")
+                            logger.info(f"🤖 [AI-ANALYSIS] Message {message.id}: {ai_processed.sentiment.sentiment.value} "
+                                      f"| {ai_processed.categories.primary_category.value} "
+                                      f"| Quality: {ai_processed.quality.overall_score:.2f} "
+                                      f"| Safety: {ai_processed.safety.safety_level.value} "
+                                      f"| Should post: {ai_processed.should_post}")
 
-                        # Check for safety filtering (most important)
-                        if ai_processed.safety.should_filter:
-                            logger.warning(f"🛡️ [SAFETY-FILTER] Skipping message {message.id} - content filtered for safety: {ai_processed.safety.safety_level.value}")
-                            logger.warning(f"🛡️ [SAFETY-FILTER] Safety issues: {ai_processed.safety.safety_issues}")
-                            # Add to blacklist to prevent future processing
-                            await _atomic_blacklist_add(self.bot, message.id)
-                            continue
+                            # Check for safety filtering (most important)
+                            if ai_processed.safety.should_filter:
+                                logger.warning(f"🛡️ [SAFETY-FILTER] Skipping message {message.id} - content filtered for safety: {ai_processed.safety.safety_level.value}")
+                                logger.warning(f"🛡️ [SAFETY-FILTER] Safety issues: {ai_processed.safety.safety_issues}")
+                                # Add to blacklist to prevent future processing
+                                await _atomic_blacklist_add(self.bot, message.id)
+                                continue
 
-                        # Check if AI recommends posting
-                        if not ai_processed.should_post:
-                            logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - AI analysis recommends skip")
-                            continue
+                            # Check if AI recommends posting
+                            if not ai_processed.should_post:
+                                logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - AI analysis recommends skip")
+                                continue
 
-                        # Check for duplicates
-                        if ai_processed.similarity_score > 0.8:
-                            logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - too similar to recent content (score: {ai_processed.similarity_score:.2f})")
-                            continue
+                            # Check for duplicates
+                            if ai_processed.similarity_score > 0.8:
+                                logger.info(f"[INTELLIGENT-FETCH] Skipping message {message.id} - too similar to recent content (score: {ai_processed.similarity_score:.2f})")
+                                continue
 
-                        # Use AI-processed content for posting
-                        final_content = ai_processed.translated_content
+                            # Use AI-processed content for posting
+                            final_content = ai_processed.translated_content
+                        else:
+                            logger.debug("🤖 [AI-ANALYSIS] AI analyzer service not available, skipping enhanced analysis")
+                            ai_processed = None
+                            final_content = cleaned_text
 
                     except Exception as e:
                         logger.error(f"❌ [AI-ANALYSIS] Content analysis failed for message {message.id}: {e}")
@@ -1249,7 +1143,12 @@ class FetchCommands(commands.Cog):
                         urgency_indicator = "📰"
 
                         if news_analysis:
-                            urgency_indicator = await self.news_intelligence.format_urgency_indicator(news_analysis)
+                            # Check if news intelligence service is still available for formatting
+                            if hasattr(self, 'news_intelligence') and self.news_intelligence is not None:
+                                urgency_indicator = await self.news_intelligence.format_urgency_indicator(news_analysis)
+                            else:
+                                urgency_indicator = "📰"  # Default indicator if service unavailable
+                                
                             if news_analysis.urgency_level == UrgencyLevel.BREAKING:
                                 logger.info(f"🚨 [BREAKING-NEWS] Message {message.id} will ping news role - breaking news detected!")
                             else:
@@ -1289,12 +1188,29 @@ class FetchCommands(commands.Cog):
                                 logger.warning(f"⚠️ [SPAM-PREVENTION] Too many delayed posts queued, skipping message {message.id}")
                                 continue
 
+                            # CRITICAL DUPLICATE PREVENTION: Add to blacklist immediately when scheduling
+                            # This prevents the same message from being scheduled multiple times
+                            # while it's waiting in the delayed posting queue
+                            blacklist_success = await _atomic_blacklist_add(self.bot, message.id)
+                            if not blacklist_success:
+                                logger.warning(f"⚠️ [DUPLICATE-PREVENTION] Failed to blacklist message {message.id}, skipping to prevent duplicates")
+                                # Remove from processing set since we're not proceeding
+                                async with self._processing_lock:
+                                    self._processing_messages.discard(message.id)
+                                continue
+
                             self.bot._delayed_post_count += 1
+                            logger.info(f"🔒 [DUPLICATE-PREVENTION] Message {message.id} blacklisted immediately to prevent duplicate scheduling")
 
                             # Schedule the post for later execution (non-blocking)
                             asyncio.create_task(self._schedule_delayed_post_with_cleanup(
                                 fetch_view, message.id, posting_delay, channel_name
                             ))
+
+                            # Remove from processing set since delayed posting will handle it
+                            async with self._processing_lock:
+                                self._processing_messages.discard(message.id)
+                                logger.debug(f"🔓 [DUPLICATE-PREVENTION] Removed message {message.id} from processing set (scheduled)")
 
                             # Continue to next message without blocking
                             continue
@@ -1305,6 +1221,11 @@ class FetchCommands(commands.Cog):
                         if post_success:
                             # Add message ID to blacklist to prevent reposting
                             await _atomic_blacklist_add(self.bot, message.id)
+
+                            # Remove from processing set since we're done
+                            async with self._processing_lock:
+                                self._processing_messages.discard(message.id)
+                                logger.debug(f"🔓 [DUPLICATE-PREVENTION] Removed message {message.id} from processing set (posted)")
 
                             # Log success with intelligence info
                             success_msg = f"✅ [INTELLIGENT-FETCH] Successfully posted message {message.id} from {channel_name}"
@@ -1320,9 +1241,17 @@ class FetchCommands(commands.Cog):
                             return True
                         else:
                             logger.warning(f"❌ [INTELLIGENT-FETCH] Failed to post message {message.id}")
+                            # Remove from processing set since posting failed
+                            async with self._processing_lock:
+                                self._processing_messages.discard(message.id)
+                                logger.debug(f"🔓 [DUPLICATE-PREVENTION] Removed message {message.id} from processing set (failed)")
 
                     except Exception as e:
                         logger.error(f"❌ [INTELLIGENT-FETCH] Error posting message {message.id}: {e}")
+                        # Remove from processing set on error
+                        async with self._processing_lock:
+                            self._processing_messages.discard(message.id)
+                            logger.debug(f"🔓 [DUPLICATE-PREVENTION] Removed message {message.id} from processing set (error)")
                         continue
 
                 logger.info(f"📊 [INTELLIGENT-FETCH] Processed {messages_processed} messages from {channel_name}, no suitable content found")
@@ -1367,19 +1296,21 @@ class FetchCommands(commands.Cog):
             async with self.bot._posting_lock:
                 logger.info(f"🚀 [DELAYED-POST] Attempting to post delayed message {message_id} from {channel_name}")
                 
-                # Double-check blacklist under lock to prevent duplicate posts
+                # Verify message is blacklisted (should already be blacklisted when scheduled)
                 if hasattr(self.bot, 'json_cache') and self.bot.json_cache:
                     blacklisted_ids = await self.bot.json_cache.get("blacklisted_posts") or []
                     if message_id in blacklisted_ids:
-                        logger.info(f"⚠️ [DELAYED-POST] Message {message_id} was blacklisted while waiting, skipping")
+                        logger.debug(f"✅ [DELAYED-POST] Message {message_id} is properly blacklisted")
+                    else:
+                        logger.warning(f"⚠️ [DELAYED-POST] Message {message_id} not in blacklist as expected, canceling delayed post to prevent duplicates")
                         return False
                 
                 # Attempt to post the content
                 post_success = await fetch_view.do_post_to_news()
                 
                 if post_success:
-                    # Add message ID to blacklist to prevent reposting
-                    await _atomic_blacklist_add(self.bot, message_id)
+                    # NOTE: Message already blacklisted when scheduled, no need to blacklist again
+                    logger.debug(f"✅ [DELAYED-POST] Message {message_id} already blacklisted during scheduling")
                     
                     # CRITICAL: Update last post time to respect auto-post interval
                     # This ensures the bot won't auto-post again too soon after this delayed post

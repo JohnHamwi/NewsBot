@@ -354,11 +354,13 @@ class TelegramManager:
                 if hasattr(self.client, '_sender') and hasattr(self.client._sender, '_keepalive_handle'):
                     try:
                         self.client._sender._keepalive_handle.cancel()
-                    except:
+                        # Wait a moment for the task to be cancelled
+                        await asyncio.sleep(0.1)
+                    except Exception:
                         pass
                 
                 # Try to disconnect gracefully with timeout
-                await asyncio.wait_for(self.client.disconnect(), timeout=5.0)
+                await asyncio.wait_for(self.client.disconnect(), timeout=3.0)
                 self.connected = False
                 logger.info("Disconnected from Telegram")
             except asyncio.TimeoutError:
@@ -368,7 +370,7 @@ class TelegramManager:
                 if hasattr(self.client, '_connection'):
                     try:
                         await self.client._connection.disconnect()
-                    except:
+                    except Exception:
                         pass
             except Exception as e:
                 error_msg = str(e)
@@ -377,7 +379,20 @@ class TelegramManager:
                     # Clear the session file to prevent future issues
                     try:
                         await self.clean_session_files()
-                    except:
+                    except Exception:
+                        pass
+                    # Force close any remaining connections
+                    try:
+                        if hasattr(self.client, '_connection') and self.client._connection:
+                            await asyncio.wait_for(self.client._connection.disconnect(), timeout=1.0)
+                    except Exception:
+                        pass
+                elif "sqlite3.OperationalError" in error_msg:
+                    logger.warning(f"SQLite error during Telegram disconnect: {error_msg}")
+                    # Handle SQLite-specific issues
+                    try:
+                        await self.clean_session_files()
+                    except Exception:
                         pass
                 else:
                     logger.error(f"Error disconnecting from Telegram: {error_msg}")

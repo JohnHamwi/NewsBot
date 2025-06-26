@@ -193,42 +193,51 @@ class TestRichPresenceTask:
         """Test that rich presence correctly shows next post time."""
         from src.utils.timezone_utils import now_eastern, utc_to_eastern
         
-        # Arrange
+        # Arrange - use a controlled timestamp to avoid real bot data interference
         mock_bot.rich_presence_mode = "automatic"
         mock_bot.auto_post_interval = 10800  # 3 hours
         
-        # Mock last post 1 hour ago
-        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+        # Create a fixed mock time to ensure predictable results
+        fixed_now = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        one_hour_ago = fixed_now - timedelta(hours=1)
+        
+        # Mock the timezone utils to return our fixed times
+        mock_timezone_utils.now_eastern.return_value = utc_to_eastern(fixed_now)
         mock_bot.last_post_time = utc_to_eastern(one_hour_ago)
         
         # Calculate expected next post time
         next_post_time = mock_bot.last_post_time + timedelta(seconds=mock_bot.auto_post_interval)
-        time_until = next_post_time - now_eastern()
+        time_until = next_post_time - mock_timezone_utils.now_eastern.return_value
         
         # Assert
         assert time_until.total_seconds() > 0
-        # Should be approximately 2 hours remaining
-        assert 7000 <= time_until.total_seconds() <= 7400
+        # Should be exactly 2 hours remaining (7200 seconds)
+        assert 7150 <= time_until.total_seconds() <= 7250
 
     @pytest.mark.asyncio
     async def test_rich_presence_shows_overdue_status(self, mock_bot, mock_timezone_utils):
         """Test that rich presence shows overdue status when post is late."""
-        from src.utils.timezone_utils import now_eastern, utc_to_eastern
+        from src.utils.timezone_utils import utc_to_eastern
         
         # Arrange
         mock_bot.rich_presence_mode = "automatic"
         mock_bot.auto_post_interval = 10800  # 3 hours
         
-        # Mock last post 4 hours ago (overdue)
-        four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=4)
+        # Create fixed times to ensure predictable results
+        fixed_now = datetime(2025, 1, 1, 16, 0, 0, tzinfo=timezone.utc)
+        four_hours_ago = fixed_now - timedelta(hours=4)  # 12:00 PM
+        
+        # Mock the timezone utils to return our fixed times
+        mock_timezone_utils.now_eastern.return_value = utc_to_eastern(fixed_now)
         mock_bot.last_post_time = utc_to_eastern(four_hours_ago)
         
-        # Calculate next post time (should be in the past)
+        # Calculate next post time (should be in the past since post was 4 hours ago, interval is 3 hours)
         next_post_time = mock_bot.last_post_time + timedelta(seconds=mock_bot.auto_post_interval)
-        time_until = next_post_time - now_eastern()
+        time_until = next_post_time - mock_timezone_utils.now_eastern.return_value
         
-        # Assert
+        # Assert - should be overdue by 1 hour (4 hours since last post - 3 hour interval = 1 hour overdue)
         assert time_until.total_seconds() <= 0  # Should be overdue
+        assert time_until.total_seconds() >= -3700  # Should be about -1 hour (-3600 seconds)
 
 
 class TestResourceMonitor:

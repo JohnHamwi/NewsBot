@@ -1,29 +1,23 @@
 # =============================================================================
-# NewsBot Cogs Package
+# NewsBot Cogs Package - Streamlined Version
 # =============================================================================
-# Discord bot cogs with enhanced command structure and unified super-commands
+# Discord bot cogs with streamlined command structure for automation
 # Last updated: 2025-01-16
 
 # =============================================================================
 # Local Application Imports
 # =============================================================================
-from .admin import AdminCommands
-from .bot_commands import BotCommands
-from .fetch_cog import FetchCommands
+from .streamlined_admin import StreamlinedAdminCommands
+from .streamlined_fetch import StreamlinedFetchCommands
 from .fetch_view import FetchView
-from .news_commands import NewsCommands
-from .status import StatusCommands
-from .utility import UtilityCommands
+from .notification_system import NotificationSystem
 
 # =============================================================================
 # Package Exports
 # =============================================================================
 __all__ = [
-    "AdminCommands",
-    "BotCommands",
-    "FetchCommands", 
+    "StreamlinedAdminCommands",
+    "StreamlinedFetchCommands", 
     "FetchView",
-    "NewsCommands",
-    "StatusCommands",
-    "UtilityCommands"
+    "NotificationSystem"
 ]

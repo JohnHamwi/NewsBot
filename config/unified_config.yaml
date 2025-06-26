@@ -1,6 +1,6 @@
 automation:
   enabled: true
-  interval_minutes: 180
+  interval_minutes: 60
   max_posts_per_session: 1
   min_content_length: 50
   notify_on_errors: true
@@ -91,15 +91,21 @@ discord:
     logs: 1378553893083938957
     news: 1382112473423020062
   guild_id: 1228455909827805308
-  token: YOUR_DISCORD_BOT_TOKEN_HERE
+  token: YOUR_DISCORD_TOKEN_HERE
 environments:
   development:
     automation:
-      interval_minutes: 60
+      interval_minutes: 180
     bot:
       debug_mode: true
     monitoring:
       log_level: DEBUG
+      resource_alerts:
+        enabled: false
+        cpu_threshold: 95.0
+        ram_threshold: 90.0
+        check_interval: 300
+        reason: "Development environment - CPU spikes are normal during testing"
   production:
     automation:
       interval_minutes: 180
@@ -107,6 +113,12 @@ environments:
       debug_mode: false
     monitoring:
       log_level: INFO
+      resource_alerts:
+        enabled: true
+        cpu_threshold: 80.0
+        ram_threshold: 75.0
+        check_interval: 120
+        reason: "Production VPS monitoring - alert on sustained high usage"
 features:
   ai_categorization: true
   ai_translation: true
@@ -119,7 +131,7 @@ features:
 meta:
   created: '2025-06-23T12:08:43.254900'
   description: Unified NewsBot Configuration
-  last_updated: '2025-06-23T12:08:43.262169'
+  last_updated: '2025-06-24T14:41:51.430870'
   version: 1.0.0
 monitoring:
   health_checks: true
@@ -127,6 +139,12 @@ monitoring:
   log_retention_days: 30
   max_log_size_mb: 50
   performance_tracking: true
+  resource_alerts:
+    enabled: true
+    cpu_threshold: 85.0
+    ram_threshold: 80.0
+    check_interval: 120
+    reason: "Default resource monitoring"
 openai:
   api_key: YOUR_OPENAI_API_KEY_HERE
   max_tokens: 4000
@@ -136,3 +154,114 @@ telegram:
   api_id: 23834972
   phone_number: '+1234567890'
   token: ''
+test:
+  e2e:
+    timestamp: '2025-06-24T14:05:56.407725'
+  integration:
+    timestamp: '2025-06-24T15:29:18.045702'
+
+# Advanced AI Content Analysis Configuration
+advanced_ai:
+  # Content analysis settings
+  content_analysis:
+    enabled: true
+    cache_ttl_seconds: 3600  # 1 hour cache for analysis results
+    parallel_analysis: true  # Run all AI analyses in parallel
+    
+    # Analysis thresholds
+    thresholds:
+      high_credibility: 0.7
+      low_credibility: 0.4
+      high_viral_potential: 0.7
+      low_viral_potential: 0.3
+      high_emotional_intensity: 0.7
+      low_emotional_intensity: 0.3
+      high_manipulation_risk: 0.6
+      cultural_sensitivity_threshold: 0.5
+      
+  # Emotional analysis configuration
+  emotional_analysis:
+    enabled: true
+    dimensions:
+      - anger
+      - fear
+      - hope
+      - sadness
+      - joy
+      - urgency
+      - anxiety
+      - determination
+    fallback_emotion: "urgency"
+    
+  # Credibility assessment configuration
+  credibility_assessment:
+    enabled: true
+    factors:
+      - source_reliability
+      - fact_checkable
+      - bias_level
+      - emotional_manipulation
+      - evidence_quality
+      - language_quality
+    warning_threshold: 2  # Number of warnings before flagging
+    
+  # Viral potential prediction
+  viral_prediction:
+    enabled: true
+    engagement_metrics:
+      - likes
+      - shares
+      - comments
+    timing_optimization: true
+    
+  # Cultural context analysis
+  cultural_analysis:
+    enabled: true
+    target_cultures:
+      - syrian
+      - arabic
+      - middle_eastern
+    sensitivity_check: true
+    localization_suggestions: true
+    
+  # Content optimization
+  optimization:
+    enabled: true
+    categories:
+      - emotional_optimization
+      - credibility_enhancement
+      - viral_potential_boost
+      - cultural_adaptation
+      - timing_optimization
+      - engagement_strategies
+    max_recommendations_per_category: 3
+    
+  # Performance settings
+  performance:
+    max_content_length: 2000  # Characters to analyze
+    timeout_seconds: 30
+    retry_attempts: 2
+    concurrent_analyses: 4
+    
+  # OpenAI API settings for advanced analysis
+  openai:
+    model: "gpt-4-turbo-preview"
+    temperature:
+      emotional_analysis: 0.3
+      credibility_assessment: 0.2
+      viral_prediction: 0.4
+      cultural_analysis: 0.3
+    max_tokens:
+      emotional_analysis: 500
+      credibility_assessment: 600
+      viral_prediction: 400
+      cultural_analysis: 500
+      
+  # Report generation
+  reports:
+    enabled: true
+    include_confidence_scores: true
+    include_processing_times: true
+    include_recommendations: true
+    max_report_length: 4000
+    chunk_size: 1900  # For Discord message splitting

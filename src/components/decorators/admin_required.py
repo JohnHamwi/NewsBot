@@ -97,6 +97,69 @@ def admin_required(func: Callable) -> Callable:
     return wrapper
 
 
+def admin_required_ctx(func: Callable) -> Callable:
+    """
+    Decorator that ensures only users with admin role can execute commands.Cog commands.
+    Compatible with the old commands.Context style.
+
+    Args:
+        func: The command function to wrap
+
+    Returns:
+        Wrapped function with admin authorization check
+    """
+
+    @wraps(func)
+    async def wrapper(self, ctx, *args, **kwargs) -> Any:
+        """
+        Wrapper function that performs admin authorization check for commands.Context.
+        """
+        try:
+            # Get admin role ID from config
+            admin_role_id = config.get("bot.admin_role_id")
+            admin_user_id = config.get("bot.admin_user_id")
+            
+            # Check if admin user ID is configured and matches
+            if admin_user_id and ctx.author.id == int(admin_user_id):
+                logger.debug(
+                    f"Admin command {func.__name__} authorized for admin user "
+                    f"{ctx.author.id} ({ctx.author.display_name})"
+                )
+                return await func(self, ctx, *args, **kwargs)
+            
+            # Check admin role if configured
+            if admin_role_id and ctx.guild:
+                # Check if user has admin role
+                admin_role = discord.utils.get(ctx.guild.roles, id=int(admin_role_id))
+                
+                if not admin_role:
+                    logger.error(f"Admin role with ID {admin_role_id} not found in guild")
+                    await ctx.send("❌ Admin role not found. Please contact the bot administrator.")
+                    return
+                
+                if admin_role in ctx.author.roles:
+                    logger.debug(
+                        f"Admin command {func.__name__} authorized for user "
+                        f"{ctx.author.id} ({ctx.author.display_name})"
+                    )
+                    return await func(self, ctx, *args, **kwargs)
+            
+            # User is not authorized
+            logger.warning(
+                f"Unauthorized access attempt by user {ctx.author.id} "
+                f"({ctx.author.display_name}) to command {func.__name__}"
+            )
+            await ctx.send("❌ You do not have permission to use this command. Admin access required.")
+            return
+
+        except Exception as e:
+            logger.error(f"Error in admin authorization check: {str(e)}", exc_info=True)
+            await ctx.send("❌ An error occurred while checking permissions.")
+            return
+
+    return wrapper
+
+
 # =============================================================================
 # Admin Authorization with Auto-Defer
 # =============================================================================

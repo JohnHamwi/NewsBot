@@ -216,7 +216,7 @@ class FetchView(ui.View):
                         self.ai_location = ai_location
                         self.logger.info(f"[FETCH] AI detected location: {ai_location}")
 
-            # Download media if present - REQUIRED for posting
+            # Download media if present - OPTIONAL based on configuration
             if self.media:
                 self.logger.info("[FETCH] Downloading media using media service")
                 media_files, temp_path = (
@@ -227,18 +227,35 @@ class FetchView(ui.View):
                 if media_files:
                     media_files = self.media_service.validate_media_files(media_files)
 
-                    # If no media files were downloaded successfully, fail the post
+                    # If media download failed but we have media, check if media is required
                     if not media_files:
+                        # Get require_media setting from config
+                        from src.core.unified_config import unified_config
+                        require_media = unified_config.get('automation.require_media', False)
+                        
+                        if require_media:
+                            self.logger.error(
+                                "[FETCH] Media download failed and media is required - aborting post"
+                            )
+                            return False
+                        else:
+                            self.logger.warning(
+                                "[FETCH] Media download failed but media is not required - proceeding without media"
+                            )
+                else:
+                    # No media present - check if media is required
+                    from src.core.unified_config import unified_config
+                    require_media = unified_config.get('automation.require_media', False)
+                    
+                    if require_media:
                         self.logger.error(
-                            "[FETCH] Media download failed or no valid media files - aborting post"
+                            "[FETCH] No media present and media is required - aborting post"
                         )
                         return False
-                else:
-                    # No media present - fail the post since we only want posts with media
-                    self.logger.error(
-                        "[FETCH] No media present - aborting post (media required)"
-                    )
-                    return False
+                    else:
+                        self.logger.info(
+                            "[FETCH] No media present but media is not required - proceeding with text-only post"
+                        )
 
             # Post to news channel using posting service with intelligence parameters
             success = await self.posting_service.post_to_news_channel(

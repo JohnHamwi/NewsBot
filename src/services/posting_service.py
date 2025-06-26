@@ -326,15 +326,11 @@ class PostingService:
             # Extract Arabic title as fallback
             title_text = self._extract_arabic_title(arabic_text, channelname)
         
-        # Add urgency indicator for breaking news
-        if urgency_level == "breaking":
-            urgency_emoji = "🚨"
-        elif urgency_level == "important":
-            urgency_emoji = "📢"
-        else:
-            urgency_emoji = "📅"
+        # Always use calendar emoji for consistency (user preference)
+        # Previously used different emojis based on urgency, but user prefers consistent calendar emoji
+        urgency_emoji = "📅"
 
-        # Build the thread title with appropriate emoji
+        # Build the thread title with calendar emoji
         return f"{urgency_emoji} {current_date} | {title_text}"
 
     def _extract_arabic_title(self, arabic_text: str, channelname: str) -> str:
@@ -432,7 +428,7 @@ class PostingService:
             if urgency_level == "breaking":
                 content_parts.append(f"🚨 **Urgency:** {urgency_display}")
             elif urgency_level == "important":
-                content_parts.append(f"📢 **Urgency:** {urgency_display}")
+                content_parts.append(f"⚡ **Urgency:** {urgency_display}")
         
         # Quality score removed - users don't need to see this information
         
@@ -451,7 +447,71 @@ class PostingService:
         # Note: News role ping is added at the top of the post, not here
         # to avoid duplicate pings
 
-        return "\n".join(content_parts)
+        # CRITICAL: Check content length and truncate if necessary
+        content = "\n".join(content_parts)
+        
+        # Discord's message limit is 4000 characters for forum posts
+        MAX_CONTENT_LENGTH = 3800  # Leave some buffer for safety
+        
+        if len(content) > MAX_CONTENT_LENGTH:
+            self.logger.warning(f"[POSTING] Content too long ({len(content)} chars), truncating to fit Discord limit")
+            
+            # Smart truncation strategy: preserve metadata, truncate content
+            # Calculate the size of metadata (everything except Arabic and English content)
+            metadata_parts = []
+            metadata_parts.extend(content_parts[-10:])  # Last 10 parts (metadata, warning, etc.)
+            metadata_size = len("\n".join(metadata_parts))
+            
+            # Reserve space for metadata and truncation notice
+            TRUNCATION_NOTICE = "\n\n**[Content truncated due to length limit]**"
+            available_space = MAX_CONTENT_LENGTH - metadata_size - len(TRUNCATION_NOTICE) - 100  # Extra buffer
+            
+            # Rebuild content with truncated text
+            truncated_parts = []
+            current_length = 0
+            
+            for i, part in enumerate(content_parts):
+                # Always include metadata parts (location, category, time, etc.)
+                if i >= len(content_parts) - 10:  # Last 10 parts are metadata
+                    truncated_parts.append(part)
+                    continue
+                    
+                # For content parts, check if we have space
+                part_length = len(part) + 1  # +1 for newline
+                if current_length + part_length <= available_space:
+                    truncated_parts.append(part)
+                    current_length += part_length
+                else:
+                    # Truncate this part if it's content
+                    if part.startswith("**Original (AR):**") or part.startswith("**Translation (EN):**"):
+                        truncated_parts.append(part)  # Keep the header
+                        continue
+                    
+                    # For actual content, truncate at word boundary
+                    remaining_space = available_space - current_length
+                    if remaining_space > 50:  # Only truncate if we have reasonable space
+                        words = part.split()
+                        truncated_text = ""
+                        for word in words:
+                            if len(truncated_text) + len(word) + 1 <= remaining_space - 20:  # Leave space for "..."
+                                truncated_text += word + " "
+                            else:
+                                break
+                        
+                        if truncated_text.strip():
+                            truncated_parts.append(truncated_text.strip() + "...")
+                    
+                    break
+            
+            # Add truncation notice
+            truncated_parts.append(TRUNCATION_NOTICE)
+            
+            # Rebuild content
+            content = "\n".join(truncated_parts)
+            
+            self.logger.info(f"[POSTING] Content truncated from {len('\n'.join(content_parts))} to {len(content)} characters")
+
+        return content
 
     def _detect_location(
         self, arabic_text: str, english_translation: Optional[str] = None

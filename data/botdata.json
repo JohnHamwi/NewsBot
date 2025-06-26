@@ -27,7 +27,14 @@
     77934,
     169442,
     1091,
-    1092
+    1092,
+    184676,
+    38663,
+    1107,
+    184720,
+    11461,
+    40462,
+    169745
   ],
   "automation_config": {
     "enabled": true,
@@ -99,10 +106,18 @@
       "date_deactivated": null
     }
   },
-  "last_post_time": "2025-06-23T13:00:03.443432-04:00",
+  "last_post_time": "2025-06-25T17:34:36.560203",
   "channel_rotation": {
-    "last_index": 6,
-    "last_updated": "2025-06-24T02:08:12.979028",
-    "last_channel": "shaamnetwork"
+    "last_index": 0,
+    "last_updated": "2025-06-25T21:32:00.125064",
+    "last_channel": "alekhbariahsy"
+  },
+  "auto_post_interval": 10800,
+  "bot_statistics": {
+    "total_posts": 4,
+    "error_count": 0,
+    "last_error": null,
+    "last_error_time": null,
+    "last_updated": "2025-06-25T21:34:36.564257+00:00"
   }
 }
